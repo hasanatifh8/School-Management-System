@@ -1,0 +1,250 @@
+// School Management System — data model.
+// Every record belongs to a School so the app can later serve several schools
+// from one database (created by a Super Admin).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE // "removed" — kept for history instead of being deleted
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum DocumentType {
+  AADHAAR
+  PAN
+  BIRTH_CERTIFICATE
+  TRANSFER_CERTIFICATE
+  MARKSHEET
+  CASTE_CERTIFICATE
+  MEDICAL_CERTIFICATE
+  RESUME
+  EDUCATION_CERTIFICATE
+  EXPERIENCE_LETTER
+  ADDRESS_PROOF
+  OTHER
+}
+
+model School {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+
+  students  Student[]
+  teachers  Teacher[]
+  classes   SchoolClass[]
+  subjects  Subject[]
+  counters  Counter[]
+  photos    Photo[]
+  documents Document[]
+}
+
+// Passport photo of a student or teacher. Kept in its own table so that
+// loading people never loads image bytes unless they are requested.
+model Photo {
+  id        String   @id @default(cuid())
+  schoolId  String
+  mimeType  String
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  school  School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student Student?
+  teacher Teacher?
+}
+
+// A document (Aadhaar, PAN, resume, certificates…) belonging to exactly one
+// student or teacher. File bytes live in DocumentFile so listing documents
+// never loads file contents.
+model Document {
+  id             String       @id @default(cuid())
+  schoolId       String
+  studentId      String?
+  teacherId      String?
+  type           DocumentType
+  title          String
+  documentNumber String? // e.g. Aadhaar or PAN number
+  fileName       String
+  mimeType       String
+  size           Int
+  fileId         String       @unique
+  createdAt      DateTime     @default(now())
+
+  school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student Student?     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  file    DocumentFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([teacherId])
+}
+
+model DocumentFile {
+  id       String    @id @default(cuid())
+  data     Bytes
+  document Document?
+}
+
+// Atomic sequence per school, used to generate human-readable IDs
+// such as STU-2026-0001 and TCH-0001.
+model Counter {
+  schoolId String
+  key      String
+  value    Int    @default(0)
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@id([schoolId, key])
+}
+
+model Student {
+  id            String    @id @default(cuid())
+  schoolId      String
+  studentCode   String // unique, human-readable student ID, e.g. STU-2026-0001
+  firstName     String
+  lastName      String
+  gender        Gender?
+  dateOfBirth   DateTime?
+  email         String?
+  phone         String?
+  address       String?
+  fatherName    String?
+  fatherPhone   String?
+  motherName    String?
+  motherPhone   String?
+  admissionDate DateTime  @default(now())
+  status        Status    @default(ACTIVE)
+  sectionId     String?
+  photoId       String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  school    School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  section   Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  photo     Photo?           @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  subjects  StudentSubject[]
+  documents Document[]
+
+  @@unique([schoolId, studentCode])
+  @@index([sectionId])
+}
+
+model Teacher {
+  id            String   @id @default(cuid())
+  schoolId      String
+  employeeCode  String // unique, human-readable staff ID, e.g. TCH-0001
+  firstName     String
+  lastName      String
+  gender        Gender?
+  email         String?
+  phone         String?
+  qualification String?
+  joiningDate   DateTime @default(now())
+  status        Status   @default(ACTIVE)
+  photoId       String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  school             School                     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  photo              Photo?                     @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  classTeacherOf     Section?
+  subjectAssignments SubjectTeacherAssignment[]
+  documents          Document[]
+
+  @@unique([schoolId, employeeCode])
+}
+
+// Named SchoolClass because "class" is a reserved word in TypeScript.
+model SchoolClass {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String // e.g. "Class 1"
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  school   School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  sections Section[]
+  subjects ClassSubject[]
+
+  @@unique([schoolId, name])
+}
+
+model Section {
+  id             String  @id @default(cuid())
+  classId        String
+  name           String // e.g. "A"
+  classTeacherId String? @unique // a teacher can be class teacher of only one section
+
+  class              SchoolClass                @relation(fields: [classId], references: [id], onDelete: Cascade)
+  classTeacher       Teacher?                   @relation(fields: [classTeacherId], references: [id], onDelete: SetNull)
+  students           Student[]
+  subjectAssignments SubjectTeacherAssignment[]
+
+  @@unique([classId, name])
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  code      String // e.g. "MATH"
+  createdAt DateTime @default(now())
+
+  school             School                     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classes            ClassSubject[]
+  students           StudentSubject[]
+  teacherAssignments SubjectTeacherAssignment[]
+
+  @@unique([schoolId, code])
+}
+
+// Curriculum: which subjects are taught in a class.
+model ClassSubject {
+  classId   String
+  subjectId String
+
+  class   SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([classId, subjectId])
+}
+
+// Subjects allotted to an individual student. Filled from the class
+// curriculum when the student is placed in a section; admin can adjust.
+model StudentSubject {
+  studentId String
+  subjectId String
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, subjectId])
+}
+
+// Subject teacher: who teaches a subject in a particular section.
+model SubjectTeacherAssignment {
+  id        String @id @default(cuid())
+  sectionId String
+  subjectId String
+  teacherId String
+
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, subjectId])
+  @@index([teacherId])
+}
