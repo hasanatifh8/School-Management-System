@@ -78,9 +78,9 @@ async function main() {
       where: { name: "A", class: { schoolId: school.id, name: "Class 1" } },
       include: { class: { include: { subjects: true } } },
     });
-    for (const [i, [firstName, lastName, gender, fatherName, motherName, fatherPhone, motherPhone]] of ([
-      ["Aarav", "Gupta", "MALE", "Sanjay Gupta", "Neha Gupta", "9810000001", "9810000002"],
-      ["Diya", "Patel", "FEMALE", "Mehul Patel", "Kavita Patel", "9820000001", "9820000002"],
+    for (const [i, [firstName, lastName, gender, fatherName, motherName, whatsappNumber]] of ([
+      ["Aarav", "Gupta", "MALE", "Sanjay Gupta", "Neha Gupta", "9810000001"],
+      ["Diya", "Patel", "FEMALE", "Mehul Patel", "Kavita Patel", "9820000001"],
     ] as const).entries()) {
       const admissionDate = new Date();
       await tx.student.create({
@@ -91,10 +91,8 @@ async function main() {
           lastName,
           gender,
           fatherName,
-          fatherPhone,
           motherName,
-          motherPhone,
-          whatsappNumber: fatherPhone,
+          whatsappNumber,
           nationality: "Indian",
           primaryAddress: "12 MG Road, Lucknow, Uttar Pradesh 226001",
           correspondenceAddress: "12 MG Road, Lucknow, Uttar Pradesh 226001",

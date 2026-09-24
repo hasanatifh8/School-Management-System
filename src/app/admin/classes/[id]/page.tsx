@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpen, Crown, Hash, Layers, Plus, Rocket, Trash2, Users } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { Select } from "@/components/select";
 import {
   Badge,
   ButtonLink,
@@ -153,7 +154,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                     compact
                     className="flex flex-wrap items-center gap-2"
                   >
-                    <select
+                    <Select
                       name="teacherId"
                       defaultValue={section.classTeacherId ?? ""}
                       className={`${selectClass} max-w-sm !py-2`}
@@ -168,7 +169,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                           </option>
                         );
                       })}
-                    </select>
+                    </Select>
                     <SubmitButton variant="secondary" size="sm">
                       Save
                     </SubmitButton>
@@ -216,7 +217,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                                   compact
                                   className="flex flex-wrap items-center gap-2"
                                 >
-                                  <select
+                                  <Select
                                     name="teacherId"
                                     defaultValue={current}
                                     className={`${selectClass} max-w-xs !py-2 ${current ? "" : "!border-amber-300 !bg-amber-50/40"}`}
@@ -227,7 +228,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                                         {fullName(t)} ({t.employeeCode})
                                       </option>
                                     ))}
-                                  </select>
+                                  </Select>
                                   <SubmitButton variant="secondary" size="sm">
                                     Save
                                   </SubmitButton>

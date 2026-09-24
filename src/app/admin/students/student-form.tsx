@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
+import { Select } from "@/components/select";
+import { AadhaarInput } from "@/components/aadhaar-input";
 import { PhotoInput } from "@/components/photo-input";
 import { FormSection, buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
@@ -39,9 +41,7 @@ type StudentValues = {
   correspondenceAddress: string | null;
   lastSchoolName: string | null;
   fatherName: string | null;
-  fatherPhone: string | null;
   motherName: string | null;
-  motherPhone: string | null;
   admissionDate: Date | null;
   sectionId: string | null;
   rollNumber: number | null;
@@ -155,13 +155,19 @@ export function StudentForm({
                   <input name="lastName" required defaultValue={student?.lastName} className={inputClass} />
                 </Field>
               </div>
+              <Field label="Father's name" name="fatherName" errors={e}>
+                <input name="fatherName" defaultValue={student?.fatherName ?? ""} className={inputClass} />
+              </Field>
+              <Field label="Mother's name" name="motherName" errors={e}>
+                <input name="motherName" defaultValue={student?.motherName ?? ""} className={inputClass} />
+              </Field>
               <Field label="Gender" name="gender" errors={e}>
-                <select name="gender" defaultValue={student?.gender ?? ""} className={selectClass}>
+                <Select name="gender" defaultValue={student?.gender ?? ""} className={selectClass}>
                   <option value="">Select gender</option>
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>
                   <option value="OTHER">Other</option>
-                </select>
+                </Select>
               </Field>
               <Field
                 label="Date of birth"
@@ -179,24 +185,17 @@ export function StudentForm({
                 />
               </Field>
               <Field label="Blood group" name="bloodGroup" errors={e}>
-                <select name="bloodGroup" defaultValue={student?.bloodGroup ?? ""} className={selectClass}>
+                <Select name="bloodGroup" defaultValue={student?.bloodGroup ?? ""} className={selectClass}>
                   <option value="">Select blood group</option>
                   {BLOOD_GROUPS.map((b) => (
                     <option key={b} value={b}>
                       {BLOOD_GROUP_LABELS[b]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
-              <Field label="Aadhaar number" name="aadhaarNumber" errors={e} hint="12 digits.">
-                <input
-                  name="aadhaarNumber"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="1234 5678 9012"
-                  defaultValue={student?.aadhaarNumber ?? ""}
-                  className={`${inputClass} font-mono`}
-                />
+              <Field label="Aadhaar number" name="aadhaarNumber" errors={e} hint="12 digits, e.g. 1234-5678-9012.">
+                <AadhaarInput name="aadhaarNumber" defaultValue={student?.aadhaarNumber} />
               </Field>
               <Field label="Nationality" name="nationality" errors={e}>
                 <input
@@ -209,24 +208,24 @@ export function StudentForm({
 
             <FormSection title="Category & religion" description="As recorded on admission documents.">
               <Field label="Category" name="category" errors={e}>
-                <select name="category" defaultValue={student?.category ?? ""} className={selectClass}>
+                <Select name="category" defaultValue={student?.category ?? ""} className={selectClass}>
                   <option value="">Select category</option>
                   {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="Religion" name="religion" errors={e}>
-                <select name="religion" defaultValue={student?.religion ?? ""} className={selectClass}>
+                <Select name="religion" defaultValue={student?.religion ?? ""} className={selectClass}>
                   <option value="">Select religion</option>
                   {RELIGIONS.map((r) => (
                     <option key={r} value={r}>
                       {r}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="Caste" name="caste" errors={e}>
                 <input name="caste" defaultValue={student?.caste ?? ""} className={inputClass} />
@@ -238,7 +237,7 @@ export function StudentForm({
               description="The class's subjects are allotted automatically when a class is chosen."
             >
               <Field label="Class & section" name="sectionId" errors={e}>
-                <select name="sectionId" defaultValue={student?.sectionId ?? ""} className={selectClass}>
+                <Select name="sectionId" defaultValue={student?.sectionId ?? ""} className={selectClass}>
                   <option value="">Not assigned</option>
                   {classes.map((c) => (
                     <optgroup key={c.id} label={c.name}>
@@ -249,7 +248,7 @@ export function StudentForm({
                       ))}
                     </optgroup>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="Admission date" name="admissionDate" errors={e}>
                 <input
@@ -277,14 +276,14 @@ export function StudentForm({
                 />
               </Field>
               <Field label="House" name="houseId" errors={e}>
-                <select name="houseId" defaultValue={student?.houseId ?? ""} className={selectClass}>
+                <Select name="houseId" defaultValue={student?.houseId ?? ""} className={selectClass}>
                   <option value="">No house</option>
                   {houses.map((h) => (
                     <option key={h.id} value={h.id}>
                       {h.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="Last school name" name="lastSchoolName" errors={e}>
                 <input
@@ -347,21 +346,6 @@ export function StudentForm({
                   />
                 </SameAs>
               </div>
-            </FormSection>
-
-            <FormSection title="Parents" description="Father's and mother's details for school communication.">
-              <Field label="Father's name" name="fatherName" errors={e}>
-                <input name="fatherName" defaultValue={student?.fatherName ?? ""} className={inputClass} />
-              </Field>
-              <Field label="Father's phone" name="fatherPhone" errors={e}>
-                <input type="tel" name="fatherPhone" defaultValue={student?.fatherPhone ?? ""} className={inputClass} />
-              </Field>
-              <Field label="Mother's name" name="motherName" errors={e}>
-                <input name="motherName" defaultValue={student?.motherName ?? ""} className={inputClass} />
-              </Field>
-              <Field label="Mother's phone" name="motherPhone" errors={e}>
-                <input type="tel" name="motherPhone" defaultValue={student?.motherPhone ?? ""} className={inputClass} />
-              </Field>
             </FormSection>
 
             <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-6">

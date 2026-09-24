@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { FileUp, Upload } from "lucide-react";
+import { AadhaarInput } from "@/components/aadhaar-input";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
@@ -66,12 +67,16 @@ export function DocumentUploadForm({
 
           {numbered && (
             <Field label={numbered.label} name="documentNumber" errors={state.fieldErrors} hint="Optional. Shown masked.">
-              <input
-                name="documentNumber"
-                placeholder={numbered.placeholder}
-                autoComplete="off"
-                className={`${inputClass} font-mono`}
-              />
+              {type === "AADHAAR" ? (
+                <AadhaarInput name="documentNumber" />
+              ) : (
+                <input
+                  name="documentNumber"
+                  placeholder={numbered.placeholder}
+                  autoComplete="off"
+                  className={`${inputClass} font-mono`}
+                />
+              )}
             </Field>
           )}
 

@@ -181,9 +181,7 @@ model Student {
   correspondenceAddress String?
   lastSchoolName        String?
   fatherName            String?
-  fatherPhone           String?
   motherName            String?
-  motherPhone           String?
   admissionDate         DateTime         @default(now())
   status                Status           @default(ACTIVE)
   sectionId             String?

@@ -58,9 +58,16 @@ export const EXPECTED_DOCUMENTS: Record<DocumentOwnerKind, DocumentType[]> = {
 
 /** Types that carry an ID number. */
 export const NUMBERED_TYPES: Partial<Record<DocumentType, { label: string; placeholder: string }>> = {
-  AADHAAR: { label: "Aadhaar number", placeholder: "1234 5678 9012" },
+  AADHAAR: { label: "Aadhaar number", placeholder: "1234-5678-9012" },
   PAN: { label: "PAN", placeholder: "ABCDE1234F" },
 };
+
+export const AADHAAR_DIGITS = 12;
+
+/** Groups digits in fours with dashes: "123456789012" → "1234-5678-9012" (also works while typing). */
+export function formatAadhaar(digits: string) {
+  return digits.replace(/\D/g, "").slice(0, AADHAAR_DIGITS).replace(/(\d{4})(?=\d)/g, "$1-");
+}
 
 /**
  * Normalises and validates an ID number for its document type.
@@ -73,9 +80,10 @@ export function normalizeDocumentNumber(
   const input = raw.trim();
   if (!input || !NUMBERED_TYPES[type]) return { value: null };
   if (type === "AADHAAR") {
-    const digits = input.replace(/[\s-]/g, "");
-    if (!/^\d{12}$/.test(digits)) return { error: "Aadhaar number must be 12 digits." };
-    return { value: digits.replace(/(\d{4})(?=\d)/g, "$1 ") };
+    if (/[^\d\s-]/.test(input)) return { error: "Aadhaar number can contain digits only." };
+    const digits = input.replace(/\D/g, "");
+    if (digits.length !== AADHAAR_DIGITS) return { error: "Aadhaar number must be exactly 12 digits." };
+    return { value: formatAadhaar(digits) };
   }
   const pan = input.toUpperCase().replace(/\s/g, "");
   if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) return { error: "PAN must look like ABCDE1234F." };
@@ -84,7 +92,7 @@ export function normalizeDocumentNumber(
 
 /** Shows only the last 4 characters of an ID number. */
 export function maskDocumentNumber(value: string) {
-  const plain = value.replace(/\s/g, "");
+  const plain = value.replace(/[\s-]/g, "");
   return `${"•".repeat(Math.max(0, plain.length - 4))}${plain.slice(-4)}`;
 }
 

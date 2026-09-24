@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
+import { Select } from "@/components/select";
 import { PhotoInput } from "@/components/photo-input";
 import { FormSection, buttonVariants, inputClass, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
@@ -57,22 +58,22 @@ export function TeacherForm({
                 </Field>
               </div>
               <Field label="Gender" name="gender" errors={e}>
-                <select name="gender" defaultValue={teacher?.gender ?? ""} className={selectClass}>
+                <Select name="gender" defaultValue={teacher?.gender ?? ""} className={selectClass}>
                   <option value="">Select gender</option>
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>
                   <option value="OTHER">Other</option>
-                </select>
+                </Select>
               </Field>
               <Field label="Blood group" name="bloodGroup" errors={e}>
-                <select name="bloodGroup" defaultValue={teacher?.bloodGroup ?? ""} className={selectClass}>
+                <Select name="bloodGroup" defaultValue={teacher?.bloodGroup ?? ""} className={selectClass}>
                   <option value="">Select blood group</option>
                   {BLOOD_GROUPS.map((b) => (
                     <option key={b} value={b}>
                       {BLOOD_GROUP_LABELS[b]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
             </FormSection>
 

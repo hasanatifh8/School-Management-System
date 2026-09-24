@@ -88,9 +88,7 @@ const studentSchema = z
     correspondenceSameAsPrimary: z.literal("on").optional(),
     lastSchoolName: optionalText,
     fatherName: optionalText,
-    fatherPhone: optionalText,
     motherName: optionalText,
-    motherPhone: optionalText,
     admissionDate: optionalDate,
     sectionId: optionalText,
     rollNumber: z

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, GraduationCap, Info, Rocket } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { Select } from "@/components/select";
 import {
   Badge,
   Card,
@@ -152,7 +153,7 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
                       </Badge>
                     </td>
                     <td className={`${tdClass} w-80`}>
-                      <select
+                      <Select
                         name={`decision:${s.id}`}
                         defaultValue={defaultDecision(s)}
                         aria-label={`Decision for ${fullName(s)}`}
@@ -178,7 +179,7 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
                           <option value="passed">🎓 Passed out</option>
                           <option value="left">Left school (TC issued)</option>
                         </optgroup>
-                      </select>
+                      </Select>
                     </td>
                   </tr>
                 ))}

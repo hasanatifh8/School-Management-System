@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { BookOpen, CalendarDays, Droplet, Hash, History, Mail, Phone, RotateCcw, UserRoundX } from "lucide-react";
+import { BookOpen, CalendarDays, Droplet, Hash, History, Mail, RotateCcw, UserRound, UserRoundX } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { Avatar, Badge, Card, InfoItem, PageHeader, StatusTab, checkboxClass } from "@/components/ui";
@@ -123,13 +123,11 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           </div>
 
           <dl className="mt-6 grid gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-4">
-            <InfoItem icon={Phone} label="Father">
+            <InfoItem icon={UserRound} label="Father">
               {student.fatherName ?? "—"}
-              {student.fatherPhone && <span className="block text-slate-500">{student.fatherPhone}</span>}
             </InfoItem>
-            <InfoItem icon={Phone} label="Mother">
+            <InfoItem icon={UserRound} label="Mother">
               {student.motherName ?? "—"}
-              {student.motherPhone && <span className="block text-slate-500">{student.motherPhone}</span>}
             </InfoItem>
             <InfoItem icon={CalendarDays} label="Admitted on">
               {dateFormat.format(student.admissionDate)}

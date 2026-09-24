@@ -39,7 +39,7 @@ Open http://localhost:3000. It redirects to the Admin Portal. You can use a Neon
 
 | Area | Features |
 |---|---|
-| **Students** | Add, edit and remove students: name (with optional middle name), blood group, Aadhaar, category, religion, caste, nationality, WhatsApp, primary and correspondence address, last school, and father's and mother's names and phone numbers. Each student gets a unique ID (`STU-<year>-0001`). Assign a class and section. The class's subjects are allotted automatically, and you can adjust each student's subjects. Search and filter by class. |
+| **Students** | Add, edit and remove students: name (with optional middle name), blood group, Aadhaar, category, religion, caste, nationality, WhatsApp, primary and correspondence address, last school, and father's and mother's names. Each student gets a unique ID (`STU-<year>-0001`). Assign a class and section. The class's subjects are allotted automatically, and you can adjust each student's subjects. Search and filter by class. |
 | **Teachers** | Add, edit and remove teachers. Each teacher gets a unique ID (`TCH-0001`). The teacher's page shows their class-teacher and subject-teacher roles. |
 | **Classes** | Add classes with sections (A, B, …). Set the class curriculum, with an option to apply changes to students already in the class. Assign one **class teacher** per section (a teacher can be class teacher of only one section) and a **subject teacher** for each subject in each section. |
 | **Subjects** | Add and delete subjects (name and code). |

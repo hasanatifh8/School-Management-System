@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, Pencil, Phone, Search, UserPlus } from "lucide-react";
+import { GraduationCap, Pencil, Search, UserPlus } from "lucide-react";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
@@ -45,8 +45,6 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
         { studentCode: { contains: q, mode: "insensitive" } },
         { fatherName: { contains: q, mode: "insensitive" } },
         { motherName: { contains: q, mode: "insensitive" } },
-        { fatherPhone: { contains: q, mode: "insensitive" } },
-        { motherPhone: { contains: q, mode: "insensitive" } },
       ],
     }),
   };
@@ -199,9 +197,9 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
                   </td>
                   <td className={tdClass}>
                     <div className="space-y-0.5 text-xs">
-                      <ParentLine label="Father" name={s.fatherName} phone={s.fatherPhone} />
-                      <ParentLine label="Mother" name={s.motherName} phone={s.motherPhone} />
-                      {!s.fatherName && !s.fatherPhone && !s.motherName && !s.motherPhone && (
+                      <ParentLine label="Father" name={s.fatherName} />
+                      <ParentLine label="Mother" name={s.motherName} />
+                      {!s.fatherName && !s.motherName && (
                         <span className="text-slate-400">Not added</span>
                       )}
                     </div>
@@ -227,18 +225,12 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
   );
 }
 
-function ParentLine({ label, name, phone }: { label: string; name: string | null; phone: string | null }) {
-  if (!name && !phone) return null;
+function ParentLine({ label, name }: { label: string; name: string | null }) {
+  if (!name) return null;
   return (
     <div className="flex items-center gap-1.5 whitespace-nowrap">
       <span className="w-12 text-slate-400">{label}</span>
-      <span className="font-medium text-slate-700">{name ?? "—"}</span>
-      {phone && (
-        <span className="inline-flex items-center gap-1 text-slate-500">
-          <Phone className="h-3 w-3" />
-          {phone}
-        </span>
-      )}
+      <span className="font-medium text-slate-700">{name}</span>
     </div>
   );
 }
