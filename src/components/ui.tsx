@@ -203,10 +203,9 @@ export function Avatar({
   src?: string | null;
   size?: "sm" | "md" | "lg" | "xl";
 }) {
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
+  // First and last word, so a middle name doesn't change the initials.
+  const words = name.split(/\s+/).filter(Boolean);
+  const initials = (words.length > 1 ? [words[0], words[words.length - 1]] : words)
     .map((p) => p[0]!.toUpperCase())
     .join("");
   const sizes = {

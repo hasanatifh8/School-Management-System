@@ -5,7 +5,9 @@ import {
   CircleCheck,
   GraduationCap,
   Presentation,
+  Rocket,
   School,
+  Shield,
   TriangleAlert,
   UserPlus,
   type LucideIcon,
@@ -24,10 +26,14 @@ import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { houseColor } from "@/lib/houses";
+import { getCurrentSession, getUpcomingSession, pendingPromotions } from "@/lib/sessions";
 
 export default async function DashboardPage() {
   const school = await getCurrentSchool();
   const active = { schoolId: school.id, status: "ACTIVE" as const };
+  const [session, upcoming] = await Promise.all([getCurrentSession(school.id), getUpcomingSession(school.id)]);
+  const pending = upcoming ? await pendingPromotions(school.id, session.id) : [];
 
   const [
     studentCount,
@@ -39,6 +45,7 @@ export default async function DashboardPage() {
     unassignedStudents,
     sectionsWithoutTeacher,
     recentStudents,
+    houses,
   ] = await Promise.all([
     db.student.count({ where: active }),
     db.student.groupBy({ by: ["gender"], where: active, _count: true }),
@@ -64,6 +71,11 @@ export default async function DashboardPage() {
       take: 5,
       include: { section: { include: { class: true } } },
     }),
+    db.house.findMany({
+      where: { schoolId: school.id },
+      orderBy: { name: "asc" },
+      include: { _count: { select: { students: { where: { status: "ACTIVE" } } } } },
+    }),
   ]);
 
   const sectionCount = classes.reduce((n, c) => n + c.sections.length, 0);
@@ -75,6 +87,7 @@ export default async function DashboardPage() {
     students: c.sections.reduce((n, s) => n + s._count.students, 0),
   }));
   const maxStrength = Math.max(1, ...classStrength.map((c) => c.students));
+  const maxHouse = Math.max(1, ...houses.map((h) => h._count.students));
   const issues = (unassignedStudents ? 1 : 0) + (sectionsWithoutTeacher.length ? 1 : 0);
 
   const today = new Intl.DateTimeFormat("en-IN", {
@@ -88,7 +101,7 @@ export default async function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        subtitle={`${today} · Overview of ${school.name}`}
+        subtitle={`${today} · Session ${session.name}`}
         action={
           <>
             <ButtonLink href="/admin/teachers/new" variant="secondary" icon={Presentation}>
@@ -100,6 +113,22 @@ export default async function DashboardPage() {
           </>
         }
       />
+
+      {upcoming && (
+        <Link
+          href="/admin/sessions"
+          className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/70 px-5 py-4 text-sm text-indigo-900 transition hover:bg-indigo-50"
+        >
+          <Rocket className="h-5 w-5 text-indigo-500" />
+          <span className="flex-1">
+            <strong>Promotion to {upcoming.name} is in progress.</strong>{" "}
+            {pending.length
+              ? `${pending.length} class(es) still to promote.`
+              : `All classes are ready. Start ${upcoming.name} when you're ready.`}
+          </span>
+          <span className="font-medium">Continue →</span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
@@ -212,8 +241,9 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <Card
+          className="xl:col-span-2"
           title="Recent admissions"
           description="The latest students added"
           padded={false}
@@ -257,6 +287,52 @@ export default async function DashboardPage() {
                   </Link>
                 </li>
               ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title="Houses"
+          icon={Shield}
+          description={houses.length ? "Active students per house" : "No houses yet"}
+          action={
+            <Link href="/admin/houses" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+              Manage
+            </Link>
+          }
+          className="self-start"
+        >
+          {houses.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              <Link href="/admin/houses" className="font-medium text-indigo-600 hover:underline">
+                Create houses
+              </Link>{" "}
+              like Red House or Green House and assign students.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {houses.map((h) => {
+                const c = houseColor(h.color);
+                return (
+                  <li key={h.id}>
+                    <Link href={`/admin/houses/${h.id}`} className="group block">
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2 font-medium text-slate-700 group-hover:text-indigo-600">
+                          <span className={`h-2.5 w-2.5 rounded-full ${c.dot}`} />
+                          {h.name}
+                        </span>
+                        <span className="tabular-nums text-slate-500">{h._count.students}</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${c.dot}`}
+                          style={{ width: `${Math.max(h._count.students ? 3 : 0, (h._count.students / maxHouse) * 100)}%` }}
+                        />
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>

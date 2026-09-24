@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, GraduationCap, LayoutDashboard, Presentation, School } from "lucide-react";
+import { BookOpen, CalendarRange, GraduationCap, LayoutDashboard, Presentation, School, Shield } from "lucide-react";
 
 const items = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -10,6 +10,8 @@ const items = [
   { href: "/admin/teachers", label: "Teachers", icon: Presentation },
   { href: "/admin/classes", label: "Classes", icon: School },
   { href: "/admin/subjects", label: "Subjects", icon: BookOpen },
+  { href: "/admin/houses", label: "Houses", icon: Shield },
+  { href: "/admin/sessions", label: "Sessions", icon: CalendarRange },
 ];
 
 export function AdminNav() {

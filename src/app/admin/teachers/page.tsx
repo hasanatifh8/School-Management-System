@@ -34,6 +34,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
     ...(q && {
       OR: [
         { firstName: { contains: q, mode: "insensitive" } },
+        { middleName: { contains: q, mode: "insensitive" } },
         { lastName: { contains: q, mode: "insensitive" } },
         { employeeCode: { contains: q, mode: "insensitive" } },
         { phone: { contains: q, mode: "insensitive" } },

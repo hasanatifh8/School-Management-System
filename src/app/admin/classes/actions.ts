@@ -7,6 +7,8 @@ import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { type ActionState, requiredText, validationError } from "@/lib/action-state";
+import { autoAssignRollNumbers } from "@/lib/enrollments";
+import { getCurrentSession } from "@/lib/sessions";
 
 async function findClass(schoolId: string, id: string) {
   const schoolClass = await db.schoolClass.findFirst({ where: { id, schoolId } });
@@ -68,6 +70,9 @@ export async function deleteClass(id: string): Promise<ActionState> {
   if (students) {
     return { error: `Move the ${students} student(s) in this class to another class first.` };
   }
+  if (await db.enrollment.count({ where: { section: { classId: id } } })) {
+    return { error: "This class has records from past or upcoming sessions, so it can't be deleted." };
+  }
   await db.schoolClass.delete({ where: { id } });
   revalidatePath("/admin", "layout");
   redirect("/admin/classes");
@@ -94,6 +99,9 @@ export async function deleteSection(sectionId: string): Promise<ActionState> {
   const students = await db.student.count({ where: { sectionId } });
   if (students) {
     return { error: `Move the ${students} student(s) in ${sectionLabel(section)} to another section first.` };
+  }
+  if (await db.enrollment.count({ where: { sectionId } })) {
+    return { error: `${sectionLabel(section)} has records from past or upcoming sessions, so it can't be deleted.` };
   }
   await db.section.delete({ where: { id: sectionId } });
   revalidatePath("/admin", "layout");
@@ -216,4 +224,23 @@ export async function assignSubjectTeacher(
 
   revalidatePath("/admin", "layout");
   return { ok: true, message: "Saved." };
+}
+
+/** Numbers the section's active students A–Z from 1 ("all"), or only those without a number ("missing"). */
+export async function assignRollNumbers(sectionId: string, mode: "all" | "missing"): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const section = await findSection(school.id, sectionId);
+  const session = await getCurrentSession(school.id);
+  const count = await db.$transaction((tx) => autoAssignRollNumbers(tx, session.id, sectionId, mode), {
+    timeout: 30_000,
+  });
+  revalidatePath("/admin", "layout");
+  if (!count) return { ok: true, message: "Everyone already has a roll number." };
+  return {
+    ok: true,
+    message:
+      mode === "all"
+        ? `Numbered ${count} student(s) in ${sectionLabel(section)} from 1 (A–Z).`
+        : `Gave roll numbers to ${count} student(s) without one.`,
+  };
 }

@@ -39,10 +39,13 @@ Open http://localhost:3000. It redirects to the Admin Portal. You can use a Neon
 
 | Area | Features |
 |---|---|
-| **Students** | Add, edit and remove students, with father's and mother's names and phone numbers. Each student gets a unique ID (`STU-<year>-0001`). Assign a class and section. The class's subjects are allotted automatically, and you can adjust each student's subjects. Search and filter by class. |
+| **Students** | Add, edit and remove students: name (with optional middle name), blood group, Aadhaar, category, religion, caste, nationality, WhatsApp, primary and correspondence address, last school, and father's and mother's names and phone numbers. Each student gets a unique ID (`STU-<year>-0001`). Assign a class and section. The class's subjects are allotted automatically, and you can adjust each student's subjects. Search and filter by class. |
 | **Teachers** | Add, edit and remove teachers. Each teacher gets a unique ID (`TCH-0001`). The teacher's page shows their class-teacher and subject-teacher roles. |
 | **Classes** | Add classes with sections (A, B, …). Set the class curriculum, with an option to apply changes to students already in the class. Assign one **class teacher** per section (a teacher can be class teacher of only one section) and a **subject teacher** for each subject in each section. |
 | **Subjects** | Add and delete subjects (name and code). |
+| **Houses** | Create houses with any name and colour (e.g. Green House). Assign students one at a time from their profile, or in bulk from the house page. |
+| **Sessions** | Academic years run April–March (e.g. 2026-27). At year end, click **Promote class** on each class: everyone moves up by default, and you mark anyone repeating, leaving or passing out. The next session is created automatically. Then **Start** it from the Sessions page. Each student's class history is kept. |
+| **Roll numbers** | Unique within a section. Enter them by hand, or use **Auto-assign roll numbers** (A–Z from 1) or **Fill missing only** on the class page. They're renumbered A–Z automatically when a new session starts. |
 
 **Passport photos** can be added for students and teachers from the add and edit forms. The browser crops each photo to 35 × 45 mm (350 × 450 px JPEG, about 30–60 KB) before uploading. The server only accepts real JPEG, PNG or WebP files up to 1 MB. Photos are stored in the `Photo` table and served from `/api/photos/<id>`.
 

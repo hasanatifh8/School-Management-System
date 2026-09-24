@@ -16,10 +16,42 @@ enum Status {
   INACTIVE // "removed" — kept for history instead of being deleted
 }
 
+enum BloodGroup {
+  A_POS
+  A_NEG
+  B_POS
+  B_NEG
+  AB_POS
+  AB_NEG
+  O_POS
+  O_NEG
+}
+
 enum Gender {
   MALE
   FEMALE
   OTHER
+}
+
+enum SessionStatus {
+  UPCOMING
+  CURRENT
+  CLOSED
+}
+
+// Outcome of a student's year, set when the class is promoted.
+enum EnrollmentResult {
+  PROMOTED
+  DETAINED
+  LEFT
+  PASSED_OUT
+}
+
+enum StudentCategory {
+  GENERAL
+  OBC
+  SC_ST
+  MINORITY
 }
 
 enum DocumentType {
@@ -50,6 +82,23 @@ model School {
   counters  Counter[]
   photos    Photo[]
   documents Document[]
+  houses    House[]
+  sessions  AcademicSession[]
+}
+
+// A school house (e.g. "Green House"). Names and colours are set by the admin.
+model House {
+  id          String   @id @default(cuid())
+  schoolId    String
+  name        String
+  color       String // palette key, see src/lib/houses.ts
+  description String?
+  createdAt   DateTime @default(now())
+
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students Student[]
+
+  @@unique([schoolId, name])
 }
 
 // Passport photo of a student or teacher. Kept in its own table so that
@@ -111,52 +160,69 @@ model Counter {
 }
 
 model Student {
-  id            String    @id @default(cuid())
-  schoolId      String
-  studentCode   String // unique, human-readable student ID, e.g. STU-2026-0001
-  firstName     String
-  lastName      String
-  gender        Gender?
-  dateOfBirth   DateTime?
-  email         String?
-  phone         String?
-  address       String?
-  fatherName    String?
-  fatherPhone   String?
-  motherName    String?
-  motherPhone   String?
-  admissionDate DateTime  @default(now())
-  status        Status    @default(ACTIVE)
-  sectionId     String?
-  photoId       String?   @unique
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                    String           @id @default(cuid())
+  schoolId              String
+  studentCode           String // unique, human-readable student ID, e.g. STU-2026-0001
+  firstName             String
+  middleName            String?
+  lastName              String
+  gender                Gender?
+  bloodGroup            BloodGroup?
+  dateOfBirth           DateTime?
+  email                 String?
+  phone                 String?
+  whatsappNumber        String?
+  aadhaarNumber         String? // stored as "1234 5678 9012"
+  category              StudentCategory?
+  caste                 String?
+  religion              String?
+  nationality           String?
+  primaryAddress        String?
+  correspondenceAddress String?
+  lastSchoolName        String?
+  fatherName            String?
+  fatherPhone           String?
+  motherName            String?
+  motherPhone           String?
+  admissionDate         DateTime         @default(now())
+  status                Status           @default(ACTIVE)
+  sectionId             String?
+  rollNumber            Int? // in the current session
+  houseId               String?
+  photoId               String?          @unique
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
-  school    School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  section   Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  photo     Photo?           @relation(fields: [photoId], references: [id], onDelete: SetNull)
-  subjects  StudentSubject[]
-  documents Document[]
+  school      School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  section     Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  house       House?           @relation(fields: [houseId], references: [id], onDelete: SetNull)
+  enrollments Enrollment[]
+  photo       Photo?           @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  subjects    StudentSubject[]
+  documents   Document[]
 
   @@unique([schoolId, studentCode])
   @@index([sectionId])
+  @@index([houseId])
 }
 
 model Teacher {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   schoolId      String
   employeeCode  String // unique, human-readable staff ID, e.g. TCH-0001
   firstName     String
+  middleName    String?
   lastName      String
   gender        Gender?
+  bloodGroup    BloodGroup?
   email         String?
   phone         String?
   qualification String?
-  joiningDate   DateTime @default(now())
-  status        Status   @default(ACTIVE)
-  photoId       String?  @unique
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  joiningDate   DateTime    @default(now())
+  status        Status      @default(ACTIVE)
+  photoId       String?     @unique
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   school             School                     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   photo              Photo?                     @relation(fields: [photoId], references: [id], onDelete: SetNull)
@@ -191,6 +257,7 @@ model Section {
   class              SchoolClass                @relation(fields: [classId], references: [id], onDelete: Cascade)
   classTeacher       Teacher?                   @relation(fields: [classTeacherId], references: [id], onDelete: SetNull)
   students           Student[]
+  enrollments        Enrollment[]
   subjectAssignments SubjectTeacherAssignment[]
 
   @@unique([classId, name])
@@ -247,4 +314,40 @@ model SubjectTeacherAssignment {
 
   @@unique([sectionId, subjectId])
   @@index([teacherId])
+}
+
+// An academic year such as "2026-27". Exactly one per school is CURRENT.
+model AcademicSession {
+  id        String        @id @default(cuid())
+  schoolId  String
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  status    SessionStatus @default(UPCOMING)
+  createdAt DateTime      @default(now())
+
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+
+  @@unique([schoolId, name])
+}
+
+// A student's class, section and roll number for one session. The CURRENT
+// session's enrollment mirrors Student.sectionId / Student.rollNumber.
+model Enrollment {
+  id         String            @id @default(cuid())
+  sessionId  String
+  studentId  String
+  sectionId  String
+  rollNumber Int?
+  result     EnrollmentResult?
+  createdAt  DateTime          @default(now())
+
+  session AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  // Restrict: a section that holds class history cannot be deleted.
+  section Section         @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentId])
+  @@index([sectionId])
 }

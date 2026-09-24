@@ -10,6 +10,15 @@ export function getClassesWithSections(schoolId: string) {
   });
 }
 
+/** Houses for pickers, alphabetically. */
+export function getHouses(schoolId: string) {
+  return db.house.findMany({
+    where: { schoolId },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, color: true },
+  });
+}
+
 /** Finds a section only if it belongs to the given school. */
 export function findSchoolSection(schoolId: string, sectionId: string) {
   return db.section.findFirst({
@@ -18,8 +27,8 @@ export function findSchoolSection(schoolId: string, sectionId: string) {
   });
 }
 
-export function fullName(p: { firstName: string; lastName: string }) {
-  return `${p.firstName} ${p.lastName}`;
+export function fullName(p: { firstName: string; middleName?: string | null; lastName: string }) {
+  return [p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ");
 }
 
 export function sectionLabel(s: { name: string; class: { name: string } }) {

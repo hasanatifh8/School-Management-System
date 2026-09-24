@@ -41,6 +41,11 @@ export const optionalDate = z
     return d;
   });
 
+export const optionalBloodGroup = z
+  .enum(["A_POS", "A_NEG", "B_POS", "B_NEG", "AB_POS", "AB_NEG", "O_POS", "O_NEG", ""])
+  .optional()
+  .transform((v) => v || null);
+
 export const optionalGender = z
   .enum(["MALE", "FEMALE", "OTHER", ""])
   .optional()

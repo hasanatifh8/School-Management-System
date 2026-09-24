@@ -2,6 +2,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { nextStudentCode, nextTeacherCode } from "../src/lib/codes";
+import { academicStartYear, sessionDates, sessionName } from "../src/lib/session-dates";
 
 const db = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -14,6 +15,10 @@ async function main() {
   }
 
   const school = await db.school.create({ data: { name: "Demo Public School", code: "DPS" } });
+  const year = academicStartYear();
+  const session = await db.academicSession.create({
+    data: { schoolId: school.id, name: sessionName(year), ...sessionDates(year), status: "CURRENT" },
+  });
 
   const subjects = await Promise.all(
     [
@@ -43,6 +48,15 @@ async function main() {
     });
   }
 
+  const houses = await Promise.all(
+    [
+      ["Red House", "red", "Courage and strength"],
+      ["Green House", "green", "Growth and harmony"],
+      ["Blue House", "blue", "Wisdom and truth"],
+      ["Yellow House", "yellow", "Joy and energy"],
+    ].map(([name, color, description]) => db.house.create({ data: { schoolId: school.id, name, color, description } })),
+  );
+
   await db.$transaction(async (tx) => {
     for (const [firstName, lastName, gender, qualification] of [
       ["Anita", "Sharma", "FEMALE", "M.A., B.Ed"],
@@ -64,10 +78,10 @@ async function main() {
       where: { name: "A", class: { schoolId: school.id, name: "Class 1" } },
       include: { class: { include: { subjects: true } } },
     });
-    for (const [firstName, lastName, gender, fatherName, motherName, fatherPhone, motherPhone] of [
+    for (const [i, [firstName, lastName, gender, fatherName, motherName, fatherPhone, motherPhone]] of ([
       ["Aarav", "Gupta", "MALE", "Sanjay Gupta", "Neha Gupta", "9810000001", "9810000002"],
       ["Diya", "Patel", "FEMALE", "Mehul Patel", "Kavita Patel", "9820000001", "9820000002"],
-    ] as const) {
+    ] as const).entries()) {
       const admissionDate = new Date();
       await tx.student.create({
         data: {
@@ -80,8 +94,15 @@ async function main() {
           fatherPhone,
           motherName,
           motherPhone,
+          whatsappNumber: fatherPhone,
+          nationality: "Indian",
+          primaryAddress: "12 MG Road, Lucknow, Uttar Pradesh 226001",
+          correspondenceAddress: "12 MG Road, Lucknow, Uttar Pradesh 226001",
           admissionDate,
           sectionId: section.id,
+          rollNumber: i + 1,
+          enrollments: { create: { sessionId: session.id, sectionId: section.id, rollNumber: i + 1 } },
+          houseId: houses[i % houses.length].id,
           subjects: {
             create: section.class.subjects.map((cs) => ({ subjectId: cs.subjectId })),
           },

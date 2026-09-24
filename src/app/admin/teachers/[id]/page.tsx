@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import {
   ArrowRight,
   BookOpen,
   CalendarDays,
   Crown,
+  Droplet,
   GraduationCap,
   Mail,
   Phone,
@@ -77,6 +79,12 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                 <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <span className="font-mono text-sm text-slate-500">{teacher.employeeCode}</span>
+                  {teacher.bloodGroup && (
+                    <Badge tone="red">
+                      <Droplet className="h-3 w-3" />
+                      {BLOOD_GROUP_LABELS[teacher.bloodGroup]}
+                    </Badge>
+                  )}
                   {teacher.classTeacherOf && (
                     <Badge tone="indigo">
                       <Crown className="h-3 w-3" />

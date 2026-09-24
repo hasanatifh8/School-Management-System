@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, Crown, Layers, Plus, Trash2, Users } from "lucide-react";
+import { BookOpen, Crown, Hash, Layers, Plus, Rocket, Trash2, Users } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import {
   Badge,
+  ButtonLink,
   Card,
   IconTile,
   PageHeader,
@@ -21,6 +22,7 @@ import { fullName, sectionLabel } from "@/lib/queries";
 import {
   addSection,
   assignClassTeacher,
+  assignRollNumbers,
   assignSubjectTeacher,
   deleteClass,
   deleteSection,
@@ -39,6 +41,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
           orderBy: { name: "asc" },
           include: {
             subjectAssignments: true,
+            students: { where: { status: "ACTIVE" }, select: { rollNumber: true } },
             _count: { select: { students: { where: { status: "ACTIVE" } } } },
           },
         },
@@ -64,6 +67,10 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
         breadcrumbs={[{ label: "Classes", href: "/admin/classes" }, { label: schoolClass.name }]}
         subtitle="Manage sections, curriculum and teacher assignments."
         action={
+          <>
+          <ButtonLink href={`/admin/classes/${schoolClass.id}/promote`} icon={Rocket}>
+            Promote class
+          </ButtonLink>
           <ActionForm action={deleteClass.bind(null, schoolClass.id)} compact className="flex flex-row-reverse items-center gap-3">
             <SubmitButton
               variant="dangerGhost"
@@ -73,6 +80,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
               Delete class
             </SubmitButton>
           </ActionForm>
+          </>
         }
       />
 
@@ -122,6 +130,16 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                     </SubmitButton>
                   </ActionForm>
                 </header>
+
+                {/* Roll numbers */}
+                {section._count.students > 0 && (
+                  <RollNumberBar
+                    sectionId={section.id}
+                    label={label}
+                    total={section._count.students}
+                    missing={section.students.filter((s) => s.rollNumber == null).length}
+                  />
+                )}
 
                 {/* Class teacher */}
                 <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50/60 to-transparent px-6 py-4">
@@ -304,6 +322,62 @@ function MiniStat({
       <div>
         <p className="text-xs font-medium text-slate-500">{label}</p>
         <p className="text-xl font-semibold tabular-nums text-slate-900">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function RollNumberBar({
+  sectionId,
+  label,
+  total,
+  missing,
+}: {
+  sectionId: string;
+  label: string;
+  total: number;
+  missing: number;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-3">
+      <span className="flex items-center gap-2 text-sm text-slate-600">
+        <Hash className="h-4 w-4 text-slate-400" />
+        Roll numbers:{" "}
+        {missing ? (
+          <Badge tone="amber" dot>
+            {missing} without a number
+          </Badge>
+        ) : (
+          <Badge tone="green" dot>
+            all assigned
+          </Badge>
+        )}
+      </span>
+      <div className="flex flex-wrap items-center gap-1">
+        {missing > 0 && missing < total && (
+          <ActionForm
+            action={assignRollNumbers.bind(null, sectionId, "missing")}
+            compact
+            className="flex flex-row-reverse items-center gap-2"
+          >
+            <SubmitButton variant="ghost" size="sm">
+              Fill missing only
+            </SubmitButton>
+          </ActionForm>
+        )}
+        <ActionForm
+          action={assignRollNumbers.bind(null, sectionId, "all")}
+          compact
+          className="flex flex-row-reverse items-center gap-2"
+        >
+          <SubmitButton
+            variant="secondary"
+            size="sm"
+            confirm={`Number all ${total} students in ${label} from 1 in A–Z order? Existing roll numbers in this section will be replaced.`}
+          >
+            Auto-assign roll numbers
+          </SubmitButton>
+        </ActionForm>
       </div>
     </div>
   );

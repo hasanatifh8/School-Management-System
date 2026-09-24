@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, CalendarDays, Hash, Mail, Phone, RotateCcw, UserRoundX } from "lucide-react";
+import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
+import { BookOpen, CalendarDays, Droplet, Hash, History, Mail, Phone, RotateCcw, UserRoundX } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { Avatar, Badge, Card, InfoItem, PageHeader, StatusTab, checkboxClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
-import { fullName, getClassesWithSections, sectionLabel } from "@/lib/queries";
+import { fullName, getClassesWithSections, getHouses, sectionLabel } from "@/lib/queries";
+import { HouseBadge } from "@/components/house";
 import { removeStudent, restoreStudent, setStudentSubjects, updateStudent } from "../actions";
 import { StudentForm } from "../student-form";
 
@@ -17,12 +19,17 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const { id } = await params;
   const tab = (await searchParams).tab === "documents" ? "documents" : "profile";
   const school = await getCurrentSchool();
-  const [student, classes, allSubjects] = await Promise.all([
+  const [student, classes, allSubjects, houses] = await Promise.all([
     db.student.findFirst({
       where: { id, schoolId: school.id },
       include: {
         section: { include: { class: { include: { subjects: true } } } },
+        house: true,
         subjects: true,
+        enrollments: {
+          orderBy: { session: { startDate: "desc" } },
+          include: { session: true, section: { include: { class: true } } },
+        },
         documents: {
           orderBy: { createdAt: "desc" },
           select: {
@@ -40,6 +47,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
     }),
     getClassesWithSections(school.id),
     db.subject.findMany({ where: { schoolId: school.id }, orderBy: { name: "asc" } }),
+    getHouses(school.id),
   ]);
   if (!student) notFound();
 
@@ -68,6 +76,13 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                 <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <span className="font-mono text-sm text-slate-500">{student.studentCode}</span>
+                  {student.bloodGroup && (
+                    <Badge tone="red">
+                      <Droplet className="h-3 w-3" />
+                      {BLOOD_GROUP_LABELS[student.bloodGroup]}
+                    </Badge>
+                  )}
+                  {student.rollNumber != null && <Badge>Roll {student.rollNumber}</Badge>}
                   {student.section ? (
                     <Badge tone="indigo">{sectionLabel(student.section)}</Badge>
                   ) : (
@@ -75,6 +90,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                       No class assigned
                     </Badge>
                   )}
+                  {student.house && <HouseBadge house={student.house} />}
                   {removed ? (
                     <Badge tone="red" dot>
                       Removed
@@ -145,61 +161,104 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             <StudentForm
               action={updateStudent.bind(null, student.id)}
               classes={classes}
+              houses={houses}
               student={student}
               photoUrl={photoUrl(student.photoId)}
               submitLabel="Save changes"
             />
           </Card>
 
-          <Card
-            title="Allotted subjects"
-            icon={BookOpen}
-            description={
-              student.section
-                ? `Tagged subjects are part of ${student.section.class.name}'s curriculum.`
-                : "Assign a class to allot its curriculum automatically."
-            }
-            className="self-start"
-          >
-            {allSubjects.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No subjects yet.{" "}
-                <Link href="/admin/subjects" className="font-medium text-indigo-600 hover:underline">
-                  Add subjects
-                </Link>
-              </p>
-            ) : (
-              <ActionForm
-                // Resync when a class change elsewhere on the page resets the allotment.
-                syncKey={[...allotted].sort().join()}
-                action={setStudentSubjects.bind(null, student.id)}
-                className="space-y-4"
-              >
-                <div className="space-y-2">
-                  {allSubjects.map((s) => (
-                    <label
-                      key={s.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 text-sm transition hover:border-indigo-200 hover:bg-indigo-50/30 has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/60"
-                    >
-                      <input
-                        type="checkbox"
-                        name="subjectIds"
-                        value={s.id}
-                        defaultChecked={allotted.has(s.id)}
-                        className={checkboxClass}
-                      />
-                      <span className="flex-1 font-medium text-slate-700">{s.name}</span>
-                      {curriculum.has(s.id) && <Badge tone="indigo">Curriculum</Badge>}
-                      <span className="font-mono text-[11px] text-slate-400">{s.code}</span>
-                    </label>
+          <div className="space-y-6 self-start">
+            <Card
+              title="Allotted subjects"
+              icon={BookOpen}
+              description={
+                student.section
+                  ? `Tagged subjects are part of ${student.section.class.name}'s curriculum.`
+                  : "Assign a class to allot its curriculum automatically."
+              }
+            >
+              {allSubjects.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No subjects yet.{" "}
+                  <Link href="/admin/subjects" className="font-medium text-indigo-600 hover:underline">
+                    Add subjects
+                  </Link>
+                </p>
+              ) : (
+                <ActionForm
+                  // Resync when a class change elsewhere on the page resets the allotment.
+                  syncKey={[...allotted].sort().join()}
+                  action={setStudentSubjects.bind(null, student.id)}
+                  className="space-y-4"
+                >
+                  <div className="space-y-2">
+                    {allSubjects.map((s) => (
+                      <label
+                        key={s.id}
+                        className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 text-sm transition hover:border-indigo-200 hover:bg-indigo-50/30 has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/60"
+                      >
+                        <input
+                          type="checkbox"
+                          name="subjectIds"
+                          value={s.id}
+                          defaultChecked={allotted.has(s.id)}
+                          className={checkboxClass}
+                        />
+                        <span className="flex-1 font-medium text-slate-700">{s.name}</span>
+                        {curriculum.has(s.id) && <Badge tone="indigo">Curriculum</Badge>}
+                        <span className="font-mono text-[11px] text-slate-400">{s.code}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <SubmitButton>Save subjects</SubmitButton>
+                </ActionForm>
+              )}
+            </Card>
+
+            <Card title="Class history" icon={History} padded={false}>
+              {student.enrollments.length === 0 ? (
+                <p className="p-6 text-sm text-slate-500">No class assigned yet.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {student.enrollments.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-3 px-6 py-3 text-sm">
+                      <div>
+                        <p className="font-medium text-slate-900">{e.session.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {sectionLabel(e.section)}
+                          {e.rollNumber != null && <> · Roll {e.rollNumber}</>}
+                        </p>
+                      </div>
+                      <EnrollmentStatus status={e.session.status} result={e.result} />
+                    </li>
                   ))}
-                </div>
-                <SubmitButton>Save subjects</SubmitButton>
-              </ActionForm>
-            )}
-          </Card>
+                </ul>
+              )}
+            </Card>
+          </div>
         </div>
       )}
     </>
   );
+}
+
+const RESULT_BADGES = {
+  PROMOTED: { tone: "indigo", label: "Promoted" },
+  DETAINED: { tone: "amber", label: "Repeating" },
+  LEFT: { tone: "slate", label: "Left school" },
+  PASSED_OUT: { tone: "green", label: "Passed out" },
+} as const;
+
+function EnrollmentStatus({
+  status,
+  result,
+}: {
+  status: "UPCOMING" | "CURRENT" | "CLOSED";
+  result: keyof typeof RESULT_BADGES | null;
+}) {
+  if (result) return <Badge tone={RESULT_BADGES[result].tone}>{RESULT_BADGES[result].label}</Badge>;
+  if (status === "CURRENT") return <Badge tone="green" dot>Current</Badge>;
+  if (status === "UPCOMING") return <Badge tone="sky">Next year</Badge>;
+  return <Badge>Completed</Badge>;
 }

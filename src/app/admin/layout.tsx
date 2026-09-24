@@ -1,6 +1,8 @@
 import { GraduationCap } from "lucide-react";
 import { Avatar } from "@/components/ui";
+import Link from "next/link";
 import { getCurrentSchool } from "@/lib/school";
+import { getCurrentSession } from "@/lib/sessions";
 import { AdminNav } from "./admin-nav";
 
 // Admin pages always show live data from the database.
@@ -8,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const school = await getCurrentSchool();
+  const session = await getCurrentSession(school.id);
   return (
     <div className="min-h-screen lg:flex">
       {/* Top bar on mobile; full-height sidebar on desktop with pinned contents. */}
@@ -17,9 +20,18 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/30">
               <GraduationCap className="h-5 w-5" />
             </span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-white">{school.name}</p>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Admin Portal</p>
+              <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                Admin Portal ·
+                <Link
+                  href="/admin/sessions"
+                  title="Current academic session"
+                  className="rounded bg-white/10 px-1.5 py-0.5 normal-case tracking-normal text-indigo-200 hover:bg-white/15"
+                >
+                  {session.name}
+                </Link>
+              </p>
             </div>
           </div>
 

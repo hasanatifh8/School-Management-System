@@ -4,7 +4,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
-import { fullName, getClassesWithSections, sectionLabel } from "@/lib/queries";
+import { fullName, getClassesWithSections, getHouses, sectionLabel } from "@/lib/queries";
+import { HouseBadge } from "@/components/house";
 import {
   Badge,
   ButtonLink,
@@ -29,14 +30,17 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.trim() : "";
   const classId = typeof params.classId === "string" ? params.classId : "";
+  const houseId = typeof params.houseId === "string" ? params.houseId : "";
   const showRemoved = params.status === "removed";
 
   const filters: Prisma.StudentWhereInput = {
     schoolId: school.id,
     ...(classId && { section: { classId } }),
+    ...(houseId && { houseId: houseId === "none" ? null : houseId }),
     ...(q && {
       OR: [
         { firstName: { contains: q, mode: "insensitive" } },
+        { middleName: { contains: q, mode: "insensitive" } },
         { lastName: { contains: q, mode: "insensitive" } },
         { studentCode: { contains: q, mode: "insensitive" } },
         { fatherName: { contains: q, mode: "insensitive" } },
@@ -47,26 +51,31 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
     }),
   };
 
-  const [students, activeCount, removedCount, classes] = await Promise.all([
+  const [students, activeCount, removedCount, classes, houses] = await Promise.all([
     db.student.findMany({
       where: { ...filters, status: showRemoved ? "INACTIVE" : "ACTIVE" },
-      orderBy: { studentCode: "asc" },
-      include: { section: { include: { class: true } }, _count: { select: { subjects: true } } },
+      // Within a class, list by section and roll number; otherwise by student ID.
+      orderBy: classId
+        ? [{ section: { name: "asc" } }, { rollNumber: { sort: "asc", nulls: "last" } }, { firstName: "asc" }]
+        : { studentCode: "asc" },
+      include: { section: { include: { class: true } }, house: true, _count: { select: { subjects: true } } },
     }),
     db.student.count({ where: { ...filters, status: "ACTIVE" } }),
     db.student.count({ where: { ...filters, status: "INACTIVE" } }),
     getClassesWithSections(school.id),
+    getHouses(school.id),
   ]);
 
   const tabHref = (removed: boolean) => {
     const sp = new URLSearchParams();
     if (q) sp.set("q", q);
     if (classId) sp.set("classId", classId);
+    if (houseId) sp.set("houseId", houseId);
     if (removed) sp.set("status", "removed");
     const s = sp.toString();
     return `/admin/students${s ? `?${s}` : ""}`;
   };
-  const filtered = Boolean(q || classId);
+  const filtered = Boolean(q || classId || houseId);
 
   return (
     <>
@@ -105,6 +114,17 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
                 </option>
               ))}
             </select>
+            {houses.length > 0 && (
+              <select name="houseId" defaultValue={houseId} className={`${selectClass} !w-40 !py-2`}>
+                <option value="">All houses</option>
+                {houses.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}
+                  </option>
+                ))}
+                <option value="none">No house</option>
+              </select>
+            )}
             <button className={`${buttonVariants.secondary} !py-2`}>Apply</button>
             {filtered && (
               <Link
@@ -142,6 +162,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
               <tr>
                 <th className={thClass}>Student</th>
                 <th className={thClass}>Class</th>
+                <th className={thClass}>Roll</th>
+                <th className={thClass}>House</th>
                 <th className={thClass}>Parents</th>
                 <th className={thClass}>Subjects</th>
                 <th className={thClass}>
@@ -168,6 +190,12 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
                         Not assigned
                       </Badge>
                     )}
+                  </td>
+                  <td className={`${tdClass} tabular-nums`}>
+                    {s.rollNumber ?? <span className="text-slate-400">—</span>}
+                  </td>
+                  <td className={tdClass}>
+                    {s.house ? <HouseBadge house={s.house} /> : <span className="text-slate-400">—</span>}
                   </td>
                   <td className={tdClass}>
                     <div className="space-y-0.5 text-xs">

@@ -10,6 +10,7 @@ import { createPhoto, readPhotoUpload, resolvePhotoChange } from "@/lib/photos";
 import {
   type ActionState,
   optionalDate,
+  optionalBloodGroup,
   optionalGender,
   optionalText,
   requiredText,
@@ -18,8 +19,10 @@ import {
 
 const teacherSchema = z.object({
   firstName: requiredText("First name"),
+  middleName: optionalText,
   lastName: requiredText("Last name"),
   gender: optionalGender,
+  bloodGroup: optionalBloodGroup,
   email: z.union([z.literal(""), z.email("Invalid email")]).optional().transform((v) => v || null),
   phone: optionalText,
   qualification: optionalText,
