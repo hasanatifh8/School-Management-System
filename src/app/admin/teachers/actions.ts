@@ -2,32 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { nextTeacherCode } from "@/lib/codes";
 import { getCurrentSchool } from "@/lib/school";
 import { createPhoto, readPhotoUpload, resolvePhotoChange } from "@/lib/photos";
-import {
-  type ActionState,
-  optionalDate,
-  optionalBloodGroup,
-  optionalGender,
-  optionalText,
-  requiredText,
-  validationError,
-} from "@/lib/action-state";
-
-const teacherSchema = z.object({
-  firstName: requiredText("First name"),
-  middleName: optionalText,
-  lastName: requiredText("Last name"),
-  gender: optionalGender,
-  bloodGroup: optionalBloodGroup,
-  email: z.union([z.literal(""), z.email("Invalid email")]).optional().transform((v) => v || null),
-  phone: optionalText,
-  qualification: optionalText,
-  joiningDate: optionalDate,
-});
+import { type ActionState, validationError } from "@/lib/action-state";
+import { teacherSchema } from "./schema";
 
 async function findTeacher(schoolId: string, id: string) {
   const teacher = await db.teacher.findFirst({ where: { id, schoolId } });

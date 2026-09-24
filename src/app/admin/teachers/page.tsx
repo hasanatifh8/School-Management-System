@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { Crown, Pencil, Phone, Presentation, Search, UserPlus } from "lucide-react";
-import type { Prisma } from "@/generated/prisma/client";
+import { Crown, FileSpreadsheet, Pencil, Phone, Presentation, UserPlus } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { ExportDialog } from "@/components/export-dialog";
+import { FilterSelect, ListToolbar, ResetFilters, SearchBox } from "@/components/list-toolbar";
+import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
+import { parseTeacherFilters, teacherWhere } from "@/lib/list-filters";
 import {
   Badge,
   ButtonLink,
@@ -15,7 +18,6 @@ import {
   StatusTab,
   Table,
   buttonVariants,
-  inputClass,
   tbodyClass,
   tdClass,
   thClass,
@@ -26,23 +28,11 @@ import {
 export default async function TeachersPage({ searchParams }: PageProps<"/admin/teachers">) {
   const school = await getCurrentSchool();
   const params = await searchParams;
-  const q = typeof params.q === "string" ? params.q.trim() : "";
-  const showRemoved = params.status === "removed";
+  const f = parseTeacherFilters(params);
+  const filters = teacherWhere(school.id, f);
+  const showRemoved = f.removed;
 
-  const filters: Prisma.TeacherWhereInput = {
-    schoolId: school.id,
-    ...(q && {
-      OR: [
-        { firstName: { contains: q, mode: "insensitive" } },
-        { middleName: { contains: q, mode: "insensitive" } },
-        { lastName: { contains: q, mode: "insensitive" } },
-        { employeeCode: { contains: q, mode: "insensitive" } },
-        { phone: { contains: q, mode: "insensitive" } },
-      ],
-    }),
-  };
-
-  const [teachers, activeCount, removedCount] = await Promise.all([
+  const [teachers, activeCount, removedCount, subjects] = await Promise.all([
     db.teacher.findMany({
       where: { ...filters, status: showRemoved ? "INACTIVE" : "ACTIVE" },
       orderBy: { employeeCode: "asc" },
@@ -53,15 +43,19 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
     }),
     db.teacher.count({ where: { ...filters, status: "ACTIVE" } }),
     db.teacher.count({ where: { ...filters, status: "INACTIVE" } }),
+    db.subject.findMany({ where: { schoolId: school.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
+  // Tabs keep the current search and filters.
   const tabHref = (removed: boolean) => {
-    const sp = new URLSearchParams();
-    if (q) sp.set("q", q);
+    const sp = new URLSearchParams(
+      Object.entries(params).flatMap(([k, v]) => (typeof v === "string" && v && k !== "status" ? [[k, v]] : [])),
+    );
     if (removed) sp.set("status", "removed");
-    const s = sp.toString();
-    return `/admin/teachers${s ? `?${s}` : ""}`;
+    const qs = sp.toString();
+    return `/admin/teachers${qs ? `?${qs}` : ""}`;
   };
+  const filtered = Boolean(f.q || f.role || f.subjectId || f.gender || f.bloodGroup);
 
   return (
     <>
@@ -69,54 +63,73 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
         title="Teachers"
         subtitle="Teaching staff, class teachers and subject assignments"
         action={
-          <ButtonLink href="/admin/teachers/new" icon={UserPlus}>
-            Add teacher
-          </ButtonLink>
+          <>
+            <ExportDialog kind="teachers" count={teachers.length} noun="teachers" />
+            <ButtonLink href="/admin/teachers/import" icon={FileSpreadsheet} variant="secondary">
+              Bulk upload
+            </ButtonLink>
+            <ButtonLink href="/admin/teachers/new" icon={UserPlus}>
+              Add teacher
+            </ButtonLink>
+          </>
         }
       />
 
       <Card padded={false}>
-        <div className="flex flex-col gap-4 border-b border-slate-100 px-6 pt-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 border-b border-slate-100 px-6 pt-4">
           <div className="-mb-px flex gap-6 text-sm font-medium">
             <StatusTab href={tabHref(false)} active={!showRemoved} label="Active" count={activeCount} />
             <StatusTab href={tabHref(true)} active={showRemoved} label="Removed" count={removedCount} />
           </div>
-          <form className="flex flex-wrap items-center gap-2 pb-4">
-            {showRemoved && <input type="hidden" name="status" value="removed" />}
-            <div className="relative w-full sm:w-auto">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                name="q"
-                defaultValue={q}
-                placeholder="Name, teacher ID or phone…"
-                className={`${inputClass} !w-full !py-2 pl-9 sm:!w-64`}
+          <div className="pb-4">
+            <ListToolbar>
+              <SearchBox placeholder="Name, ID, phone or email…" />
+              <FilterSelect
+                name="role"
+                label="Any role"
+                options={[
+                  { value: "class", label: "Class teachers" },
+                  { value: "subject", label: "Subject teachers" },
+                  { value: "none", label: "No assignments" },
+                ]}
               />
-            </div>
-            <button className={`${buttonVariants.secondary} !py-2`}>Search</button>
-            {q && (
-              <Link
-                href={showRemoved ? "/admin/teachers?status=removed" : "/admin/teachers"}
-                className={buttonVariants.ghost}
-              >
-                Clear
-              </Link>
-            )}
-          </form>
+              <FilterSelect
+                name="subjectId"
+                label="Any subject"
+                options={subjects.map((sub) => ({ value: sub.id, label: `Teaches ${sub.name}` }))}
+              />
+              <FilterSelect
+                name="gender"
+                label="Any gender"
+                options={[
+                  { value: "MALE", label: "Male" },
+                  { value: "FEMALE", label: "Female" },
+                  { value: "OTHER", label: "Other" },
+                ]}
+              />
+              <FilterSelect
+                name="bloodGroup"
+                label="Any blood group"
+                options={BLOOD_GROUPS.map((b) => ({ value: b, label: BLOOD_GROUP_LABELS[b] }))}
+              />
+              <ResetFilters keys={["q", "role", "subjectId", "gender", "bloodGroup"]} />
+            </ListToolbar>
+          </div>
         </div>
 
         {teachers.length === 0 ? (
           <EmptyState
             icon={Presentation}
-            title={q ? "No teachers match your search" : showRemoved ? "No removed teachers" : "No teachers yet"}
+            title={filtered ? "No teachers match your filters" : showRemoved ? "No removed teachers" : "No teachers yet"}
             description={
-              q
-                ? "Try a different name, ID or phone number."
+              filtered
+                ? "Try a different search or reset the filters."
                 : showRemoved
                   ? "Teachers you remove will appear here and can be restored."
                   : "Add teachers, then assign them as class or subject teachers from each class."
             }
             action={
-              !q && !showRemoved ? (
+              !filtered && !showRemoved ? (
                 <ButtonLink href="/admin/teachers/new" icon={UserPlus}>
                   Add teacher
                 </ButtonLink>

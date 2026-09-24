@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { GraduationCap, Pencil, Search, UserPlus } from "lucide-react";
-import type { Prisma } from "@/generated/prisma/client";
+import { FileSpreadsheet, GraduationCap, Pencil, UserPlus } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
 import { fullName, getClassesWithSections, getHouses, sectionLabel } from "@/lib/queries";
 import { HouseBadge } from "@/components/house";
+import { ExportDialog } from "@/components/export-dialog";
+import { FilterSelect, ListToolbar, ResetFilters, SearchBox } from "@/components/list-toolbar";
+import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
+import { parseStudentFilters, studentOrder, studentWhere } from "@/lib/list-filters";
+import { CATEGORY_LABELS } from "@/lib/student-options";
 import {
   Badge,
   ButtonLink,
@@ -16,8 +20,6 @@ import {
   StatusTab,
   Table,
   buttonVariants,
-  inputClass,
-  selectClass,
   tbodyClass,
   tdClass,
   thClass,
@@ -28,34 +30,14 @@ import {
 export default async function StudentsPage({ searchParams }: PageProps<"/admin/students">) {
   const school = await getCurrentSchool();
   const params = await searchParams;
-  const q = typeof params.q === "string" ? params.q.trim() : "";
-  const classId = typeof params.classId === "string" ? params.classId : "";
-  const houseId = typeof params.houseId === "string" ? params.houseId : "";
-  const showRemoved = params.status === "removed";
-
-  const filters: Prisma.StudentWhereInput = {
-    schoolId: school.id,
-    ...(classId && { section: { classId } }),
-    ...(houseId && { houseId: houseId === "none" ? null : houseId }),
-    ...(q && {
-      OR: [
-        { firstName: { contains: q, mode: "insensitive" } },
-        { middleName: { contains: q, mode: "insensitive" } },
-        { lastName: { contains: q, mode: "insensitive" } },
-        { studentCode: { contains: q, mode: "insensitive" } },
-        { fatherName: { contains: q, mode: "insensitive" } },
-        { motherName: { contains: q, mode: "insensitive" } },
-      ],
-    }),
-  };
+  const f = parseStudentFilters(params);
+  const filters = studentWhere(school.id, f);
+  const showRemoved = f.removed;
 
   const [students, activeCount, removedCount, classes, houses] = await Promise.all([
     db.student.findMany({
       where: { ...filters, status: showRemoved ? "INACTIVE" : "ACTIVE" },
-      // Within a class, list by section and roll number; otherwise by student ID.
-      orderBy: classId
-        ? [{ section: { name: "asc" } }, { rollNumber: { sort: "asc", nulls: "last" } }, { firstName: "asc" }]
-        : { studentCode: "asc" },
+      orderBy: studentOrder(f),
       include: { section: { include: { class: true } }, house: true, _count: { select: { subjects: true } } },
     }),
     db.student.count({ where: { ...filters, status: "ACTIVE" } }),
@@ -64,16 +46,17 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
     getHouses(school.id),
   ]);
 
+  // Tabs keep the current search and filters.
   const tabHref = (removed: boolean) => {
-    const sp = new URLSearchParams();
-    if (q) sp.set("q", q);
-    if (classId) sp.set("classId", classId);
-    if (houseId) sp.set("houseId", houseId);
+    const sp = new URLSearchParams(
+      Object.entries(params).flatMap(([k, v]) => (typeof v === "string" && v && k !== "status" ? [[k, v]] : [])),
+    );
     if (removed) sp.set("status", "removed");
-    const s = sp.toString();
-    return `/admin/students${s ? `?${s}` : ""}`;
+    const qs = sp.toString();
+    return `/admin/students${qs ? `?${qs}` : ""}`;
   };
-  const filtered = Boolean(q || classId || houseId);
+  const filtered = Boolean(f.q || f.classId || f.sectionId || f.houseId || f.gender || f.category || f.bloodGroup);
+  const sections = classes.find((c) => c.id === f.classId)?.sections ?? [];
 
   return (
     <>
@@ -81,58 +64,69 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
         title="Students"
         subtitle="Admissions, class placement and parent contacts"
         action={
-          <ButtonLink href="/admin/students/new" icon={UserPlus}>
-            Add student
-          </ButtonLink>
+          <>
+            <ExportDialog kind="students" count={students.length} noun="students" />
+            <ButtonLink href="/admin/students/import" icon={FileSpreadsheet} variant="secondary">
+              Bulk upload
+            </ButtonLink>
+            <ButtonLink href="/admin/students/new" icon={UserPlus}>
+              Add student
+            </ButtonLink>
+          </>
         }
       />
 
       <Card padded={false}>
-        <div className="flex flex-col gap-4 border-b border-slate-100 px-6 pt-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 border-b border-slate-100 px-6 pt-4">
           <div className="-mb-px flex gap-6 text-sm font-medium">
             <StatusTab href={tabHref(false)} active={!showRemoved} label="Active" count={activeCount} />
             <StatusTab href={tabHref(true)} active={showRemoved} label="Removed" count={removedCount} />
           </div>
-          <form className="flex flex-wrap items-center gap-2 pb-4">
-            {showRemoved && <input type="hidden" name="status" value="removed" />}
-            <div className="relative w-full sm:w-auto">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                name="q"
-                defaultValue={q}
-                placeholder="Name, student ID or parent…"
-                className={`${inputClass} !w-full !py-2 pl-9 sm:!w-64`}
+          <div className="pb-4">
+            <ListToolbar>
+              <SearchBox placeholder="Name, ID, parent or phone…" />
+              <FilterSelect
+                name="classId"
+                label="All classes"
+                resets={["sectionId"]}
+                options={classes.map((c) => ({ value: c.id, label: c.name }))}
               />
-            </div>
-            <select name="classId" defaultValue={classId} className={`${selectClass} !w-40 !py-2`}>
-              <option value="">All classes</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            {houses.length > 0 && (
-              <select name="houseId" defaultValue={houseId} className={`${selectClass} !w-40 !py-2`}>
-                <option value="">All houses</option>
-                {houses.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.name}
-                  </option>
-                ))}
-                <option value="none">No house</option>
-              </select>
-            )}
-            <button className={`${buttonVariants.secondary} !py-2`}>Apply</button>
-            {filtered && (
-              <Link
-                href={showRemoved ? "/admin/students?status=removed" : "/admin/students"}
-                className={buttonVariants.ghost}
-              >
-                Clear
-              </Link>
-            )}
-          </form>
+              {sections.length > 1 && (
+                <FilterSelect
+                  name="sectionId"
+                  label="All sections"
+                  options={sections.map((sec) => ({ value: sec.id, label: `Section ${sec.name}` }))}
+                />
+              )}
+              {houses.length > 0 && (
+                <FilterSelect
+                  name="houseId"
+                  label="All houses"
+                  options={[...houses.map((h) => ({ value: h.id, label: h.name })), { value: "none", label: "No house" }]}
+                />
+              )}
+              <FilterSelect
+                name="gender"
+                label="Any gender"
+                options={[
+                  { value: "MALE", label: "Male" },
+                  { value: "FEMALE", label: "Female" },
+                  { value: "OTHER", label: "Other" },
+                ]}
+              />
+              <FilterSelect
+                name="category"
+                label="Any category"
+                options={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))}
+              />
+              <FilterSelect
+                name="bloodGroup"
+                label="Any blood group"
+                options={BLOOD_GROUPS.map((b) => ({ value: b, label: BLOOD_GROUP_LABELS[b] }))}
+              />
+              <ResetFilters keys={["q", "classId", "sectionId", "houseId", "gender", "category", "bloodGroup"]} />
+            </ListToolbar>
+          </div>
         </div>
 
         {students.length === 0 ? (

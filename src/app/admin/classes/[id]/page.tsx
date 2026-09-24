@@ -118,7 +118,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                     <div>
                       <h2 className="font-semibold text-slate-900">Section {section.name}</h2>
                       <Link
-                        href={`/admin/students?classId=${schoolClass.id}`}
+                        href={`/admin/students?classId=${schoolClass.id}&sectionId=${section.id}`}
                         className="text-xs text-slate-500 hover:text-indigo-600"
                       >
                         {section._count.students} active students
