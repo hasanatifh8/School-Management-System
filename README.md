@@ -57,6 +57,24 @@ Open http://localhost:3000. It redirects to the Admin Portal. You can use a Neon
 
 **Removing** a student or teacher marks them inactive and does not delete them. This keeps their history (attendance, marks, fees later) and lets them be restored. A removed teacher loses their class-teacher and subject-teacher roles.
 
+## Power Admin (multiple schools)
+
+Power Admin at **`/power`** manages every school on the system:
+
+- **Schools:** add, edit (name, code, board, principal, contact details, **logo**), suspend or reactivate.
+- **Open Admin Portal:** switches the Admin Portal to that school. The sidebar shows its logo, plus a *Switch school* link when there are several schools.
+- **Data tools:** download a full Excel backup, load demo data into an empty school, purge removed students and teachers, clean unused files, **reset** a school's data, or **delete** a school (both ask you to type the school code).
+- **System:** database size, migrations, unused files, and an **activity log** of every Power Admin action (including failed sign-ins).
+
+**Setup:** set `POWER_ADMIN_PASSWORD` (at least 10 characters) in the environment: in Vercel under *Settings → Environment Variables*, then redeploy, or in `.env` locally. Without it, Power Admin stays switched off. Sessions last 8 hours, and changing the password signs everyone out.
+
+### School admins and sign-in
+
+- **Accounts:** Power Admin creates school admin accounts, either while adding a school or later on the school's page under **School admins**. Each account has a name, email and password, and the password field has *Generate* and *Copy* buttons. From there you can also **reset a password**, **disable/enable** an account or delete it.
+- **Signing in:** school admins sign in at **`/login`** and only ever see **their own school**. They can change their password under **Account & password**, which signs out their other devices.
+- **What's protected:** the whole Admin Portal, including photos, documents, exports and templates, needs a signed-in school admin or Power Admin. Otherwise it redirects to `/login`. A Power Admin can open any school, and sees a "Viewing … as Power Admin" banner.
+- **Security:** passwords are stored with scrypt (salted). Sessions are kept in the database and last 12 hours. They are revoked on sign-out, password reset, disabling an admin or suspending the school. Failed sign-ins are slowed down and recorded in the activity log.
+
 ## Project structure
 
 ```

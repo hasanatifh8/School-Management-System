@@ -69,11 +69,29 @@ enum DocumentType {
   OTHER
 }
 
+enum SchoolStatus {
+  ACTIVE
+  SUSPENDED
+}
+
 model School {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  createdAt DateTime @default(now())
+  id              String       @id @default(cuid())
+  name            String
+  code            String       @unique
+  status          SchoolStatus @default(ACTIVE)
+  board           String?
+  principalName   String?
+  establishedYear Int?
+  motto           String?
+  address         String?
+  phone           String?
+  email           String?
+  website         String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @default(now()) @updatedAt
+
+  logo   SchoolLogo?
+  admins SchoolAdmin[]
 
   students  Student[]
   teachers  Teacher[]
@@ -348,4 +366,58 @@ model Enrollment {
 
   @@unique([sessionId, studentId])
   @@index([sectionId])
+}
+
+// School logo, kept apart from School so loading a school never loads image bytes.
+model SchoolLogo {
+  schoolId  String   @id
+  mimeType  String
+  data      Bytes
+  updatedAt DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+// Record of Power Admin actions (schools created, reset, deleted, cleanups…).
+// Not linked to School so entries survive the school's deletion.
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  schoolId   String?
+  schoolName String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// A school's admin account for the Admin Portal (signs in at /login).
+model SchoolAdmin {
+  id           String    @id @default(cuid())
+  schoolId     String
+  name         String
+  email        String    @unique // stored lower-case; used to sign in
+  passwordHash String
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  school   School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  sessions AdminSession[]
+
+  @@index([schoolId])
+}
+
+// A signed-in admin session. `id` is the SHA-256 of the random token kept in
+// the cookie, so a database leak doesn't reveal usable tokens.
+model AdminSession {
+  id        String   @id
+  adminId   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  admin SchoolAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
 }

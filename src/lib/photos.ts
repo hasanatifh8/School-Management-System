@@ -25,8 +25,9 @@ function sniffImageType(b: Uint8Array): string | null {
  */
 export async function readPhotoUpload(
   formData: FormData,
+  field = "photo",
 ): Promise<{ photo: PhotoUpload | null } | { error: string }> {
-  const file = formData.get("photo");
+  const file = formData.get(field);
   if (!(file instanceof File) || file.size === 0) return { photo: null };
   if (file.size > MAX_PHOTO_BYTES) return { error: "Photo must be smaller than 1 MB." };
 
