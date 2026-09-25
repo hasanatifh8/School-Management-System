@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarCheck, CalendarRange, GraduationCap, LayoutDashboard, Presentation, School, Shield } from "lucide-react";
+import { BookOpen, CalendarCheck, IdCard, CalendarRange, GraduationCap, LayoutDashboard, Presentation, School, Shield } from "lucide-react";
 
 const items = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/students", label: "Students", icon: GraduationCap },
   { href: "/admin/teachers", label: "Teachers", icon: Presentation },
   { href: "/admin/attendance", label: "Attendance", icon: CalendarCheck },
+  { href: "/admin/id-cards", label: "ID cards", icon: IdCard },
   { href: "/admin/classes", label: "Classes", icon: School },
   { href: "/admin/subjects", label: "Subjects", icon: BookOpen },
   { href: "/admin/houses", label: "Houses", icon: Shield },

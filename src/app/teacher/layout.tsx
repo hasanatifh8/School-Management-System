@@ -25,7 +25,7 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
 
   return (
     <div className="min-h-screen lg:flex">
-      <aside className="z-30 bg-slate-950 lg:w-64 lg:shrink-0">
+      <aside className="z-30 bg-slate-950 print:hidden lg:w-64 lg:shrink-0">
         <div className="flex flex-col lg:sticky lg:top-0 lg:h-screen">
           <div className="flex items-center gap-3 px-5 py-4 lg:py-6">
             {logoUrl ? (
@@ -70,7 +70,7 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
         </div>
       </aside>
       <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10">{children}</div>
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10 print:max-w-none print:p-0">{children}</div>
       </main>
     </div>
   );

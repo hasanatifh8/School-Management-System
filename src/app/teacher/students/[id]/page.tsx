@@ -3,7 +3,7 @@ import { BookOpen, CalendarDays, Droplet, Hash, IdCard, Shield, UserRound, Users
 import { DocumentsPanel } from "../../../admin/documents/documents-panel";
 import { AttendanceSummaryCard } from "@/components/attendance/attendance-summary";
 import { HouseBadge } from "@/components/house";
-import { Avatar, Badge, Card, InfoItem, PageHeader } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, Card, InfoItem, PageHeader } from "@/components/ui";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { db } from "@/lib/db";
 import { maskDocumentNumber } from "@/lib/document-types";
@@ -41,6 +41,11 @@ export default async function TeacherStudentPage({ params }: PageProps<"/teacher
       <PageHeader
         title={name}
         breadcrumbs={[{ label: "My class", href: "/teacher/class" }, { label: name }]}
+        action={
+          <ButtonLink href={`/teacher/id-cards/generate?ids=${student.id}`} variant="secondary" icon={IdCard}>
+            ID card
+          </ButtonLink>
+        }
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono">{student.studentCode}</span>

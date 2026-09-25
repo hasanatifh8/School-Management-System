@@ -106,6 +106,26 @@ Teachers sign in at **`/login`** under the **Teacher** tab (or `/login?role=teac
   - The admin dashboard lists the classes that haven't marked today.
 - **Percentage:** present and late count as a full day, half day as half, and absent and leave as not attended. Holidays don't count.
 
+## Student ID cards
+
+- **Step by step** (Admin → **ID cards**):
+  1. **Choose a class.** Each class shows its student count and how many have no photo.
+  2. **Pick students.** Search and tick students (or *Select all*), then click **Generate**. Each row's **Card** link makes one student's card straight away.
+  3. **Download or print** only the students you picked, up to 100 at a time, so the page stays quick.
+  - Class teachers have the same steps for their own class under **ID cards** in the Teacher Portal.
+  - A student profile's **ID card** button goes straight to step 3 for that student.
+- **What's on the card** (standard 54 × 85.6 mm, portrait):
+  - **Front:** school logo, name and motto; the student's photo, name, class, section, roll number, admission number, date of birth, blood group and parent contact; a QR code; and "valid till" (the end of the session).
+  - **Back:** the school's address, phone, email and website, a principal signature line, and "If found, please return to the school".
+  - The school details come from what **Power Admin enters for the school**. Missing details are listed, and those spaces are left blank.
+- **QR code:** plain text (school, name, admission number, class and roll, date of birth, blood group, parent) that any phone camera reads offline.
+- **Images:**
+  - **Sizes:** Print quality 300 DPI (638 × 1011 px), High-res print 600 DPI (1276 × 2023 px), Phone/WhatsApp (540 × 856 px), or a custom width from 200 to 4000 px. The height follows the card's shape.
+  - **Formats:** PNG or JPG.
+  - **One student:** download the front, the back, or front and back side by side in one image.
+  - **Several students:** download a single ZIP with each student's front and one back image, or use the download link under any card.
+- **Printing:** choose a layout (**Double-sided**, **Front and back side by side**, or **Front only**) and click **Print**. In the print window, turn on **Background graphics** and keep the scale at **100%**. For double-sided printing, flip on the long edge.
+
 ## Project structure
 
 ```

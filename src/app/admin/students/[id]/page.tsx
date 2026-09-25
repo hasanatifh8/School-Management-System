@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { BookOpen, CalendarDays, Droplet, Hash, History, Mail, RotateCcw, UserRound, UserRoundX } from "lucide-react";
+import { BookOpen, CalendarDays, Droplet, Hash, History, IdCard, Mail, RotateCcw, UserRound, UserRoundX } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { AttendanceSummaryCard } from "@/components/attendance/attendance-summary";
-import { Avatar, Badge, Card, InfoItem, PageHeader, StatusTab, checkboxClass } from "@/components/ui";
+import { Avatar, Badge, Card, InfoItem, PageHeader, StatusTab, buttonVariants, checkboxClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
@@ -104,23 +104,31 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                 </div>
               </div>
             </div>
-            {removed ? (
-              <ActionForm action={restoreStudent.bind(null, student.id)} compact className="flex items-center gap-3 pt-3">
-                <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
-                  Restore student
-                </SubmitButton>
-              </ActionForm>
-            ) : (
-              <ActionForm action={removeStudent.bind(null, student.id)} compact className="flex items-center gap-3 pt-3">
-                <SubmitButton
-                  variant="dangerGhost"
-                  confirm={`Remove ${name}? The record is kept and can be restored.`}
-                  icon={<UserRoundX className="h-4 w-4" />}
-                >
-                  Remove student
-                </SubmitButton>
-              </ActionForm>
-            )}
+            <div className="flex flex-wrap items-start gap-2">
+              {!removed && (
+                <Link href={`/admin/id-cards/generate?ids=${student.id}`} className={`${buttonVariants.secondary} mt-3`}>
+                  <IdCard className="h-4 w-4" />
+                  ID card
+                </Link>
+              )}
+              {removed ? (
+                <ActionForm action={restoreStudent.bind(null, student.id)} compact className="flex items-center gap-3 pt-3">
+                  <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
+                    Restore student
+                  </SubmitButton>
+                </ActionForm>
+              ) : (
+                <ActionForm action={removeStudent.bind(null, student.id)} compact className="flex items-center gap-3 pt-3">
+                  <SubmitButton
+                    variant="dangerGhost"
+                    confirm={`Remove ${name}? The record is kept and can be restored.`}
+                    icon={<UserRoundX className="h-4 w-4" />}
+                  >
+                    Remove student
+                  </SubmitButton>
+                </ActionForm>
+              )}
+            </div>
           </div>
 
           <dl className="mt-6 grid gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-4">

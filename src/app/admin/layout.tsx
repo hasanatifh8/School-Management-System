@@ -23,7 +23,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
     <div className="min-h-screen lg:flex">
       {/* Top bar on mobile; full-height sidebar on desktop with pinned contents. */}
-      <aside className="z-30 bg-slate-950 lg:w-64 lg:shrink-0">
+      <aside className="z-30 bg-slate-950 print:hidden lg:w-64 lg:shrink-0">
         <div className="flex flex-col lg:sticky lg:top-0 lg:h-screen">
           <div className="flex items-center gap-3 px-5 py-4 lg:py-6">
             {logoUrl ? (
@@ -101,7 +101,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
 
       <main className="min-w-0 flex-1">
         {viewer.kind === "power" && (
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 px-4 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200 sm:px-6 lg:px-10">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 print:hidden px-4 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200 sm:px-6 lg:px-10">
             <span>
               Viewing <strong>{school.name}</strong> as Power Admin.
             </span>
@@ -110,7 +110,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             </Link>
           </div>
         )}
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10">{children}</div>
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10 print:max-w-none print:p-0">{children}</div>
       </main>
     </div>
   );
