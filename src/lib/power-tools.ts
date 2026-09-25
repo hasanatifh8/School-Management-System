@@ -29,6 +29,7 @@ export async function wipeSchoolData(tx: Tx, schoolId: string) {
   await tx.enrollment.deleteMany({ where: { session: { schoolId } } });
   await tx.attendanceDay.deleteMany({ where: { schoolId } }); // cascades to attendance records
   await tx.holiday.deleteMany({ where: { schoolId } });
+  await tx.notice.deleteMany({ where: { schoolId } }); // cascades to recipients
   await tx.expense.deleteMany({ where: { schoolId } });
   await tx.expenseCategory.deleteMany({ where: { schoolId } });
   await tx.salaryPayment.deleteMany({ where: { schoolId } });

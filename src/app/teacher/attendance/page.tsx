@@ -1,4 +1,4 @@
-import { CalendarCheck, Table2 } from "lucide-react";
+import { CalendarCheck, Megaphone, Table2 } from "lucide-react";
 import { AttendanceSheet } from "@/components/attendance/attendance-sheet";
 import { DateNav } from "@/components/attendance/date-nav";
 import { UpcomingHolidays } from "@/components/attendance/upcoming-holidays";
@@ -36,9 +36,16 @@ export default async function TeacherAttendancePage({ searchParams }: PageProps<
         title="Attendance"
         subtitle={`${sectionLabel(section)} · ${formatISO(date)}`}
         action={
-          <ButtonLink href="/teacher/attendance/register" variant="secondary" icon={Table2}>
-            Monthly register
-          </ButtonLink>
+          <>
+            {sheet.initial && Object.values(sheet.initial).some((m) => m.status === "ABSENT") && (
+              <ButtonLink href={`/teacher/notices?absent=${date}`} variant="secondary" icon={Megaphone}>
+                Message absent parents
+              </ButtonLink>
+            )}
+            <ButtonLink href="/teacher/attendance/register" variant="secondary" icon={Table2}>
+              Monthly register
+            </ButtonLink>
+          </>
         }
       />
       <div className="mb-6">

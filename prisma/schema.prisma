@@ -78,6 +78,18 @@ enum PaymentMode {
   OTHER
 }
 
+enum MessageChannel {
+  WHATSAPP
+  SMS
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED // no phone number
+}
+
 enum PayeeType {
   TEACHER
   STAFF
@@ -148,6 +160,8 @@ model School {
   salaryPayments SalaryPayment[]
   expenseCats    ExpenseCategory[]
   expenses       Expense[]
+  messaging      MessagingSettings?
+  notices        Notice[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -257,16 +271,17 @@ model Student {
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 
-  school      School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  section     Section?           @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  house       House?             @relation(fields: [houseId], references: [id], onDelete: SetNull)
-  enrollments Enrollment[]
-  photo       Photo?             @relation(fields: [photoId], references: [id], onDelete: SetNull)
-  subjects    StudentSubject[]
-  documents   Document[]
-  attendance  AttendanceRecord[]
-  feeHeads    StudentFeeHead[]
-  feeReceipts FeeReceipt[]
+  school           School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  section          Section?           @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  house            House?             @relation(fields: [houseId], references: [id], onDelete: SetNull)
+  enrollments      Enrollment[]
+  photo            Photo?             @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  subjects         StudentSubject[]
+  documents        Document[]
+  attendance       AttendanceRecord[]
+  feeHeads         StudentFeeHead[]
+  feeReceipts      FeeReceipt[]
+  noticeRecipients NoticeRecipient[]
 
   @@unique([schoolId, studentCode])
   @@index([sectionId])
@@ -309,6 +324,7 @@ model Teacher {
   sessions           TeacherSession[]
 
   salaryPayments SalaryPayment[]
+  notices        Notice[]
 
   @@unique([schoolId, employeeCode])
 }
@@ -730,4 +746,59 @@ model Expense {
 
   @@index([schoolId, date])
   @@index([categoryId])
+}
+
+// WhatsApp and SMS providers for sending notices. Provider settings (API keys)
+// are stored encrypted with the SECRETS_KEY environment variable.
+model MessagingSettings {
+  schoolId         String   @id
+  whatsappProvider String? // "meta", "twilio", "http", "test"
+  whatsappConfig   String? // encrypted JSON
+  smsProvider      String? // "fast2sms", "twilio", "http", "test"
+  smsConfig        String? // encrypted JSON
+  teachersCanSend  Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+// A message sent to parents, by an admin or a class teacher.
+model Notice {
+  id        String           @id @default(cuid())
+  schoolId  String
+  title     String
+  body      String
+  channels  MessageChannel[]
+  audience  String // e.g. "Class 1 – A, Class 2 – B" or "Absent on 26 Sept"
+  sentBy    String
+  teacherId String?
+  createdAt DateTime         @default(now())
+
+  school     School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher    Teacher?          @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  recipients NoticeRecipient[]
+
+  @@index([schoolId, createdAt])
+}
+
+// One message to one phone on one channel, with its delivery result.
+model NoticeRecipient {
+  id          String         @id @default(cuid())
+  noticeId    String
+  studentId   String?
+  name        String
+  className   String?
+  phone       String?
+  channel     MessageChannel
+  message     String // with the student's details filled in
+  status      DeliveryStatus @default(PENDING)
+  error       String?
+  providerRef String?
+  sentAt      DateTime?
+
+  notice  Notice   @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  student Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@index([noticeId, status])
+  @@index([studentId])
 }

@@ -204,7 +204,19 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
         </Card>
 
         <div className="space-y-6 self-start">
-          <Card title="Absent" icon={UserRoundX} description={absentees.length ? `${absentees.length} student(s)` : undefined} padded={false}>
+          <Card
+            title="Absent"
+            icon={UserRoundX}
+            description={absentees.length ? `${absentees.length} student(s)` : undefined}
+            padded={false}
+            action={
+              absentees.length > 0 && (
+                <Link href={`/admin/notices?absent=${date}`} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                  Message parents
+                </Link>
+              )
+            }
+          >
             {absentees.length === 0 ? (
               <p className="p-6 text-sm text-slate-500">{markedCount ? "No one is absent." : "No attendance marked yet."}</p>
             ) : (

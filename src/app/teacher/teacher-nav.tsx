@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarCheck, IdCard, KeyRound, LayoutDashboard, Users } from "lucide-react";
+import { BookOpen, CalendarCheck, IdCard, Megaphone, KeyRound, LayoutDashboard, Users } from "lucide-react";
 
 type Item = { href: string; label: string; icon: typeof Users; sub?: string };
 
@@ -14,6 +14,7 @@ export function TeacherNav({ myClass, subjectSections }: { myClass: string | nul
       ? [
           { href: "/teacher/class", label: "My class", icon: Users, sub: myClass },
           { href: "/teacher/attendance", label: "Attendance", icon: CalendarCheck },
+          { href: "/teacher/notices", label: "Notices", icon: Megaphone },
           { href: "/teacher/id-cards", label: "ID cards", icon: IdCard },
         ]
       : []),

@@ -211,6 +211,39 @@ This section is for school admins and Power Admin. Fees staff can't see it.
   - Expected by month end is, for salaries, what's already paid plus the salaries still due; for other categories, the higher of the amount spent so far and the usual amount.
   - Next month is the current payroll plus each category's recent average.
 
+## Notices (WhatsApp & SMS)
+
+**Settings** (*Admin → Notices → WhatsApp & SMS settings*)
+- Connect a WhatsApp provider and an SMS provider:
+
+  | Channel | Providers |
+  |---|---|
+  | WhatsApp | **WhatsApp Cloud API (Meta)**, **Twilio**, **Other provider (HTTP)** |
+  | SMS | **Fast2SMS**, **Twilio**, **Other provider (HTTP)** |
+
+  - **Other provider (HTTP)** works with any provider that has an HTTP API (MSG91, Gupshup, Interakt, WATI, Textlocal…). Enter the URL, headers and body with `{phone}`, `{phone10}` and `{message}` placeholders.
+  - **Test mode** records messages without sending anything.
+- Meta WhatsApp: messages to parents who haven't messaged you in the last 24 hours need an **approved template** with one body variable `{{1}}`. The notice text goes into it.
+- **Send test** sends a test message to any number.
+- You can **turn off** a channel, and decide whether class teachers may send notices.
+- API keys are stored **encrypted** (AES-256-GCM) using the `SECRETS_KEY` environment variable, and are never shown again after saving.
+  - Set `SECRETS_KEY` to a long random value locally (`.env`) and on Vercel.
+  - Changing it means entering the keys again.
+
+**Sending**
+- **Admins** (*Notices → Send notice*) can send to selected classes, individual students, students **absent** on a day (from attendance), or the whole school.
+- **Class teachers** (*Teacher Portal → Notices*) can send to their whole class, their absent students, or students they pick. Other classes are never included.
+- Choose WhatsApp, SMS or both. Write the message, or start from a template (Absent today, Holiday, Fee reminder, Parent-teacher meeting).
+- Placeholders are filled in for each student: `{student}`, `{class}`, `{roll}`, `{father}`, `{date}`, `{school}`.
+- **Review** shows how many messages will go out, how many students have no number, and a sample message. Then **Send**.
+- WhatsApp uses the student's WhatsApp number, or their phone number if there isn't one. SMS uses the phone number.
+- Attendance has shortcuts: **Message parents** on the admin absent list, and **Message absent parents** on the teacher's attendance page.
+
+**Delivery**
+- Messages are sent in the background (up to 60 seconds after sending), and also while the notice page is open. They're never sent twice.
+- Each notice shows every recipient as **Sent**, **Failed** (with the provider's error), **Skipped** (no number) or **Waiting**. **Retry failed** tries the failed ones again.
+- *Notices → Sent* lists all notices from admins and teachers.
+
 ## Project structure
 
 ```
