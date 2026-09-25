@@ -1,5 +1,5 @@
 import "server-only";
-import { randomBytes, scrypt as scryptCb, timingSafeEqual, type ScryptOptions } from "node:crypto";
+import { randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual, type ScryptOptions } from "node:crypto";
 
 // scrypt with N=2^15, r=8, p=1 (~32 MB, ~50–100 ms per check).
 const N = 32768;
@@ -40,4 +40,19 @@ export function passwordProblem(password: string) {
   if (password.length > 128) return "Password is too long.";
   if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "Use at least one letter and one number.";
   return null;
+}
+
+// No look-alike characters (0/O, 1/l/I) so a password can be read out or typed from paper.
+const LETTERS = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
+const DIGITS = "23456789";
+
+/** 12-character password from a secure random source, always with letters and digits. */
+export function generatePassword() {
+  const pick = (set: string, n: number) => Array.from({ length: n }, () => set[randomInt(set.length)]).join("");
+  const chars = (pick(LETTERS, 9) + pick(DIGITS, 3)).split("");
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
 }

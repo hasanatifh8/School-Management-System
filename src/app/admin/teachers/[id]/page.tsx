@@ -4,6 +4,7 @@ import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import {
   ArrowRight,
   BookOpen,
+  Briefcase,
   CalendarDays,
   Crown,
   Droplet,
@@ -20,10 +21,20 @@ import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
-import { removeTeacher, restoreTeacher, updateTeacher } from "../actions";
+import {
+  changeTeacherUsername,
+  issueTeacherLogin,
+  removeTeacher,
+  removeTeacherLogin,
+  restoreTeacher,
+  setTeacherLoginEnabled,
+  updateTeacher,
+} from "../actions";
+import { TeacherLoginCard } from "./teacher-login-card";
 import { TeacherForm } from "../teacher-form";
 
 const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
+const dateTimeFormat = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 
 export default async function TeacherPage({ params, searchParams }: PageProps<"/admin/teachers/[id]">) {
   const { id } = await params;
@@ -122,18 +133,30 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
             )}
           </div>
 
-          <dl className="mt-6 grid gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="mt-6 grid gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-3">
             <InfoItem icon={GraduationCap} label="Qualification">
               {teacher.qualification ?? "—"}
             </InfoItem>
+            <InfoItem icon={BookOpen} label="Specialization">
+              {teacher.specialization ?? "—"}
+            </InfoItem>
+            <InfoItem icon={Briefcase} label="Experience">
+              {teacher.experienceYears == null
+                ? "—"
+                : `${teacher.experienceYears} year${teacher.experienceYears === 1 ? "" : "s"}`}
+            </InfoItem>
             <InfoItem icon={Phone} label="Phone">
               {teacher.phone ?? "—"}
+              {teacher.whatsappNumber && teacher.whatsappNumber !== teacher.phone && (
+                <span className="block text-slate-500">WhatsApp {teacher.whatsappNumber}</span>
+              )}
             </InfoItem>
             <InfoItem icon={Mail} label="Email">
               {teacher.email ?? "—"}
             </InfoItem>
             <InfoItem icon={CalendarDays} label="Joined on">
               {dateFormat.format(teacher.joiningDate)}
+              {teacher.dateOfBirth && <span className="block text-slate-500">Born {dateFormat.format(teacher.dateOfBirth)}</span>}
             </InfoItem>
           </dl>
         </div>
@@ -165,6 +188,17 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
           </Card>
 
           <div className="space-y-6 self-start">
+            <TeacherLoginCard
+              username={teacher.username}
+              hasLogin={Boolean(teacher.passwordHash)}
+              enabled={teacher.loginEnabled}
+              lastLoginAt={teacher.lastLoginAt ? dateTimeFormat.format(teacher.lastLoginAt) : null}
+              issue={issueTeacherLogin.bind(null, teacher.id)}
+              changeUsername={changeTeacherUsername.bind(null, teacher.id)}
+              setEnabled={setTeacherLoginEnabled.bind(null, teacher.id)}
+              remove={removeTeacherLogin.bind(null, teacher.id)}
+            />
+
             <Card title="Class teacher" icon={Crown} description="Assigned from the class's page.">
               {teacher.classTeacherOf ? (
                 <Link

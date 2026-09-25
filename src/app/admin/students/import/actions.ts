@@ -91,7 +91,11 @@ export async function importStudents(_: ImportState, formData: FormData): Promis
       aadhaarNumber: v.aadhaarNumber ?? "",
       phone: v.phone ?? "",
       fatherName: v.fatherName ?? "",
+      fatherOccupation: v.fatherOccupation ?? "",
       motherName: v.motherName ?? "",
+      guardianName: v.guardianName ?? "",
+      // Like the form: a blank guardian means the father is the guardian.
+      ...(!(v.guardianName ?? "").trim() && (v.fatherName ?? "").trim() && { guardianIsFather: "on" }),
       rollNumber: v.rollNumber ?? "",
       nationality: DEFAULT_NATIONALITY,
     });

@@ -62,6 +62,7 @@ export function studentWhere(schoolId: string, f: StudentFilters): Prisma.Studen
       "studentCode",
       "fatherName",
       "motherName",
+      "guardianName",
       "phone",
     ]),
   };
@@ -104,6 +105,14 @@ export function teacherWhere(schoolId: string, f: TeacherFilters): Prisma.Teache
     ...(f.subjectId && { subjectAssignments: { some: { subjectId: f.subjectId } } }),
     ...(f.gender && { gender: f.gender }),
     ...(f.bloodGroup && { bloodGroup: f.bloodGroup }),
-    ...wordSearch<Prisma.TeacherWhereInput>(f.q, ["firstName", "middleName", "lastName", "employeeCode", "phone", "email"]),
+    ...wordSearch<Prisma.TeacherWhereInput>(f.q, [
+      "firstName",
+      "middleName",
+      "lastName",
+      "employeeCode",
+      "phone",
+      "email",
+      "specialization",
+    ]),
   };
 }

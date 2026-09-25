@@ -28,6 +28,8 @@ import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { houseColor } from "@/lib/houses";
 import { getCurrentSession, getUpcomingSession, pendingPromotions } from "@/lib/sessions";
+import { attendanceWindow } from "@/lib/attendance";
+import { isSunday, parseISODate } from "@/lib/attendance-shared";
 
 export default async function DashboardPage() {
   const school = await getCurrentSchool();
@@ -78,6 +80,22 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  // Classes with students that haven't taken today's attendance (skipped on Sundays and school holidays).
+  const win = await attendanceWindow(school.id);
+  const todayDate = parseISODate(win.today)!;
+  const attendanceDue = win.today === win.max && !isSunday(win.today);
+  const [todayHoliday, todayDays] = attendanceDue
+    ? await Promise.all([
+        db.holiday.findUnique({ where: { schoolId_date: { schoolId: school.id, date: todayDate } } }),
+        db.attendanceDay.findMany({ where: { schoolId: school.id, date: todayDate }, select: { sectionId: true } }),
+      ])
+    : [null, []];
+  const takenToday = new Set(todayDays.map((d) => d.sectionId));
+  const attendancePending =
+    attendanceDue && !todayHoliday
+      ? classes.flatMap((c) => c.sections).filter((s) => s._count.students > 0 && !takenToday.has(s.id)).length
+      : 0;
+
   const sectionCount = classes.reduce((n, c) => n + c.sections.length, 0);
   const byGender = Object.fromEntries(genderCounts.map((g) => [g.gender ?? "NONE", g._count]));
   const classStrength = classes.map((c) => ({
@@ -88,7 +106,7 @@ export default async function DashboardPage() {
   }));
   const maxStrength = Math.max(1, ...classStrength.map((c) => c.students));
   const maxHouse = Math.max(1, ...houses.map((h) => h._count.students));
-  const issues = (unassignedStudents ? 1 : 0) + (sectionsWithoutTeacher.length ? 1 : 0);
+  const issues = (unassignedStudents ? 1 : 0) + (sectionsWithoutTeacher.length ? 1 : 0) + (attendancePending ? 1 : 0);
 
   const today = new Intl.DateTimeFormat("en-IN", {
     weekday: "long",
@@ -213,6 +231,15 @@ export default async function DashboardPage() {
           icon={issues ? TriangleAlert : CircleCheck}
         >
           <ul className="space-y-3">
+            <AttentionItem ok={!attendancePending} href="/admin/attendance">
+              {todayHoliday
+                ? `Today is a holiday: ${todayHoliday.name}`
+                : attendancePending
+                  ? `${attendancePending} class(es) haven't taken attendance today`
+                  : attendanceDue
+                    ? "Attendance is taken for every class today"
+                    : "No attendance due today"}
+            </AttentionItem>
             <AttentionItem ok={!unassignedStudents} href="/admin/students">
               {unassignedStudents
                 ? `${unassignedStudents} student(s) not assigned to a class`

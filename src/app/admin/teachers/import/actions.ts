@@ -33,6 +33,8 @@ export async function importTeachers(_: ImportState, formData: FormData): Promis
 
     const joiningDate = toIsoDate(v.joiningDate ?? "");
     if (joiningDate === null) errors.push("Joining date: use DD-MM-YYYY, e.g. 01-04-2026");
+    const dateOfBirth = toIsoDate(v.dateOfBirth ?? "");
+    if (dateOfBirth === null) errors.push("Date of birth: use DD-MM-YYYY, e.g. 12-06-1988");
     const gender = toGender(v.gender ?? "");
     if (gender === null) errors.push("Gender: use Male, Female or Other");
     const bloodGroup = toBloodGroup(v.bloodGroup ?? "");
@@ -48,6 +50,12 @@ export async function importTeachers(_: ImportState, formData: FormData): Promis
       phone: v.phone ?? "",
       qualification: v.qualification ?? "",
       joiningDate: joiningDate ?? "",
+      dateOfBirth: dateOfBirth ?? "",
+      whatsappNumber: v.whatsappNumber ?? "",
+      address: v.address ?? "",
+      specialization: v.specialization ?? "",
+      experienceYears: v.experienceYears ?? "",
+      monthlySalary: v.monthlySalary ?? "",
     });
     if (!parsed.success) errors.push(...describeErrors("teachers", parsed.error));
 
@@ -64,7 +72,7 @@ export async function importTeachers(_: ImportState, formData: FormData): Promis
     results.push({
       rowNumber,
       name: fullName({ firstName: v.firstName || "—", middleName: v.middleName, lastName: v.lastName ?? "" }),
-      detail: [v.qualification, v.phone].filter(Boolean).join(" · ") || "—",
+      detail: [v.specialization || v.qualification, v.phone].filter(Boolean).join(" · ") || "—",
       errors,
       warnings,
       ...(errors.length === 0 && parsed.success && { data: parsed.data }),

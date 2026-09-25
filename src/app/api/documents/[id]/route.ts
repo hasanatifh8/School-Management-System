@@ -1,14 +1,20 @@
 import { db } from "@/lib/db";
-import { getCurrentSchool } from "@/lib/school";
+import { getActor } from "@/lib/access";
 import { INLINE_TYPES } from "@/lib/documents";
 
 export async function GET(request: Request, ctx: RouteContext<"/api/documents/[id]">) {
   const { id } = await ctx.params;
-  const school = await getCurrentSchool();
-  const document = await db.document.findFirst({
-    where: { id, schoolId: school.id },
-    include: { file: true },
-  });
+  const actor = await getActor();
+  // Teachers may only open documents of students in their own class.
+  const document =
+    actor.kind === "staff"
+      ? await db.document.findFirst({ where: { id, schoolId: actor.school.id }, include: { file: true } })
+      : actor.ctx.classSection
+        ? await db.document.findFirst({
+            where: { id, schoolId: actor.ctx.school.id, student: { sectionId: actor.ctx.classSection.id, status: "ACTIVE" } },
+            include: { file: true },
+          })
+        : null;
   if (!document) return new Response("Not found", { status: 404 });
 
   const download = new URL(request.url).searchParams.has("download");

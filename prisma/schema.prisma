@@ -54,6 +54,14 @@ enum StudentCategory {
   MINORITY
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  LEAVE
+}
+
 enum DocumentType {
   AADHAAR
   PAN
@@ -102,6 +110,9 @@ model School {
   documents Document[]
   houses    House[]
   sessions  AcademicSession[]
+
+  attendanceDays AttendanceDay[]
+  holidays       Holiday[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -199,6 +210,8 @@ model Student {
   correspondenceAddress String?
   lastSchoolName        String?
   fatherName            String?
+  fatherOccupation      String?
+  guardianName          String?
   motherName            String?
   admissionDate         DateTime         @default(now())
   status                Status           @default(ACTIVE)
@@ -209,13 +222,14 @@ model Student {
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 
-  school      School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  section     Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  house       House?           @relation(fields: [houseId], references: [id], onDelete: SetNull)
+  school      School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  section     Section?           @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  house       House?             @relation(fields: [houseId], references: [id], onDelete: SetNull)
   enrollments Enrollment[]
-  photo       Photo?           @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  photo       Photo?             @relation(fields: [photoId], references: [id], onDelete: SetNull)
   subjects    StudentSubject[]
   documents   Document[]
+  attendance  AttendanceRecord[]
 
   @@unique([schoolId, studentCode])
   @@index([sectionId])
@@ -223,28 +237,39 @@ model Student {
 }
 
 model Teacher {
-  id            String      @id @default(cuid())
-  schoolId      String
-  employeeCode  String // unique, human-readable staff ID, e.g. TCH-0001
-  firstName     String
-  middleName    String?
-  lastName      String
-  gender        Gender?
-  bloodGroup    BloodGroup?
-  email         String?
-  phone         String?
-  qualification String?
-  joiningDate   DateTime    @default(now())
-  status        Status      @default(ACTIVE)
-  photoId       String?     @unique
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String      @id @default(cuid())
+  schoolId        String
+  employeeCode    String // unique, human-readable staff ID, e.g. TCH-0001
+  firstName       String
+  middleName      String?
+  lastName        String
+  gender          Gender?
+  bloodGroup      BloodGroup?
+  dateOfBirth     DateTime?
+  email           String?
+  phone           String?
+  whatsappNumber  String?
+  address         String?
+  qualification   String?
+  specialization  String?
+  experienceYears Int? // total teaching experience
+  monthlySalary   Int? // in rupees
+  joiningDate     DateTime    @default(now())
+  status          Status      @default(ACTIVE)
+  photoId         String?     @unique
+  username        String?     @unique // teacher sign-in, e.g. dps.tch0001
+  passwordHash    String?
+  loginEnabled    Boolean     @default(true)
+  lastLoginAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   school             School                     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   photo              Photo?                     @relation(fields: [photoId], references: [id], onDelete: SetNull)
   classTeacherOf     Section?
   subjectAssignments SubjectTeacherAssignment[]
   documents          Document[]
+  sessions           TeacherSession[]
 
   @@unique([schoolId, employeeCode])
 }
@@ -275,6 +300,7 @@ model Section {
   students           Student[]
   enrollments        Enrollment[]
   subjectAssignments SubjectTeacherAssignment[]
+  attendanceDays     AttendanceDay[]
 
   @@unique([classId, name])
 }
@@ -420,4 +446,63 @@ model AdminSession {
   admin SchoolAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
+}
+
+// A signed-in teacher session (same scheme as AdminSession: id = SHA-256 of the cookie token).
+model TeacherSession {
+  id        String   @id
+  teacherId String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId])
+}
+
+// One section's attendance for one day. When `holiday` is set the class was
+// off that day (declared by its class teacher or the school admin) and it has
+// no records.
+model AttendanceDay {
+  id        String   @id @default(cuid())
+  schoolId  String
+  sectionId String
+  date      DateTime @db.Date
+  holiday   String? // reason, e.g. "Class picnic"
+  markedBy  String? // who last saved it, e.g. "Kavya Menon (class teacher)"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school  School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  section Section            @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  records AttendanceRecord[]
+
+  @@unique([sectionId, date])
+  @@index([schoolId, date])
+}
+
+model AttendanceRecord {
+  dayId     String
+  studentId String
+  status    AttendanceStatus
+  remark    String?
+
+  day     AttendanceDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  student Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([dayId, studentId])
+  @@index([studentId])
+}
+
+// A school-wide holiday: no class takes attendance that day.
+model Holiday {
+  id        String   @id @default(cuid())
+  schoolId  String
+  date      DateTime @db.Date
+  name      String
+  createdAt DateTime @default(now())
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, date])
 }

@@ -70,6 +70,9 @@ export const studentSchema = z
     correspondenceSameAsPrimary: z.literal("on").optional(),
     lastSchoolName: optionalText,
     fatherName: optionalText,
+    fatherOccupation: z.string().trim().max(100).optional().transform((v) => v || null),
+    guardianName: optionalText,
+    guardianIsFather: z.literal("on").optional(),
     motherName: optionalText,
     admissionDate: optionalDate,
     sectionId: optionalText,
@@ -88,7 +91,11 @@ export const studentSchema = z
       }),
     houseId: optionalText,
   })
-  .transform(({ whatsappSameAsPhone, correspondenceSameAsPrimary, ...data }, ctx) => {
+  .transform(({ whatsappSameAsPhone, correspondenceSameAsPrimary, guardianIsFather, ...data }, ctx) => {
+    if (guardianIsFather && !data.fatherName) {
+      ctx.addIssue({ code: "custom", path: ["fatherName"], message: "Enter the father's name, or untick “Father is the guardian”" });
+      return z.NEVER;
+    }
     // "Same as" checkboxes copy the other field.
     let whatsappNumber = data.whatsappNumber;
     if (whatsappSameAsPhone) {
@@ -106,6 +113,7 @@ export const studentSchema = z
       ...data,
       whatsappNumber,
       correspondenceAddress: correspondenceSameAsPrimary ? data.primaryAddress : data.correspondenceAddress,
+      guardianName: guardianIsFather ? data.fatherName : data.guardianName,
     };
   });
 

@@ -20,11 +20,12 @@ const HOUSES = [
   ["Yellow House", "yellow", "Joy and energy"],
 ] as const;
 
-const TEACHERS: [string, string, Gender, string][] = [
-  ["Anita", "Sharma", "FEMALE", "M.A., B.Ed"],
-  ["Rahul", "Verma", "MALE", "M.Sc, B.Ed"],
-  ["Sunita", "Rao", "FEMALE", "M.Sc (Maths), B.Ed"],
-  ["Imran", "Khan", "MALE", "M.A. (English), B.Ed"],
+// [first, last, gender, qualification, specialization, years of experience]
+const TEACHERS: [string, string, Gender, string, string, number][] = [
+  ["Anita", "Sharma", "FEMALE", "M.A., B.Ed", "Social Studies", 12],
+  ["Rahul", "Verma", "MALE", "M.Sc, B.Ed", "Science", 7],
+  ["Sunita", "Rao", "FEMALE", "M.Sc (Maths), B.Ed", "Mathematics", 15],
+  ["Imran", "Khan", "MALE", "M.A. (English), B.Ed", "English", 5],
 ];
 
 // [first, last, gender, father, mother, blood group]
@@ -89,10 +90,19 @@ export async function loadDemoData(tx: Prisma.TransactionClient, schoolId: strin
   }
 
   const teachers: { id: string }[] = [];
-  for (const [firstName, lastName, gender, qualification] of TEACHERS) {
+  for (const [firstName, lastName, gender, qualification, specialization, experienceYears] of TEACHERS) {
     teachers.push(
       await tx.teacher.create({
-        data: { schoolId, employeeCode: await nextTeacherCode(tx, schoolId), firstName, lastName, gender, qualification },
+        data: {
+          schoolId,
+          employeeCode: await nextTeacherCode(tx, schoolId),
+          firstName,
+          lastName,
+          gender,
+          qualification,
+          specialization,
+          experienceYears,
+        },
       }),
     );
   }
@@ -129,6 +139,7 @@ export async function loadDemoData(tx: Prisma.TransactionClient, schoolId: strin
         bloodGroup,
         fatherName,
         motherName,
+        guardianName: fatherName,
         // Age fits the class: about 5 years old in Class 1.
         dateOfBirth: new Date(Date.UTC(year - 5 - section.classIndex, (rollNumber * 3) % 12, 10 + rollNumber)),
         nationality: "Indian",

@@ -4,6 +4,7 @@ import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { BookOpen, CalendarDays, Droplet, Hash, History, Mail, RotateCcw, UserRound, UserRoundX } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DocumentsPanel } from "../../documents/documents-panel";
+import { AttendanceSummaryCard } from "@/components/attendance/attendance-summary";
 import { Avatar, Badge, Card, InfoItem, PageHeader, StatusTab, checkboxClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
@@ -125,9 +126,13 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           <dl className="mt-6 grid gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-4">
             <InfoItem icon={UserRound} label="Father">
               {student.fatherName ?? "—"}
+              {student.fatherOccupation && <span className="block text-slate-500">{student.fatherOccupation}</span>}
             </InfoItem>
             <InfoItem icon={UserRound} label="Mother">
               {student.motherName ?? "—"}
+              {student.guardianName && student.guardianName !== student.fatherName && (
+                <span className="block text-slate-500">Guardian: {student.guardianName}</span>
+              )}
             </InfoItem>
             <InfoItem icon={CalendarDays} label="Admitted on">
               {dateFormat.format(student.admissionDate)}
@@ -213,6 +218,12 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                 </ActionForm>
               )}
             </Card>
+
+            <AttendanceSummaryCard
+              schoolId={school.id}
+              studentId={student.id}
+              registerHref={student.section ? `/admin/attendance/${student.section.id}/register` : null}
+            />
 
             <Card title="Class history" icon={History} padded={false}>
               {student.enrollments.length === 0 ? (

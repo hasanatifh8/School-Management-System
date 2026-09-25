@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { Select } from "@/components/select";
 import { AadhaarInput } from "@/components/aadhaar-input";
 import { PhotoInput } from "@/components/photo-input";
-import { FormSection, buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
+import { SameAs } from "@/components/same-as";
+import { FormSection, buttonVariants, inputClass, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import {
@@ -41,6 +41,8 @@ type StudentValues = {
   correspondenceAddress: string | null;
   lastSchoolName: string | null;
   fatherName: string | null;
+  fatherOccupation: string | null;
+  guardianName: string | null;
   motherName: string | null;
   admissionDate: Date | null;
   sectionId: string | null;
@@ -49,63 +51,6 @@ type StudentValues = {
 };
 
 type HouseOption = { id: string; name: string };
-
-/**
- * A "Same as …" checkbox. While ticked it replaces `children` with a note, and
- * the server copies the other field. Follows the form's reset after a save.
- */
-function SameAs({
-  name,
-  label,
-  initial,
-  note,
-  children,
-}: {
-  name: string;
-  label: string;
-  initial: boolean;
-  note: string;
-  children: ReactNode;
-}) {
-  const [checked, setChecked] = useState(initial);
-  const initialRef = useRef(initial);
-  const boxRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    initialRef.current = initial;
-  }, [initial]);
-
-  useEffect(() => {
-    const form = boxRef.current?.form;
-    if (!form) return;
-    const onReset = () => setChecked(initialRef.current);
-    form.addEventListener("reset", onReset);
-    return () => form.removeEventListener("reset", onReset);
-  }, []);
-
-  return (
-    <>
-      {checked ? (
-        <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-500">
-          {note}
-        </p>
-      ) : (
-        children
-      )}
-      <label className="mt-2 flex w-fit cursor-pointer items-center gap-2 text-sm text-slate-600">
-        <input
-          ref={boxRef}
-          type="checkbox"
-          name={name}
-          checked={checked}
-          onChange={(e) => setChecked(e.target.checked)}
-          className={checkboxClass}
-        />
-        {label}
-      </label>
-    </>
-  );
-}
 
 export function StudentForm({
   action,
@@ -129,6 +74,14 @@ export function StudentForm({
   const whatsappSameAsPhone =
     !!student?.whatsappNumber && normalizeIndianMobile(student.phone ?? "") === student.whatsappNumber;
   // New students usually have one address; existing ones keep what was saved.
+  // The father is the usual guardian: ticked for new students, and for existing
+  // ones with no guardian recorded yet (only if a father's name exists, so saving
+  // other changes never trips the "enter the father's name" check).
+  const guardianIsFather = student
+    ? student.guardianName
+      ? student.guardianName === student.fatherName
+      : !!student.fatherName
+    : true;
   const correspondenceSame = student
     ? !!student.primaryAddress && student.primaryAddress === student.correspondenceAddress
     : true;
@@ -161,6 +114,32 @@ export function StudentForm({
               <Field label="Mother's name" name="motherName" errors={e}>
                 <input name="motherName" defaultValue={student?.motherName ?? ""} className={inputClass} />
               </Field>
+              <Field label="Father's occupation" name="fatherOccupation" errors={e}>
+                <input
+                  name="fatherOccupation"
+                  maxLength={100}
+                  placeholder="e.g. Engineer, Business, Farmer"
+                  defaultValue={student?.fatherOccupation ?? ""}
+                  className={inputClass}
+                />
+              </Field>
+              <div>
+                <span className="mb-1.5 block text-sm font-medium text-slate-700">Guardian name</span>
+                <SameAs
+                  name="guardianIsFather"
+                  label="Father is the guardian"
+                  initial={guardianIsFather}
+                  note="Uses the father's name above."
+                >
+                  <input
+                    name="guardianName"
+                    aria-label="Guardian name"
+                    placeholder="e.g. uncle, grandparent"
+                    defaultValue={student?.guardianName ?? ""}
+                    className={inputClass}
+                  />
+                </SameAs>
+              </div>
               <Field label="Gender" name="gender" errors={e}>
                 <Select name="gender" defaultValue={student?.gender ?? ""} className={selectClass}>
                   <option value="">Select gender</option>

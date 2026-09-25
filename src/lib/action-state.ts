@@ -6,6 +6,10 @@ export type ActionState = {
   message?: string;
   error?: string;
   fieldErrors?: Record<string, string[] | undefined>;
+  /** New login details to show once (the password is never stored in plain text). */
+  credentials?: { username: string; password: string };
+  /** Where to continue after showing `credentials`. */
+  next?: string;
 };
 
 export function validationError(error: z.ZodError): ActionState {

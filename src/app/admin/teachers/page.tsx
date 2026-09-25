@@ -83,7 +83,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
           </div>
           <div className="pb-4">
             <ListToolbar>
-              <SearchBox placeholder="Name, ID, phone or email…" />
+              <SearchBox placeholder="Name, ID, phone, email or subject…" />
               <FilterSelect
                 name="role"
                 label="Any role"
@@ -162,7 +162,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
                         sub={
                           <>
                             <span className="font-mono">{t.employeeCode}</span>
-                            {t.qualification && <> · {t.qualification}</>}
+                            {(t.specialization ?? t.qualification) && <> · {t.specialization ?? t.qualification}</>}
                           </>
                         }
                       />

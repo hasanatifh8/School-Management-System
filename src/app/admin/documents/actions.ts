@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCurrentSchool } from "@/lib/school";
+import { getActor } from "@/lib/access";
 import { readDocumentUpload } from "@/lib/documents";
 import {
   DOCUMENT_LABELS,
@@ -25,10 +25,22 @@ export async function uploadDocument(
   _: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const school = await getCurrentSchool();
+  const actor = await getActor();
+  // Teachers may add documents only for students in their own class.
+  if (actor.kind === "teacher" && (ownerKind !== "student" || !actor.ctx.classSection)) {
+    return { error: "You can only add documents for students in your class." };
+  }
+  const school = actor.kind === "staff" ? actor.school : actor.ctx.school;
   const owner =
     ownerKind === "student"
-      ? await db.student.findFirst({ where: { id: ownerId, schoolId: school.id }, select: { id: true } })
+      ? await db.student.findFirst({
+          where: {
+            id: ownerId,
+            schoolId: school.id,
+            ...(actor.kind === "teacher" && { sectionId: actor.ctx.classSection!.id, status: "ACTIVE" as const }),
+          },
+          select: { id: true },
+        })
       : await db.teacher.findFirst({ where: { id: ownerId, schoolId: school.id }, select: { id: true } });
   if (!owner) return { error: `${ownerKind === "student" ? "Student" : "Teacher"} not found.` };
 
@@ -62,20 +74,28 @@ export async function uploadDocument(
     select: { id: true },
   });
 
-  revalidatePath("/admin", "layout");
+  revalidatePath("/", "layout");
   return { ok: true, message: `Uploaded “${title}”.` };
 }
 
 export async function deleteDocument(documentId: string): Promise<ActionState> {
-  const school = await getCurrentSchool();
+  const actor = await getActor();
+  const school = actor.kind === "staff" ? actor.school : actor.ctx.school;
   const document = await db.document.findFirst({
-    where: { id: documentId, schoolId: school.id },
+    where: {
+      id: documentId,
+      schoolId: school.id,
+      // Teachers: only documents of students in their own class.
+      ...(actor.kind === "teacher" && {
+        student: { sectionId: actor.ctx.classSection?.id ?? "-", status: "ACTIVE" as const },
+      }),
+    },
     select: { fileId: true, title: true },
   });
   if (!document) return { error: "Document not found." };
 
   // Deleting the file cascades to the document row.
   await db.documentFile.delete({ where: { id: document.fileId } });
-  revalidatePath("/admin", "layout");
+  revalidatePath("/", "layout");
   return { ok: true, message: `Deleted “${document.title}”.` };
 }

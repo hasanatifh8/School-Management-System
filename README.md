@@ -75,6 +75,37 @@ Power Admin at **`/power`** manages every school on the system:
 - **What's protected:** the whole Admin Portal, including photos, documents, exports and templates, needs a signed-in school admin or Power Admin. Otherwise it redirects to `/login`. A Power Admin can open any school, and sees a "Viewing … as Power Admin" banner.
 - **Security:** passwords are stored with scrypt (salted). Sessions are kept in the database and last 12 hours. They are revoked on sign-out, password reset, disabling an admin or suspending the school. Failed sign-ins are slowed down and recorded in the activity log.
 
+## Teacher Portal
+
+Teachers sign in at **`/login`** under the **Teacher** tab (or `/login?role=teacher`) and land on **`/teacher`**.
+
+- **Creating a login:** when adding a teacher, *Create a login for this teacher* is ticked by default. After saving, the username (for example `dps.tch0001`) and a generated password are shown **once**, with copy buttons. For existing teachers, use the **Teacher login** card on the teacher's profile.
+- **Admin controls (Teacher login card):** **reset password** (shows a new one), **change username**, **turn off / turn on**, and **remove login**. Each of these signs the teacher out everywhere.
+- **What a teacher sees:**
+  - **My class**: the section they are class teacher of. They can see full student details and documents.
+  - **Subject classes**: sections where they teach a subject. These show a student list only.
+  - They see nothing from other classes, and they can't open the Admin Portal.
+- **What a teacher can change (own class only):** a student's photo, phone, WhatsApp, email, addresses and roll number (including *Auto-assign roll numbers*). They can also upload and delete student documents. Names, class, parents and other details stay with the school admin.
+- **Account:** a teacher can change their own password under **Account**.
+
+## Attendance
+
+- **Who marks it:** the **class teacher** marks their own class in the Teacher Portal under **Attendance**. The **school admin** (or Power Admin) can mark any class under **Admin → Attendance**.
+- **Taking attendance:**
+  - Choose a date from the current session, up to today. Today is the default.
+  - Everyone starts as **Present**. Mark students **Absent**, **Late**, **Half day** or **Leave**, and add an optional remark.
+  - Click **Save**. You can change a saved day later; the latest save wins, and the page shows who saved it.
+- **Holidays:**
+  - **School holidays** are set by the admin under *Attendance → Holidays*: one day or a date range, with Sundays in a range skipped. No class takes attendance on those days. Marks saved earlier for that day are kept but not counted, and they count again if the holiday is removed.
+  - A **class holiday** (for example a class picnic) can be marked by the class teacher or the admin from that day's sheet. It clears that day's marks for the class.
+  - **Sundays** are treated as a weekly off. Attendance can still be taken on a Sunday if the school was open.
+- **Reports:**
+  - The admin **overview** shows every class for a day: marked or not, the counts, and the list of absent students.
+  - Each class has a **monthly register** (a grid, with month and session percentages) that can be downloaded as Excel.
+  - Student profiles show the session attendance percentage.
+  - The admin dashboard lists the classes that haven't marked today.
+- **Percentage:** present and late count as a full day, half day as half, and absent and leave as not attended. Holidays don't count.
+
 ## Project structure
 
 ```
@@ -96,5 +127,4 @@ Every table is scoped to a `School`, so the planned Super Admin can manage sever
 
 ## Not built yet
 
-- **Authentication and roles.** There is no login yet. `getCurrentSchool()` in `src/lib/school.ts` returns the first school, and that is where the admin session check will go. Don't deploy the app publicly until login is added.
-- Academic years and promotions, attendance, exams and report cards, fees, and the teacher and student portals.
+- Exams and report cards, fees, and the student/parent portal.

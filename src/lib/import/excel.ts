@@ -4,7 +4,7 @@ import { IMPORT_COLUMNS, MAX_IMPORT_ROWS, type ImportKind } from "@/lib/import/c
 
 const SHEET_NAMES: Record<ImportKind, string> = { students: "Students", teachers: "Teachers" };
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
-const TEXT_COLUMNS = new Set(["phone", "aadhaarNumber", "rollNumber", "sectionName"]);
+const TEXT_COLUMNS = new Set(["phone", "whatsappNumber", "aadhaarNumber", "rollNumber", "sectionName"]);
 const DATE_COLUMNS = new Set(["dateOfBirth", "admissionDate", "joiningDate"]);
 
 /* ───────────────────────── Template ───────────────────────── */

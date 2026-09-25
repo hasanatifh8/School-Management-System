@@ -26,7 +26,9 @@ export const EXPORT_FIELDS: Record<ExportKind, ExportField[]> = {
     { key: "lastSchoolName", label: "Last school", group: "Academic" },
 
     { key: "fatherName", label: "Father's name", group: "Family", default: true },
+    { key: "fatherOccupation", label: "Father's occupation", group: "Family" },
     { key: "motherName", label: "Mother's name", group: "Family", default: true },
+    { key: "guardianName", label: "Guardian", group: "Family" },
 
     { key: "phone", label: "Phone", group: "Contact", default: true },
     { key: "whatsappNumber", label: "WhatsApp", group: "Contact" },
@@ -48,13 +50,19 @@ export const EXPORT_FIELDS: Record<ExportKind, ExportField[]> = {
     { key: "lastName", label: "Last name", group: "Basic" },
     { key: "gender", label: "Gender", group: "Basic", default: true },
     { key: "bloodGroup", label: "Blood group", group: "Basic" },
+    { key: "dateOfBirth", label: "Date of birth", group: "Basic" },
     { key: "status", label: "Status", group: "Basic" },
 
     { key: "phone", label: "Phone", group: "Contact", default: true },
+    { key: "whatsappNumber", label: "WhatsApp", group: "Contact" },
     { key: "email", label: "Email", group: "Contact", default: true },
+    { key: "address", label: "Address", group: "Contact" },
 
     { key: "qualification", label: "Qualification", group: "Work", default: true },
+    { key: "specialization", label: "Specialization", group: "Work", default: true },
+    { key: "experienceYears", label: "Experience (years)", group: "Work" },
     { key: "joiningDate", label: "Joining date", group: "Work" },
+    { key: "monthlySalary", label: "Monthly salary (₹)", group: "Work" },
     { key: "classTeacherOf", label: "Class teacher of", group: "Work", default: true },
     { key: "subjectsTaught", label: "Subjects taught", group: "Work", default: true },
   ],

@@ -22,10 +22,18 @@ function yearsAgo(years: number, from = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
-/** Earliest and latest allowed date of birth as YYYY-MM-DD (for `min`/`max` and validation). */
-export function dateOfBirthBounds(today = new Date()) {
-  return { min: yearsAgo(MAX_STUDENT_AGE, today), max: yearsAgo(MIN_STUDENT_AGE, today) };
+/** Earliest and latest date of birth (YYYY-MM-DD) for someone aged minAge–maxAge today. */
+export function ageBounds(minAge: number, maxAge: number, today = new Date()) {
+  return { min: yearsAgo(maxAge, today), max: yearsAgo(minAge, today) };
 }
+
+/** Earliest and latest allowed student date of birth (for `min`/`max` and validation). */
+export function dateOfBirthBounds(today = new Date()) {
+  return ageBounds(MIN_STUDENT_AGE, MAX_STUDENT_AGE, today);
+}
+
+export const MIN_TEACHER_AGE = 18;
+export const MAX_TEACHER_AGE = 75;
 
 /**
  * Normalises an Indian mobile number to 10 digits, accepting spaces, dashes and

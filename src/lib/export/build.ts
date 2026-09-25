@@ -40,7 +40,9 @@ function studentValues(s: StudentForExport) {
     admissionDate: s.admissionDate,
     lastSchoolName: s.lastSchoolName,
     fatherName: s.fatherName,
+    fatherOccupation: s.fatherOccupation,
     motherName: s.motherName,
+    guardianName: s.guardianName,
     phone: s.phone,
     whatsappNumber: s.whatsappNumber,
     email: s.email,
@@ -71,11 +73,17 @@ function teacherValues(t: TeacherForExport) {
     lastName: t.lastName,
     gender: label(GENDER_LABELS, t.gender),
     bloodGroup: label(BLOOD_GROUP_LABELS, t.bloodGroup),
+    dateOfBirth: t.dateOfBirth,
     status: t.status === "ACTIVE" ? "Active" : "Removed",
     phone: t.phone,
+    whatsappNumber: t.whatsappNumber,
     email: t.email,
+    address: t.address,
     qualification: t.qualification,
+    specialization: t.specialization,
+    experienceYears: t.experienceYears,
     joiningDate: t.joiningDate,
+    monthlySalary: t.monthlySalary,
     classTeacherOf: t.classTeacherOf ? sectionLabel(t.classTeacherOf) : null,
     subjectsTaught: t.subjectAssignments.map((a) => `${a.subject.name} (${sectionLabel(a.section)})`).join(", "),
   };
@@ -113,11 +121,12 @@ function addSheet(wb: ExcelJS.Workbook, name: string, columns: Column[], rows: R
   sheet.columns = columns.map((c) => ({ header: c.label, key: c.key, width: Math.max(12, c.label.length + 4) }));
   for (const r of rows) sheet.addRow(Object.fromEntries(columns.map((c) => [c.key, r[c.key] ?? null])));
 
-  columns.forEach((_, i) => {
+  columns.forEach((_col, i) => {
     const col = sheet.getColumn(i + 1);
     let width = col.width ?? 12;
     col.eachCell({ includeEmpty: false }, (cell, rowNumber) => {
       if (rowNumber > 1 && cell.value instanceof Date) cell.numFmt = "dd-mm-yyyy";
+      if (rowNumber > 1 && columns[i].key === "monthlySalary" && typeof cell.value === "number") cell.numFmt = "#,##,##0";
       const text = cell.value instanceof Date ? "00-00-0000" : String(cell.value ?? "");
       width = Math.max(width, Math.min(60, text.length + 2));
     });
@@ -149,7 +158,8 @@ export async function buildExport(kind: ExportKind, schoolId: string, params: UR
 
 /**
  * Full backup of one school as a multi-sheet workbook: profile, students and
- * teachers (all columns, active and removed), classes, subjects, houses and sessions.
+ * teachers (all columns, active and removed), classes, subjects, houses, sessions,
+ * attendance and holidays.
  */
 export async function buildSchoolBackup(schoolId: string) {
   const school = await db.school.findUniqueOrThrow({ where: { id: schoolId } });
@@ -251,6 +261,53 @@ export async function buildSchoolBackup(schoolId: string) {
       { key: "students", label: "Students enrolled" },
     ],
     sessions.map((x) => ({ name: x.name, start: x.startDate, end: x.endDate, status: x.status, students: x._count.enrollments })),
+  );
+
+  const [attendance, holidays] = await Promise.all([
+    db.attendanceDay.findMany({
+      where: { schoolId },
+      orderBy: [{ date: "asc" }, { section: { class: { sortOrder: "asc" } } }, { section: { name: "asc" } }],
+      include: {
+        section: { include: { class: true } },
+        records: { include: { student: { select: { studentCode: true, firstName: true, middleName: true, lastName: true } } } },
+      },
+    }),
+    db.holiday.findMany({ where: { schoolId }, orderBy: { date: "asc" } }),
+  ]);
+  addSheet(
+    wb,
+    "Attendance",
+    [
+      { key: "date", label: "Date" },
+      { key: "class", label: "Class" },
+      { key: "code", label: "Student ID" },
+      { key: "student", label: "Student" },
+      { key: "status", label: "Status" },
+      { key: "remark", label: "Remark" },
+      { key: "markedBy", label: "Marked by" },
+    ],
+    attendance.flatMap((d): Record<string, Cell>[] =>
+      d.holiday
+        ? [{ date: d.date, class: sectionLabel(d.section), status: "CLASS HOLIDAY", remark: d.holiday, markedBy: d.markedBy }]
+        : d.records.map((r) => ({
+            date: d.date,
+            class: sectionLabel(d.section),
+            code: r.student.studentCode,
+            student: fullName(r.student),
+            status: r.status,
+            remark: r.remark,
+            markedBy: d.markedBy,
+          })),
+    ),
+  );
+  addSheet(
+    wb,
+    "Holidays",
+    [
+      { key: "date", label: "Date" },
+      { key: "name", label: "Holiday" },
+    ],
+    holidays.map((h) => ({ date: h.date, name: h.name })),
   );
 
   return { buffer: Buffer.from(await wb.xlsx.writeBuffer()), school };

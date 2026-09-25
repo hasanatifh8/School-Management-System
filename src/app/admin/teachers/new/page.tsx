@@ -11,7 +11,7 @@ export default function NewTeacherPage() {
         breadcrumbs={[{ label: "Teachers", href: "/admin/teachers" }, { label: "Add teacher" }]}
       />
       <Card>
-        <TeacherForm action={createTeacher} submitLabel="Add teacher" cancelHref="/admin/teachers" />
+        <TeacherForm action={createTeacher} submitLabel="Add teacher" cancelHref="/admin/teachers" offerLogin />
       </Card>
     </>
   );
