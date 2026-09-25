@@ -38,7 +38,7 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
       where: { id },
       include: {
         logo: { select: { updatedAt: true } },
-        admins: { orderBy: { createdAt: "asc" }, select: { id: true, name: true, email: true, active: true, lastLoginAt: true } },
+        admins: { where: { role: "ADMIN" }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, email: true, active: true, lastLoginAt: true } },
         _count: { select: { students: true, teachers: true, classes: true, subjects: true, houses: true, documents: true } },
       },
     }),

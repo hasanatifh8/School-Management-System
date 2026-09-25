@@ -1,9 +1,11 @@
+import { getCurrentSchool } from "@/lib/school";
 import { ImportPanel } from "@/components/import-panel";
 import { PageHeader } from "@/components/ui";
 import { IMPORT_COLUMNS } from "@/lib/import/columns";
 import { importStudents } from "./actions";
 
-export default function ImportStudentsPage() {
+export default async function ImportStudentsPage() {
+  await getCurrentSchool(); // admins only
   return (
     <>
       <PageHeader

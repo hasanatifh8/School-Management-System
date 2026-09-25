@@ -2,25 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarCheck, IdCard, CalendarRange, GraduationCap, LayoutDashboard, Presentation, School, Shield } from "lucide-react";
+import { BookOpen, CalendarCheck, IdCard, PiggyBank, UserCog, Wallet, CalendarRange, GraduationCap, LayoutDashboard, Presentation, School, Shield } from "lucide-react";
 
 const items = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/students", label: "Students", icon: GraduationCap },
   { href: "/admin/teachers", label: "Teachers", icon: Presentation },
   { href: "/admin/attendance", label: "Attendance", icon: CalendarCheck },
+  { href: "/admin/fees", label: "Fees", icon: Wallet },
+  { href: "/admin/expenses", label: "Expenses", icon: PiggyBank },
   { href: "/admin/id-cards", label: "ID cards", icon: IdCard },
   { href: "/admin/classes", label: "Classes", icon: School },
   { href: "/admin/subjects", label: "Subjects", icon: BookOpen },
   { href: "/admin/houses", label: "Houses", icon: Shield },
   { href: "/admin/sessions", label: "Sessions", icon: CalendarRange },
+  { href: "/admin/staff", label: "Staff", icon: UserCog },
 ];
 
-export function AdminNav() {
+/** `feesOnly`: fees staff (accountants) see just the Fees section. */
+export function AdminNav({ feesOnly = false }: { feesOnly?: boolean }) {
   const pathname = usePathname();
+  const shown = feesOnly ? items.filter((i) => i.href === "/admin/fees") : items;
   return (
     <nav className="flex gap-1 overflow-x-auto lg:flex-col">
-      {items.map(({ href, label, icon: Icon }) => {
+      {shown.map(({ href, label, icon: Icon }) => {
         const active = href === "/admin" ? pathname === href : pathname.startsWith(href);
         return (
           <Link

@@ -10,14 +10,15 @@ import { hasPowerSession } from "@/lib/power-auth";
 export const CURRENT_SCHOOL_COOKIE = "current_school";
 
 /**
- * The school the current request operates on, and the access check for the
- * whole Admin Portal. Every admin page, server action and file route calls it.
+ * The school the signed-in admin, staff member or Power Admin is working on,
+ * without checking their role. Use getCurrentSchool() (whole Admin Portal) or
+ * getFeesAccess() (Fees) instead; this is for the shared layout.
  *
  * - Power Admin signed in → the school chosen in Power Admin (or the oldest active one).
- * - School admin signed in → their own school, nothing else.
+ * - School admin / staff signed in → their own school, nothing else.
  * - Otherwise → redirected to /login.
  */
-export const getCurrentSchool = cache(async () => {
+export const getPortalSchool = cache(async () => {
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
   if (viewer.kind === "admin") return viewer.admin.school;
@@ -27,6 +28,19 @@ export const getCurrentSchool = cache(async () => {
     (chosen && (await db.school.findFirst({ where: { id: chosen, status: "ACTIVE" } }))) ||
     (await db.school.findFirst({ where: { status: "ACTIVE" }, orderBy: { createdAt: "asc" } }));
   if (!school) redirect("/power?setup=1");
+  return school;
+});
+
+/**
+ * The school the current request operates on, and the access check for the
+ * whole Admin Portal. Every admin page, server action and file route calls it.
+ * Only Power Admin and full school admins pass; fees staff (accountants) are
+ * sent to the Fees section, the only part they may use.
+ */
+export const getCurrentSchool = cache(async () => {
+  const school = await getPortalSchool();
+  const viewer = await getViewer();
+  if (viewer?.kind === "admin" && viewer.admin.role !== "ADMIN") redirect("/admin/fees");
   return school;
 });
 

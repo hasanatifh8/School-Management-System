@@ -159,7 +159,7 @@ export async function buildExport(kind: ExportKind, schoolId: string, params: UR
 /**
  * Full backup of one school as a multi-sheet workbook: profile, students and
  * teachers (all columns, active and removed), classes, subjects, houses, sessions,
- * attendance and holidays.
+ * attendance, fee receipts, salaries, expenses and holidays.
  */
 export async function buildSchoolBackup(schoolId: string) {
   const school = await db.school.findUniqueOrThrow({ where: { id: schoolId } });
@@ -299,6 +299,74 @@ export async function buildSchoolBackup(schoolId: string) {
             markedBy: d.markedBy,
           })),
     ),
+  );
+  const receipts = await db.feeReceipt.findMany({
+    where: { schoolId },
+    orderBy: [{ date: "asc" }, { number: "asc" }],
+    include: { items: true },
+  });
+  addSheet(
+    wb,
+    "Fee receipts",
+    [
+      { key: "number", label: "Receipt no." },
+      { key: "date", label: "Date" },
+      { key: "code", label: "Student ID" },
+      { key: "student", label: "Student" },
+      { key: "class", label: "Class" },
+      { key: "fees", label: "Fees" },
+      { key: "total", label: "Amount (₹)" },
+      { key: "mode", label: "Mode" },
+      { key: "reference", label: "Reference" },
+      { key: "collectedBy", label: "Collected by" },
+      { key: "status", label: "Status" },
+    ],
+    receipts.map((r) => ({
+      number: r.number,
+      date: r.date,
+      code: r.studentCode,
+      student: r.studentName,
+      class: r.className,
+      fees: r.items.map((i) => `${i.headName} (${i.periodLabel}) ${i.amount}`).join("; "),
+      total: r.total,
+      mode: r.mode,
+      reference: r.reference,
+      collectedBy: r.collectedBy,
+      status: r.cancelledAt ? `Cancelled: ${r.cancelReason ?? ""}` : "Paid",
+    })),
+  );
+  const [salaries, expenses] = await Promise.all([
+    db.salaryPayment.findMany({ where: { schoolId }, orderBy: [{ month: "asc" }, { name: "asc" }] }),
+    db.expense.findMany({ where: { schoolId }, orderBy: { date: "asc" }, include: { category: { select: { name: true } } } }),
+  ]);
+  addSheet(
+    wb,
+    "Salaries",
+    [
+      { key: "month", label: "Month" },
+      { key: "name", label: "Name" },
+      { key: "role", label: "Role" },
+      { key: "type", label: "Staff" },
+      { key: "amount", label: "Amount (₹)" },
+      { key: "paidOn", label: "Paid on" },
+      { key: "mode", label: "Mode" },
+      { key: "note", label: "Note" },
+    ],
+    salaries.map((p) => ({ month: p.month, name: p.name, role: p.role, type: p.payeeType === "TEACHER" ? "Teaching" : "Non-teaching", amount: p.amount, paidOn: p.paidOn, mode: p.mode, note: p.note })),
+  );
+  addSheet(
+    wb,
+    "Expenses",
+    [
+      { key: "date", label: "Date" },
+      { key: "category", label: "Category" },
+      { key: "amount", label: "Amount (₹)" },
+      { key: "paidTo", label: "Paid to" },
+      { key: "description", label: "What for" },
+      { key: "mode", label: "Mode" },
+      { key: "reference", label: "Reference" },
+    ],
+    expenses.map((e) => ({ date: e.date, category: e.category.name, amount: e.amount, paidTo: e.paidTo, description: e.description, mode: e.mode, reference: e.reference })),
   );
   addSheet(
     wb,

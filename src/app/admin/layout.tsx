@@ -3,7 +3,7 @@ import { ArrowLeftRight, GraduationCap, KeyRound, LogOut, ShieldCheck } from "lu
 import { SchoolLogo } from "@/components/school-logo";
 import { Avatar } from "@/components/ui";
 import { db } from "@/lib/db";
-import { getCurrentSchool, getViewer, schoolLogoUrl } from "@/lib/school";
+import { getPortalSchool, getViewer, schoolLogoUrl } from "@/lib/school";
 import { adminLogout } from "../login/actions";
 import { getCurrentSession } from "@/lib/sessions";
 import { AdminNav } from "./admin-nav";
@@ -12,8 +12,10 @@ import { AdminNav } from "./admin-nav";
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
-  const school = await getCurrentSchool();
-  const viewer = (await getViewer())!; // getCurrentSchool already redirected anonymous visitors
+  // Each page checks access itself (fees staff may only open Fees pages).
+  const school = await getPortalSchool();
+  const viewer = (await getViewer())!; // getPortalSchool already redirected anonymous visitors
+  const feesOnly = viewer.kind === "admin" && viewer.admin.role !== "ADMIN";
   const [session, logo, activeSchools] = await Promise.all([
     getCurrentSession(school.id),
     db.schoolLogo.findUnique({ where: { schoolId: school.id }, select: { updatedAt: true } }),
@@ -36,7 +38,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-white">{school.name}</p>
               <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                Admin Portal ·
+                {feesOnly ? "Fees" : "Admin Portal"} ·
                 <Link
                   href="/admin/sessions"
                   title="Current academic session"
@@ -52,7 +54,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             <p className="mb-2 hidden px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-600 lg:block">
               Manage
             </p>
-            <AdminNav />
+            <AdminNav feesOnly={feesOnly} />
           </div>
 
           {/* Who is signed in */}

@@ -54,6 +54,35 @@ enum StudentCategory {
   MINORITY
 }
 
+// Who a school admin account is: a full admin, or non-teaching staff who
+// only see the Fees section.
+enum StaffRole {
+  ADMIN
+  ACCOUNTANT
+}
+
+enum FeeFrequency {
+  ONE_TIME // once per student, e.g. admission fee (students admitted this session)
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY // once a session, in a chosen month (annual charges, extra dues)
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  CHEQUE
+  BANK_TRANSFER
+  OTHER
+}
+
+enum PayeeType {
+  TEACHER
+  STAFF
+}
+
 enum AttendanceStatus {
   PRESENT
   ABSENT
@@ -113,6 +142,12 @@ model School {
 
   attendanceDays AttendanceDay[]
   holidays       Holiday[]
+  feeHeads       FeeHead[]
+  feeReceipts    FeeReceipt[]
+  staffMembers   StaffMember[]
+  salaryPayments SalaryPayment[]
+  expenseCats    ExpenseCategory[]
+  expenses       Expense[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -230,6 +265,8 @@ model Student {
   subjects    StudentSubject[]
   documents   Document[]
   attendance  AttendanceRecord[]
+  feeHeads    StudentFeeHead[]
+  feeReceipts FeeReceipt[]
 
   @@unique([schoolId, studentCode])
   @@index([sectionId])
@@ -271,6 +308,8 @@ model Teacher {
   documents          Document[]
   sessions           TeacherSession[]
 
+  salaryPayments SalaryPayment[]
+
   @@unique([schoolId, employeeCode])
 }
 
@@ -285,6 +324,8 @@ model SchoolClass {
   school   School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   sections Section[]
   subjects ClassSubject[]
+
+  feeAmounts FeeAmount[]
 
   @@unique([schoolId, name])
 }
@@ -370,6 +411,8 @@ model AcademicSession {
 
   school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   enrollments Enrollment[]
+  feeHeads    FeeHead[]
+  feeReceipts FeeReceipt[]
 
   @@unique([schoolId, name])
 }
@@ -424,6 +467,7 @@ model SchoolAdmin {
   name         String
   email        String    @unique // stored lower-case; used to sign in
   passwordHash String
+  role         StaffRole @default(ADMIN)
   active       Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
@@ -505,4 +549,185 @@ model Holiday {
   school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@unique([schoolId, date])
+}
+
+// A fee charged in one session, e.g. "Tuition fee" (monthly) or "Admission fee"
+// (one time). Each class has its own amount; a class without an amount isn't
+// charged. Optional heads (transport, hostel) apply only to students added to them.
+model FeeHead {
+  id        String       @id @default(cuid())
+  schoolId  String
+  sessionId String
+  name      String
+  frequency FeeFrequency
+  optional  Boolean      @default(false)
+  dueDay    Int          @default(10) // day of the month the fee is due
+  dueMonth  Int? // YEARLY only: 1–12
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+
+  school       School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session      AcademicSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  amounts      FeeAmount[]
+  students     StudentFeeHead[]
+  receiptItems FeeReceiptItem[]
+
+  @@unique([sessionId, name])
+  @@index([schoolId])
+}
+
+model FeeAmount {
+  headId  String
+  classId String
+  amount  Int // whole rupees
+
+  head  FeeHead     @relation(fields: [headId], references: [id], onDelete: Cascade)
+  class SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([headId, classId])
+}
+
+// A student added to an optional fee head (e.g. uses the school bus).
+model StudentFeeHead {
+  studentId String
+  headId    String
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  head    FeeHead @relation(fields: [headId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, headId])
+  @@index([headId])
+}
+
+// A payment. Receipts are never deleted, only cancelled; the student's name,
+// ID and class are copied so the receipt stays readable later.
+model FeeReceipt {
+  id           String      @id @default(cuid())
+  schoolId     String
+  sessionId    String
+  studentId    String?
+  number       String // e.g. "2026-27/0001"
+  date         DateTime    @db.Date
+  mode         PaymentMode
+  reference    String? // UPI / cheque / transaction number
+  remarks      String?
+  total        Int
+  studentName  String
+  studentCode  String
+  className    String?
+  collectedBy  String
+  createdAt    DateTime    @default(now())
+  cancelledAt  DateTime?
+  cancelledBy  String?
+  cancelReason String?
+
+  school  School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session AcademicSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student?         @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  items   FeeReceiptItem[]
+
+  @@unique([schoolId, number])
+  @@index([studentId])
+  @@index([schoolId, date])
+}
+
+model FeeReceiptItem {
+  id          String  @id @default(cuid())
+  receiptId   String
+  headId      String?
+  headName    String
+  period      String // e.g. "2026-04", "Q1", "H2", "Y", "ONCE"
+  periodLabel String
+  amount      Int
+
+  receipt FeeReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  head    FeeHead?   @relation(fields: [headId], references: [id], onDelete: SetNull)
+
+  @@index([receiptId])
+  @@index([headId, period])
+}
+
+// Non-teaching staff on the payroll: office staff, guards, helpers, drivers…
+// (Separate from sign-in accounts; a staff member may or may not have one.)
+model StaffMember {
+  id            String    @id @default(cuid())
+  schoolId      String
+  name          String
+  designation   String // e.g. "Security guard"
+  phone         String?
+  monthlySalary Int?
+  joiningDate   DateTime?
+  status        Status    @default(ACTIVE)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  salaryPayments SalaryPayment[]
+
+  @@index([schoolId])
+}
+
+// One person's salary paid for one month. Name and role are copied so the
+// record stays readable after someone leaves.
+model SalaryPayment {
+  id        String      @id @default(cuid())
+  schoolId  String
+  month     String // "2026-09"
+  payeeType PayeeType
+  teacherId String?
+  staffId   String?
+  name      String
+  role      String
+  amount    Int
+  paidOn    DateTime    @db.Date
+  mode      PaymentMode
+  note      String?
+  createdBy String
+  createdAt DateTime    @default(now())
+
+  school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  staff   StaffMember? @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@unique([teacherId, month])
+  @@unique([staffId, month])
+  @@index([schoolId, month])
+}
+
+// What money is spent on. The "Salaries" category is built in: its spending
+// comes from salary payments. A monthly budget applies to every month.
+model ExpenseCategory {
+  id            String   @id @default(cuid())
+  schoolId      String
+  name          String
+  monthlyBudget Int?
+  isSalaries    Boolean  @default(false)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+
+  @@unique([schoolId, name])
+}
+
+model Expense {
+  id          String      @id @default(cuid())
+  schoolId    String
+  categoryId  String
+  date        DateTime    @db.Date
+  amount      Int
+  paidTo      String?
+  description String?
+  mode        PaymentMode
+  reference   String?
+  createdBy   String
+  createdAt   DateTime    @default(now())
+
+  school   School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  category ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([schoolId, date])
+  @@index([categoryId])
 }

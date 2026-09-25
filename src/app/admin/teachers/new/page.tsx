@@ -1,8 +1,10 @@
+import { getCurrentSchool } from "@/lib/school";
 import { Card, PageHeader } from "@/components/ui";
 import { createTeacher } from "../actions";
 import { TeacherForm } from "../teacher-form";
 
-export default function NewTeacherPage() {
+export default async function NewTeacherPage() {
+  await getCurrentSchool(); // admins only
   return (
     <>
       <PageHeader

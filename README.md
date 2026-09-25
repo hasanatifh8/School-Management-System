@@ -126,6 +126,91 @@ Teachers sign in at **`/login`** under the **Teacher** tab (or `/login?role=teac
   - **Several students:** download a single ZIP with each student's front and one back image, or use the download link under any card.
 - **Printing:** choose a layout (**Double-sided**, **Front and back side by side**, or **Front only**) and click **Print**. In the print window, turn on **Background graphics** and keep the scale at **100%**. For double-sided printing, flip on the long edge.
 
+## Fees
+
+**Who can use it**
+- **School admins** and Power Admin have full access.
+- **Fees staff** (non-teaching staff such as the accountant) have their own logins, created by a school admin under **Admin → Staff → Fees logins**. They sign in at `/login` like admins, but see only the **Fees** section: collecting fees, receipts and the fee chart. Opening any other admin page takes them back to Fees.
+
+**Fee structure** (*Fees → Fee structure*, admins only)
+- Fees are set up for each academic session. Add each fee the school charges and choose **how often** it is charged:
+
+  | How often | When it's charged |
+  |---|---|
+  | **One time** | Once, to students admitted this session (e.g. admission fee) |
+  | **Monthly** | Every month of the session |
+  | **Quarterly** | Apr, Jul, Oct, Jan |
+  | **Half-yearly** | Apr and Oct |
+  | **Once a year / extra due** | Once, in the month you choose (annual charges, exam fee, event fee…) |
+
+- Each fee has its **own amount for each class**. Leave a class blank to skip it (*Fill all classes* sets the same amount everywhere).
+- Each fee has a **due day**. After that day it shows as overdue.
+- **Only for students who opt in** is for fees like transport or hostel. Add students to it from their fee page.
+- The chart shows the yearly total per student for every class.
+- A new session starts empty; **Copy fees from the previous session** copies them over.
+
+**Collecting fees** (*Fees → Collect fees*)
+1. Find a student by name, ID, father's name or phone, or open a class to see who owes what.
+2. The student's fee page lists every instalment for the session: **Due**, **Part paid**, **Paid** or **Upcoming**. Everything due up to today is ticked.
+   - Change amounts for a part payment (you can't pay more than the balance).
+   - Tick upcoming instalments to take an advance.
+3. Choose the date and how it was paid (Cash, UPI, Card, Cheque, Bank transfer, Other). UPI, cheque and bank transfer need a reference number.
+4. Click **Collect**. A numbered receipt is created (e.g. `2026-27/0001`) and opens ready to print.
+- Students who join mid-session are charged only from the month they were admitted.
+
+**Receipts**
+- Each receipt shows the school details, the student, the fees paid (consecutive months shown as one line), the total and the amount in words.
+- It prints on A4 with a **parent copy and an office copy**, or as a single copy.
+- *Fees → Receipts* lists receipts by date with totals by payment mode.
+- Receipts are never deleted. An admin can **cancel** one with a reason: it stays on record marked "Cancelled", and its amounts become due again.
+
+**Overview:** collected today, this month and this session; today's collection by payment mode; recent receipts; and the amount due now in each class.
+
+## Expenses & budget
+
+This section is for school admins and Power Admin. Fees staff can't see it.
+
+**Staff** (*Admin → Staff*)
+- The **Non-teaching staff** register holds office staff, guards, helpers, drivers and so on, each with a job, phone number and monthly salary. You can edit someone or remove them from the payroll; their past salaries are kept.
+- The **Fees logins** tab holds sign-in accounts for fees staff.
+- Teachers' salaries come from the *Monthly salary* on their profile.
+
+**Salaries** (*Expenses → Salaries*)
+- The month's payroll lists teaching and non-teaching staff, each marked paid or unpaid.
+- **Pay** one person, changing the amount for deductions or bonuses and adding a note, or **Pay all** the unpaid people at their monthly salary on one date.
+- A payment can be undone.
+- The totals show teaching and non-teaching salaries separately.
+
+**Expenses** (*Expenses → Expenses*)
+- Record bills and payments by category: electricity, water, events, maintenance, stationery, transport, internet, cleaning, and so on.
+- Categories can be added or removed on the Budget tab.
+
+**Budget** (*Expenses → Budget*)
+- Set a **monthly budget** for each category, including Salaries. The same budgets apply to every month.
+- Each category shows a **suggested** amount:
+  - Salaries: the current payroll.
+  - Other categories: the average of the last 3 months plus 10%, rounded up to ₹500.
+
+**Overview**
+- For any month, it shows what was spent against the budget, marked under budget, near the limit or over budget.
+- Summary tiles show:
+  - salaries paid (teaching and non-teaching)
+  - other expenses
+  - **expected spending by month end**, and next month
+  - fees collected, and the balance left after spending
+- A 6-month spending chart, and a table by category with the budget, spending, percentage used, usual monthly amount, expected amount and status.
+- **Recommendations** are worked out from the numbers:
+  - categories over budget or likely to go over
+  - unusual spikes, meaning 30% or more above the usual amount
+  - salaries still to pay, including anything unpaid from last month
+  - staff with no salary set, and categories with no budget
+  - spending compared with fees collected
+  - next month's expected cost
+- **How the forecasts work:**
+  - The usual amount for a category is its average over the previous 3 months that have spending recorded.
+  - Expected by month end is, for salaries, what's already paid plus the salaries still due; for other categories, the higher of the amount spent so far and the usual amount.
+  - Next month is the current payroll plus each category's recent average.
+
 ## Project structure
 
 ```
@@ -147,4 +232,4 @@ Every table is scoped to a `School`, so the planned Super Admin can manage sever
 
 ## Not built yet
 
-- Exams and report cards, fees, and the student/parent portal.
+- Exams and report cards, and the student/parent portal.

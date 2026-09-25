@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { BookOpen, CalendarDays, Droplet, Hash, History, IdCard, Mail, RotateCcw, UserRound, UserRoundX } from "lucide-react";
+import { BookOpen, CalendarDays, Droplet, Hash, History, IdCard, Mail, Wallet, RotateCcw, UserRound, UserRoundX } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { AttendanceSummaryCard } from "@/components/attendance/attendance-summary";
@@ -105,6 +105,10 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               </div>
             </div>
             <div className="flex flex-wrap items-start gap-2">
+              <Link href={`/admin/fees/students/${student.id}`} className={`${buttonVariants.secondary} mt-3`}>
+                <Wallet className="h-4 w-4" />
+                Fees
+              </Link>
               {!removed && (
                 <Link href={`/admin/id-cards/generate?ids=${student.id}`} className={`${buttonVariants.secondary} mt-3`}>
                   <IdCard className="h-4 w-4" />

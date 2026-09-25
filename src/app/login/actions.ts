@@ -50,7 +50,7 @@ export async function signIn(_: ActionState, formData: FormData): Promise<Action
 
   await startAdminSession(admin.id);
   await db.schoolAdmin.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
-  redirect("/admin");
+  redirect(admin.role === "ADMIN" ? "/admin" : "/admin/fees");
 }
 
 export async function adminLogout() {
