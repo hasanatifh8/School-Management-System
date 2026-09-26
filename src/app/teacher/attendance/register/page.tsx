@@ -22,7 +22,7 @@ export default async function TeacherRegisterPage({ searchParams }: PageProps<"/
         breadcrumbs={[{ label: "Attendance", href: "/teacher/attendance" }, { label: "Register" }]}
         subtitle={`${sectionLabel(section)} · ${range.label}`}
         action={
-          <a href={registerDownloadHref(section.id, range)} download className={buttonVariants.primary}>
+          <a href={registerDownloadHref(section.id, range, query)} download className={buttonVariants.primary}>
             <Download className="h-4 w-4" />
             Download Excel
           </a>
@@ -30,6 +30,7 @@ export default async function TeacherRegisterPage({ searchParams }: PageProps<"/
       />
       <RegisterView
         basePath="/teacher/attendance/register"
+        params={query}
         register={register}
         range={range}
         view={pickView(query, range)}

@@ -42,7 +42,7 @@ export default async function SectionAttendancePage({ params, searchParams }: Pa
         breadcrumbs={[{ label: "Attendance", href: `/admin/attendance?date=${date}` }, { label: sectionLabel(section) }]}
         subtitle={`${formatISO(date)} · Class teacher: ${section.classTeacher ? fullName(section.classTeacher) : "none"}`}
         action={
-          <ButtonLink href={`/admin/attendance/${section.id}/register?month=${date.slice(0, 7)}`} variant="secondary" icon={Table2}>
+          <ButtonLink href={`/admin/attendance/register?section=${section.id}&period=month&month=${date.slice(0, 7)}`} variant="secondary" icon={Table2}>
             Monthly register
           </ButtonLink>
         }

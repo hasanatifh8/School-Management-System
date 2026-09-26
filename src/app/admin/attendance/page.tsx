@@ -111,17 +111,20 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
               <MenuLink href="/admin/attendance/holidays" icon={<CalendarOff />}>
                 School holidays
               </MenuLink>
+              {nextToMark && (
+                <MenuLink href={`/admin/attendance/${nextToMark.section.id}?date=${date}`} icon={<CalendarCheck />}>
+                  Take attendance · {sectionLabel(nextToMark.section)}
+                </MenuLink>
+              )}
               {absentees.length > 0 && (
                 <MenuLink href={`/admin/notices?absent=${date}`} icon={<Megaphone />}>
                   Message absent parents
                 </MenuLink>
               )}
             </MoreMenu>
-            {nextToMark && (
-              <ButtonLink href={`/admin/attendance/${nextToMark.section.id}?date=${date}`} icon={CalendarCheck}>
-                Take · {sectionLabel(nextToMark.section)}
-              </ButtonLink>
-            )}
+            <ButtonLink href={`/admin/attendance/register?period=month&month=${date.slice(0, 7)}`} icon={Table2}>
+              Attendance register
+            </ButtonLink>
           </>
         }
       />
@@ -213,7 +216,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
                           {marked ? "Edit" : holiday || day?.holiday || !s._count.students ? "View" : "Take"}
                         </ButtonLink>
                         <Link
-                          href={`/admin/attendance/${s.id}/register?month=${date.slice(0, 7)}`}
+                          href={`/admin/attendance/register?section=${s.id}&period=month&month=${date.slice(0, 7)}`}
                           title="Monthly register"
                           aria-label={`Monthly register for ${sectionLabel(s)}`}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-subtle transition hover:bg-surface-3 hover:text-fg"

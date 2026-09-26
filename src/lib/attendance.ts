@@ -271,3 +271,78 @@ export async function loadRegister(schoolId: string, sectionId: string, from: st
 }
 
 export type Register = Awaited<ReturnType<typeof loadRegister>>;
+
+/** Student filters for the register: ?q= (name, ID or roll) and ?band=below75|below90|full|none. */
+export const REGISTER_BANDS = [
+  { value: "below75", label: "Below 75%" },
+  { value: "below90", label: "Below 90%" },
+  { value: "full", label: "100% attendance" },
+  { value: "none", label: "Not marked yet" },
+] as const;
+
+export function filterRegisterStudents<T extends { name: string; studentCode: string; rollNumber: number | null; periodPercent: number | null }>(
+  students: T[],
+  params: Params,
+) {
+  const q = typeof params.q === "string" ? params.q.trim().toLowerCase() : "";
+  const band = typeof params.band === "string" ? params.band : "";
+  const words = q.split(/\s+/).filter(Boolean);
+  return students.filter((s) => {
+    const p = s.periodPercent;
+    if (band === "below75" && !(p != null && p < 75)) return false;
+    if (band === "below90" && !(p != null && p < 90)) return false;
+    if (band === "full" && p !== 100) return false;
+    if (band === "none" && p != null) return false;
+    return words.every((w) => s.name.toLowerCase().includes(w) || s.studentCode.toLowerCase().includes(w) || String(s.rollNumber ?? "") === w);
+  });
+}
+
+/**
+ * Every class's attendance over a date range, for the school-wide register:
+ * working days, average of students' percentages, students below 75% and
+ * total absences. Students count under their current class.
+ */
+export async function loadClassSummaries(schoolId: string, from: string, to: string) {
+  const holidays = await schoolHolidays(schoolId, from, to);
+  const dayWhere = {
+    schoolId,
+    holiday: null,
+    date: { gte: parseISODate(from)!, lte: parseISODate(to)!, notIn: [...holidays.keys()].map((d) => parseISODate(d)!) },
+  };
+  const [sections, days, records] = await Promise.all([
+    db.section.findMany({
+      where: { class: { schoolId } },
+      orderBy: [{ class: { sortOrder: "asc" } }, { class: { name: "asc" } }, { name: "asc" }],
+      include: {
+        class: true,
+        classTeacher: { select: { firstName: true, middleName: true, lastName: true } },
+        students: { where: { status: "ACTIVE" }, select: { id: true } },
+      },
+    }),
+    db.attendanceDay.groupBy({ by: ["sectionId"], where: { ...dayWhere, records: { some: {} } }, _count: true }),
+    db.attendanceRecord.groupBy({ by: ["studentId", "status"], where: { day: dayWhere }, _count: true }),
+  ]);
+  const counts = new Map<string, AttendanceCounts>();
+  for (const r of records) {
+    if (!counts.has(r.studentId)) counts.set(r.studentId, emptyCounts());
+    counts.get(r.studentId)![r.status] += r._count;
+  }
+  const working = new Map(days.map((d) => [d.sectionId, d._count]));
+
+  return sections.map((s) => {
+    const percents = s.students.map((st) => attendancePercent(counts.get(st.id) ?? emptyCounts())).filter((p): p is number => p != null);
+    return {
+      id: s.id,
+      label: `${s.class.name} – ${s.name}`,
+      classId: s.classId,
+      classTeacher: s.classTeacher ? fullName(s.classTeacher) : null,
+      students: s.students.length,
+      workingDays: working.get(s.id) ?? 0,
+      average: percents.length ? Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 10) / 10 : null,
+      below75: percents.filter((p) => p < 75).length,
+      absences: s.students.reduce((n, st) => n + (counts.get(st.id)?.ABSENT ?? 0), 0),
+    };
+  });
+}
+
+export type ClassSummary = Awaited<ReturnType<typeof loadClassSummaries>>[number];

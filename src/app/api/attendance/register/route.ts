@@ -1,6 +1,15 @@
 import ExcelJS from "exceljs";
 import { getActor } from "@/lib/access";
-import { attendanceWindow, loadRegister, pickRange, type Register, type RegisterRange } from "@/lib/attendance";
+import {
+  attendanceWindow,
+  filterRegisterStudents,
+  loadClassSummaries,
+  loadRegister,
+  pickRange,
+  type ClassSummary,
+  type Register,
+  type RegisterRange,
+} from "@/lib/attendance";
 import { ATTENDANCE_STATUSES, MAX_DAILY_DAYS, STATUS_META, isSunday, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { sectionLabel } from "@/lib/queries";
@@ -17,8 +26,9 @@ const monthShort = new Intl.DateTimeFormat("en-IN", { month: "short", year: "2-d
 
 /**
  * GET /api/attendance/register?section=…&period=week|month|year|custom&…
- * A class's attendance register as Excel, for the same range as the screen
- * (see pickRange). Admins: any class; teachers: their own class.
+ * A class's attendance register as Excel, for the same range and student
+ * filters (?q=, ?band=) as the screen. Admins: any class; teachers: their own
+ * class. section=all (admins only, optional ?classId=) exports one row per class.
  * Sheets: "Day by day" (one column per date) and "Summary" (totals and a
  * percentage per month); the summary comes first for long ranges.
  */
@@ -27,13 +37,31 @@ export async function GET(request: Request) {
   const sectionId = url.searchParams.get("section") ?? "";
   const actor = await getActor();
   const school = actor.kind === "staff" ? actor.school : actor.ctx.school;
+  const params = Object.fromEntries(url.searchParams);
+
+  // Every class, one row each (admins only).
+  if (sectionId === "all") {
+    if (actor.kind !== "staff") return new Response("Not found", { status: 404 });
+    const win = await attendanceWindow(school.id);
+    const range = pickRange(params, win);
+    const classId = url.searchParams.get("classId");
+    const rows = (await loadClassSummaries(school.id, range.from, range.to)).filter((c) => !classId || c.classId === classId);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = school.name;
+    classesSheet(wb, rows, `${school.name} · Class-wise attendance ${range.label}`, `Session ${win.session.name} · Average is the mean of each student's percentage`);
+    const span = range.period === "month" ? range.from.slice(0, 7) : range.period === "week" ? `week-${range.from}` : `${range.from}-to-${range.to}`;
+    return xlsx(wb, `attendance-all-classes-${span}`);
+  }
+
   if (actor.kind === "teacher" && actor.ctx.classSection?.id !== sectionId) return new Response("Not found", { status: 404 });
   const section = await db.section.findFirst({ where: { id: sectionId, class: { schoolId: school.id } }, include: { class: true } });
   if (!section) return new Response("Not found", { status: 404 });
 
   const win = await attendanceWindow(school.id);
-  const range = pickRange(Object.fromEntries(url.searchParams), win);
-  const reg = await loadRegister(school.id, section.id, range.from, range.to, win);
+  const range = pickRange(params, win);
+  const full = await loadRegister(school.id, section.id, range.from, range.to, win);
+  // Same student filters as the screen (?q=, ?band=).
+  const reg = { ...full, students: filterRegisterStudents(full.students, params) };
 
   const wb = new ExcelJS.Workbook();
   wb.creator = school.name;
@@ -48,10 +76,14 @@ export async function GET(request: Request) {
     summarySheet(wb, reg, range, title, note);
   }
 
-  const file = Buffer.from(await wb.xlsx.writeBuffer());
   const span =
     range.period === "month" ? range.from.slice(0, 7) : range.period === "week" ? `week-${range.from}` : `${range.from}-to-${range.to}`;
-  const name = `attendance-${section.class.name}-${section.name}-${span}`.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
+  return xlsx(wb, `attendance-${section.class.name}-${section.name}-${span}`);
+}
+
+async function xlsx(wb: ExcelJS.Workbook, baseName: string) {
+  const file = Buffer.from(await wb.xlsx.writeBuffer());
+  const name = baseName.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
   return new Response(file, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -175,4 +207,19 @@ function summarySheet(wb: ExcelJS.Workbook, reg: Register, range: RegisterRange,
   monthCols.forEach((_, i) => (ws.getColumn(firstMonth + i).width = 10));
   ws.getColumn(pctCol).width = 12;
   ws.getColumn(pctCol + 1).width = 12;
+}
+
+function classesSheet(wb: ExcelJS.Workbook, rows: ClassSummary[], title: string, note: string) {
+  const ws = wb.addWorksheet("Classes", { views: [{ state: "frozen", xSplit: 1, ySplit: 3 }] });
+  titleRows(ws, title, note);
+  styleHeader(ws.addRow(["Class", "Class teacher", "Students", "Working days", "Average %", "Below 75%", "Absences"]));
+  for (const c of rows) {
+    const row = ws.addRow([c.label, c.classTeacher ?? "", c.students, c.workingDays, null, c.below75, c.absences]);
+    for (const col of [3, 4, 6, 7]) row.getCell(col).alignment = { horizontal: "center" };
+    percentCell(row.getCell(5), c.average);
+    if (c.below75) row.getCell(6).font = { color: { argb: TEXT.bad }, bold: true };
+  }
+  ws.getColumn(1).width = 18;
+  ws.getColumn(2).width = 26;
+  for (const col of [3, 4, 5, 6, 7]) ws.getColumn(col).width = 13;
 }

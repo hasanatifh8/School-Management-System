@@ -108,7 +108,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                   Generate ID card
                 </MenuLink>
                 {student.section && (
-                  <MenuLink href={`/admin/attendance/${student.section.id}/register`} icon={<CalendarDays />}>
+                  <MenuLink href={`/admin/attendance/register?section=${student.section.id}`} icon={<CalendarDays />}>
                     Attendance register
                   </MenuLink>
                 )}
@@ -263,7 +263,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             <AttendanceSummaryCard
               schoolId={school.id}
               studentId={student.id}
-              registerHref={student.section ? `/admin/attendance/${student.section.id}/register` : null}
+              registerHref={student.section ? `/admin/attendance/register?section=${student.section.id}` : null}
             />
 
             <Card title="Class history" icon={History} padded={false}>
