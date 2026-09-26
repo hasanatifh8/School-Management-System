@@ -7,9 +7,9 @@ import {
   Badge,
   Card,
   EmptyState,
+  PagedTable,
   PageHeader,
   PersonCell,
-  Table,
   selectClass,
   tbodyClass,
   tdClass,
@@ -90,8 +90,8 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
         }
       />
 
-      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 text-sm text-indigo-900">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />
+      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-accent-line bg-accent-soft/60 p-4 text-sm text-accent-text">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent-text" />
         <div>
           Every student is set to{" "}
           <strong>{nextClass ? `move up to ${nextClass.name}` : "pass out (this is the last class)"}</strong>. Change
@@ -116,9 +116,9 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
             action={promoteClass.bind(null, id)}
             className="[&>[role=alert]]:mx-6 [&>[role=alert]]:mb-4 [&>[role=status]]:mx-6 [&>[role=status]]:mb-4"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4">
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">{students.length}</span> students
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-4">
+              <p className="text-sm text-fg-2">
+                <span className="font-semibold text-fg">{students.length}</span> students
                 {decided > 0 && <> · {decided} already saved (you can change them)</>}
               </p>
               {nextClass && nextSections.length === 0 && (
@@ -127,19 +127,23 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
                 </Badge>
               )}
             </div>
-            <Table>
-              <thead className={theadClass}>
+            <PagedTable
+              noun="students"
+              pageSize={20}
+              theadClassName={theadClass}
+              tbodyClassName={tbodyClass}
+              head={
                 <tr>
                   <th className={thClass}>Roll</th>
                   <th className={thClass}>Student</th>
                   <th className={thClass}>Now</th>
                   <th className={thClass}>In {nextName}</th>
                 </tr>
-              </thead>
-              <tbody className={tbodyClass}>
+              }
+            >
                 {students.map((s) => (
                   <tr key={s.id} className={trClass}>
-                    <td className={`${tdClass} w-16 tabular-nums text-slate-500`}>{s.rollNumber ?? "—"}</td>
+                    <td className={`${tdClass} w-16 tabular-nums text-muted`}>{s.rollNumber ?? "—"}</td>
                     <td className={tdClass}>
                       <PersonCell
                         name={fullName(s)}
@@ -157,7 +161,7 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
                         name={`decision:${s.id}`}
                         defaultValue={defaultDecision(s)}
                         aria-label={`Decision for ${fullName(s)}`}
-                        className={`${selectClass} !py-2`}
+                        className={selectClass}
                       >
                         {nextClass && nextSections.length > 0 && (
                           <optgroup label={`Promote to ${nextClass.name}`}>
@@ -183,10 +187,9 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </Table>
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
-              <Link href={`/admin/classes/${id}`} className="text-sm font-medium text-slate-600 hover:text-slate-900">
+              </PagedTable>
+            <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-glass px-4 py-4 backdrop-blur-xl sm:px-6 md:bottom-0">
+              <Link href={`/admin/classes/${id}`} className="text-sm font-medium text-fg-2 hover:text-fg">
                 Cancel
               </Link>
               <SubmitButton
@@ -200,9 +203,9 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
         )}
       </Card>
 
-      <p className="mt-4 text-sm text-slate-500">
+      <p className="mt-4 text-sm text-muted">
         Next: promote the other classes, then start {nextName} from{" "}
-        <Link href="/admin/sessions" className="font-medium text-indigo-600 hover:underline">
+        <Link href="/admin/sessions" className="font-medium text-accent-text hover:underline">
           Sessions
         </Link>
         .

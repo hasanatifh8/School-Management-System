@@ -28,10 +28,10 @@ export default async function ActivityPage({ searchParams }: PageProps<"/power/a
             <tbody className={tbodyClass}>
               {entries.map((e) => (
                 <tr key={e.id} className={trClass}>
-                  <td className={`${tdClass} whitespace-nowrap text-slate-500`}>{when.format(e.createdAt)}</td>
-                  <td className={`${tdClass} font-medium ${e.action.startsWith("Failed") ? "text-rose-700" : "text-slate-900"}`}>{e.action}</td>
+                  <td className={`${tdClass} whitespace-nowrap text-muted`}>{when.format(e.createdAt)}</td>
+                  <td className={`${tdClass} font-medium ${e.action.startsWith("Failed") ? "text-danger" : "text-fg"}`}>{e.action}</td>
                   <td className={tdClass}>{e.schoolName ?? "—"}</td>
-                  <td className={`${tdClass} text-slate-500`}>{e.details ?? ""}</td>
+                  <td className={`${tdClass} text-muted`}>{e.details ?? ""}</td>
                 </tr>
               ))}
             </tbody>

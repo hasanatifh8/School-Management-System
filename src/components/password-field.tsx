@@ -29,6 +29,7 @@ export function PasswordField({
   required = true,
   placeholder,
   keepAfterSave = false,
+  labelledBy,
 }: {
   name: string;
   generate?: boolean;
@@ -37,6 +38,8 @@ export function PasswordField({
   placeholder?: string;
   /** Keep the value after a successful save (so a password set for someone else can still be copied). */
   keepAfterSave?: boolean;
+  /** id of a visible label, when the field isn't wrapped in a <label>. */
+  labelledBy?: string;
 }) {
   const [value, setValue] = useState("");
   const [visible, setVisible] = useState(false);
@@ -68,13 +71,14 @@ export function PasswordField({
           required={required}
           autoComplete={autoComplete}
           placeholder={placeholder}
+          aria-labelledby={labelledBy}
           className={`${inputClass} pr-10 ${visible ? "font-mono" : ""}`}
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Hide password" : "Show password"}
-          className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-subtle transition hover:bg-surface-3 hover:text-fg-2"
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
@@ -88,7 +92,7 @@ export function PasswordField({
               setVisible(true);
               setCopied(false);
             }}
-            className="inline-flex items-center gap-1 font-medium text-indigo-600 hover:text-indigo-500"
+            className="inline-flex items-center gap-1 rounded font-medium text-accent-text transition hover:text-accent-hover"
           >
             <Wand2 className="h-3.5 w-3.5" /> Generate strong password
           </button>
@@ -103,7 +107,7 @@ export function PasswordField({
                   setCopied(false);
                 }
               }}
-              className="inline-flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800"
+              className="inline-flex items-center gap-1 font-medium text-muted hover:text-fg"
             >
               <Copy className="h-3.5 w-3.5" /> {copied ? "Copied" : "Copy"}
             </button>

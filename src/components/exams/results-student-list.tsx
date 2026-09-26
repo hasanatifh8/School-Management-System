@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ChevronRight, Search, Trophy, X } from "lucide-react";
-import { Avatar, Badge, inputClass, selectClass } from "@/components/ui";
+import { ChevronRight, Search, SearchX, Trophy, X } from "lucide-react";
+import { Avatar, Badge, EmptyState, PagedList, inputClass, selectClass } from "@/components/ui";
 
 export type StudentResult = {
   id: string;
@@ -55,20 +55,20 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
   }, [students, q, filter, sort]);
 
   const chips: { key: Filter; label: string; tone: string }[] = [
-    { key: "all", label: "All", tone: "bg-slate-900 text-white" },
-    { key: "Pass", label: "Pass", tone: "bg-emerald-600 text-white" },
-    { key: "Fail", label: "Fail", tone: "bg-rose-600 text-white" },
-    { key: "Incomplete", label: "Incomplete", tone: "bg-slate-600 text-white" },
+    { key: "all", label: "All", tone: "bg-fg text-canvas" },
+    { key: "Pass", label: "Pass", tone: "bg-success-solid text-white" },
+    { key: "Fail", label: "Fail", tone: "bg-danger-solid text-white" },
+    { key: "Incomplete", label: "Incomplete", tone: "bg-warning-solid text-white" },
   ];
 
   return (
     <div>
-      <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 lg:flex-row lg:items-center">
+      <div className="flex flex-col gap-3 border-b border-line px-6 py-4 lg:flex-row lg:items-center">
         <div className="relative max-w-sm flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, roll no. or ID" aria-label="Search students" className={`${inputClass} !py-2 !pl-9 !pr-9`} />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, roll no. or ID" aria-label="Search students" className={`${inputClass} !pl-9 !pr-9`} />
           {q && (
-            <button type="button" onClick={() => setQ("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-700">
+            <button type="button" onClick={() => setQ("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-subtle hover:text-fg-2">
               <X className="h-4 w-4" />
             </button>
           )}
@@ -82,15 +82,15 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
                 type="button"
                 aria-pressed={filter === c.key}
                 onClick={() => setFilter(c.key)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === c.key ? c.tone : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === c.key ? c.tone : "bg-surface-3 text-fg-2 hover:bg-line-strong"}`}
               >
                 {c.label} <span className="tabular-nums opacity-75">{counts[c.key]}</span>
               </button>
             ))}
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-500 lg:ml-auto">
+        <label className="flex items-center gap-2 text-sm text-muted lg:ml-auto">
           Sort by
-          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className={`${selectClass} !w-36 !py-1.5`}>
+          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className={`${selectClass} !w-36`}>
             <option value="roll">Roll number</option>
             <option value="rank">Rank</option>
             <option value="name">Name</option>
@@ -99,61 +99,62 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
       </div>
 
       {shown.length === 0 ? (
-        <p className="px-6 py-12 text-center text-sm text-slate-500">No students match. Try a different name or filter.</p>
+        <EmptyState icon={SearchX} title="No students match" description="Try a different name or filter." />
       ) : (
-        <ul className="divide-y divide-slate-100">
+        // Keyed so a new search, filter or sort starts from the first page.
+        <PagedList key={`${q}|${filter}|${sort}`} pageSize={15} noun="students">
           {shown.map((s) => (
             <li key={s.id}>
-              <Link href={`${cardHref}${s.id}`} className="group flex items-center gap-4 px-6 py-3 transition hover:bg-indigo-50/40 focus-visible:bg-indigo-50/60 focus-visible:outline-none">
-                <span className="w-8 text-right text-sm tabular-nums text-slate-400">{s.rollNumber ?? "—"}</span>
+              <Link href={`${cardHref}${s.id}`} className="group flex items-center gap-4 px-4 py-3 transition hover:bg-surface-2 focus-visible:bg-accent-soft focus-visible:outline-none sm:px-6">
+                <span className="w-8 text-right text-sm tabular-nums text-subtle">{s.rollNumber ?? "—"}</span>
                 <Avatar name={s.name} src={s.photoUrl} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-slate-900 group-hover:text-indigo-700">{s.name}</p>
-                  <p className="truncate text-xs text-slate-500">
+                  <p className="truncate font-medium text-fg group-hover:text-accent-text">{s.name}</p>
+                  <p className="truncate text-xs text-muted">
                     <span className="font-mono">{s.studentCode}</span>
-                    {s.failed.length > 0 && s.result === "Fail" && <span className="text-rose-600"> · Below pass in {s.failed.join(", ")}</span>}
+                    {s.failed.length > 0 && s.result === "Fail" && <span className="text-danger"> · Below pass in {s.failed.join(", ")}</span>}
                   </p>
                 </div>
                 <div className="hidden w-40 sm:block">
                   <div className="flex items-baseline justify-between text-sm">
-                    <span className="tabular-nums text-slate-700">
+                    <span className="tabular-nums text-fg-2">
                       {s.obtained}
-                      <span className="text-slate-400">/{s.max}</span>
+                      <span className="text-subtle">/{s.max}</span>
                     </span>
-                    <span className="font-semibold tabular-nums text-slate-900">{s.percent == null ? "—" : `${s.percent.toFixed(1)}%`}</span>
+                    <span className="font-semibold tabular-nums text-fg">{s.percent == null ? "—" : `${s.percent.toFixed(1)}%`}</span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-3">
                     <div
-                      className={`h-full rounded-full ${s.result === "Fail" ? "bg-rose-500" : s.result === "Pass" ? "bg-emerald-500" : "bg-slate-300"}`}
+                      className={`h-full rounded-full ${s.result === "Fail" ? "bg-danger-solid" : s.result === "Pass" ? "bg-success-solid" : "bg-line-strong"}`}
                       style={{ width: `${Math.min(100, s.percent ?? 0)}%` }}
                     />
                   </div>
                 </div>
-                <span className="w-10 text-center text-sm font-semibold text-slate-700">{s.grade}</span>
+                <span className="w-10 text-center text-sm font-semibold text-fg-2">{s.grade}</span>
                 <span className="hidden w-16 text-center md:block">
                   {s.rank ? (
-                    <span className={`inline-flex items-center gap-1 text-sm tabular-nums ${s.rank <= 3 ? "font-semibold text-amber-600" : "text-slate-600"}`}>
+                    <span className={`inline-flex items-center gap-1 text-sm tabular-nums ${s.rank <= 3 ? "font-semibold text-warning" : "text-fg-2"}`}>
                       {s.rank <= 3 && <Trophy className="h-3.5 w-3.5" />}#{s.rank}
                     </span>
                   ) : (
-                    <span className="text-slate-300">—</span>
+                    <span className="text-subtle">—</span>
                   )}
                 </span>
                 <span className="w-24 text-right">
                   <Badge tone={s.result === "Pass" ? "green" : s.result === "Fail" ? "red" : "slate"}>{s.result}</Badge>
                 </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-indigo-500" />
+                <ChevronRight className="h-4 w-4 shrink-0 text-subtle group-hover:text-accent-text" />
               </Link>
             </li>
           ))}
-        </ul>
+        </PagedList>
       )}
-      <p className="border-t border-slate-100 px-6 py-3 text-xs text-slate-500">
+      <p className="border-t border-line px-6 py-3 text-xs text-muted">
         Showing {shown.length} of {students.length} · Click a student to open their report card
         {shown.length > 0 && (
           <>
             {" · "}
-            <button type="button" onClick={() => router.push(`${cardHref}${shown[0].id}`)} className="font-medium text-indigo-600 hover:text-indigo-500">
+            <button type="button" onClick={() => router.push(`${cardHref}${shown[0].id}`)} className="font-medium text-accent-text underline-offset-4 hover:underline">
               Start with {shown[0].name.split(" ")[0]}
             </button>
           </>

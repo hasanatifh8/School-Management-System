@@ -37,11 +37,11 @@ export async function ExamWorkspace({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-semibold text-slate-900">{exam.name}</h2>
+              <h2 className="text-xl font-semibold text-fg">{exam.name}</h2>
               {isExam ? (
                 exam.published ? (
                   <Badge tone="green" dot>
@@ -56,7 +56,7 @@ export async function ExamWorkspace({
                 <Badge tone="sky">Class test</Badge>
               )}
             </div>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
               <CalendarDays className="h-4 w-4" />
               {dateSpan(exam.papers.map((p) => isoDate(p.date)))} · {exam.papers.length} paper{exam.papers.length === 1 ? "" : "s"} · Session {exam.session.name}
               {!isExam && ` · by ${exam.createdBy}`}

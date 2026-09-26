@@ -13,9 +13,9 @@ export function MarksOverview({ rows, base, emptyText }: { rows: OverviewRow[]; 
       padded={false}
     >
       {rows.length === 0 ? (
-        <p className="p-6 text-sm text-slate-500">{emptyText ?? "No sections to show."}</p>
+        <p className="p-6 text-sm text-muted">{emptyText ?? "No sections to show."}</p>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-line">
           {rows.map((r) => {
             const pct = r.required ? Math.round((r.filled / r.required) * 100) : 0;
             const minePct = r.mine ? Math.round((r.mineFilled / r.mine) * 100) : 0;
@@ -23,7 +23,7 @@ export function MarksOverview({ rows, base, emptyText }: { rows: OverviewRow[]; 
               <li key={r.sectionId} className="flex flex-wrap items-center gap-4 px-6 py-4">
                 <div className="min-w-40 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-slate-900">{r.label}</p>
+                    <p className="font-semibold text-fg">{r.label}</p>
                     {r.students === 0 ? (
                       <Badge>No students</Badge>
                     ) : r.published ? (
@@ -41,33 +41,33 @@ export function MarksOverview({ rows, base, emptyText }: { rows: OverviewRow[]; 
                       </Badge>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="mt-0.5 text-xs text-muted">
                     {r.students} students · {r.papers} graded paper{r.papers === 1 ? "" : "s"}
                     {r.editablePapers < r.papers && ` · you enter ${r.editablePapers}`}
                   </p>
                 </div>
                 <div className="w-48">
-                  <div className="flex justify-between text-xs text-slate-500">
+                  <div className="flex justify-between text-xs text-muted">
                     <span>{r.editablePapers < r.papers ? "Your marks" : "Marks entered"}</span>
                     <span className="tabular-nums">{r.editablePapers < r.papers ? `${r.mineFilled}/${r.mine}` : `${r.filled}/${r.required}`}</span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-3">
                     <div
-                      className={`h-full rounded-full ${(r.editablePapers < r.papers ? minePct : pct) === 100 ? "bg-emerald-500" : "bg-indigo-500"}`}
+                      className={`h-full rounded-full ${(r.editablePapers < r.papers ? minePct : pct) === 100 ? "bg-success-solid" : "bg-accent"}`}
                       style={{ width: `${r.editablePapers < r.papers ? minePct : pct}%` }}
                     />
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
                   {(r.published || r.access.canPreview) && (
-                    <Link href={`${base}/results/${r.sectionId}`} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
+                    <Link href={`${base}/results/${r.sectionId}`} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-fg-2 hover:bg-surface-3">
                       <FileBarChart className="h-4 w-4" />
                       Results
                     </Link>
                   )}
                   <Link
                     href={`${base}/marks/${r.sectionId}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent-soft px-3 py-2 text-sm font-medium text-accent-text hover:bg-accent-soft"
                   >
                     {r.published ? "View marks" : "Enter marks"}
                     <ArrowRight className="h-4 w-4" />

@@ -90,24 +90,24 @@ export function DocumentUploadForm({
           </Field>
 
           <div>
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">
-              File<span className="ml-0.5 text-rose-500">*</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-2">
+              File<span className="ml-0.5 text-danger">*</span>
             </span>
             <label
-              className={`relative flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-center transition hover:border-indigo-300 hover:bg-indigo-50/40 ${
-                fileError ? "border-rose-300 bg-rose-50/40" : file ? "border-indigo-300 bg-indigo-50/40" : "border-slate-200"
+              className={`relative flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-center transition hover:border-accent-line hover:bg-accent-soft/40 ${
+                fileError ? "border-danger-line bg-danger-soft/40" : file ? "border-accent-line bg-accent-soft/40" : "border-line"
               }`}
             >
-              <FileUp className="h-6 w-6 text-indigo-500" />
+              <FileUp className="h-6 w-6 text-accent-text" />
               {file ? (
                 <>
-                  <span className="max-w-full truncate text-sm font-medium text-slate-800">{file.name}</span>
-                  <span className="text-xs text-slate-500">{formatBytes(file.size)} · click to change</span>
+                  <span className="max-w-full truncate text-sm font-medium text-fg">{file.name}</span>
+                  <span className="text-xs text-muted">{formatBytes(file.size)} · click to change</span>
                 </>
               ) : (
                 <>
-                  <span className="text-sm font-medium text-slate-700">Click to choose a file</span>
-                  <span className="text-xs text-slate-500">PDF, JPG, PNG, WebP, DOC or DOCX · max {MAX_DOCUMENT_LABEL}</span>
+                  <span className="text-sm font-medium text-fg-2">Click to choose a file</span>
+                  <span className="text-xs text-muted">PDF, JPG, PNG, WebP, DOC or DOCX · max {MAX_DOCUMENT_LABEL}</span>
                 </>
               )}
               <input
@@ -131,7 +131,7 @@ export function DocumentUploadForm({
               />
             </label>
             {(fileError ?? state.fieldErrors?.file?.[0]) && (
-              <span className="mt-1.5 block text-xs font-medium text-rose-600">
+              <span className="mt-1.5 block text-xs font-medium text-danger">
                 {fileError ?? state.fieldErrors?.file?.[0]}
               </span>
             )}

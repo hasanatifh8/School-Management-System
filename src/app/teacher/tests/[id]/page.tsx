@@ -32,10 +32,10 @@ export default async function TestPage({ params }: PageProps<"/teacher/tests/[id
           breadcrumbs={[{ label: "Tests & exams", href: "/teacher/tests?view=school" }, { label: exam.name }]}
         />
         <div className="space-y-6">
-          <section className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <section className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-line bg-surface p-6 shadow-card">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">{exam.name}</h2>
-              <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
+              <h2 className="text-xl font-semibold text-fg">{exam.name}</h2>
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
                 <CalendarDays className="h-4 w-4" />
                 {dateSpan(exam.papers.map((p) => isoDate(p.date)))} · {exam.papers.length} papers
                 {exam.kind === "TEST" && ` · by ${exam.createdBy}`}

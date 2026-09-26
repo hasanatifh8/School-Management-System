@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CircleCheck, GraduationCap, XCircle } from "lucide-react";
+import { GraduationCap, HandCoins, XCircle } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
-import { Card, buttonVariants, inputClass } from "@/components/ui";
+import { ButtonLink, Card, SuccessState, buttonVariants, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getFeesAccess } from "@/lib/fees";
 import { MODE_LABELS, amountInWords, rupees } from "@/lib/fees-shared";
@@ -149,9 +149,24 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
     <div className="space-y-6">
       <div className="space-y-4 print:hidden">
         {sp.new === "1" && !receipt.cancelledAt && (
-          <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
-            <CircleCheck className="h-4 w-4" /> Payment of {rupees(receipt.total)} saved. Receipt {receipt.number}.
-          </p>
+          <Card>
+            <SuccessState
+              title={`${rupees(receipt.total)} collected`}
+              description={
+                <>
+                  Receipt <span className="font-mono font-medium text-fg">{receipt.number}</span> for {receipt.studentName} is ready to print.
+                </>
+              }
+              action={
+                <>
+                  <PrintButton />
+                  <ButtonLink href="/admin/fees/collect" variant="secondary" icon={HandCoins}>
+                    Collect another
+                  </ButtonLink>
+                </>
+              }
+            />
+          </Card>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <PrintButton />
@@ -169,7 +184,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
       </div>
 
       <style>{`@page { size: A4 portrait; margin: 10mm; } @media print { html, body { background: #fff !important; } }`}</style>
-      <div className="mx-auto w-full max-w-[190mm] space-y-[4mm] bg-white print:max-w-none">
+      <div className="mx-auto w-full max-w-[190mm] space-y-[4mm] rounded-2xl bg-white p-[4mm] text-slate-900 shadow-lift print:max-w-none print:rounded-none print:p-0 print:shadow-none">
         {copies.map((label, i) => (
           <div key={label}>
             {i > 0 && <div className="mb-[4mm] border-t border-dashed border-slate-400 text-center text-[7pt] text-slate-400 print:block" />}
@@ -179,8 +194,8 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
       </div>
 
       {canManage && !receipt.cancelledAt && (
-        <Card title="Cancel this receipt" icon={XCircle} className="max-w-xl print:hidden">
-          <p className="mb-3 text-sm text-slate-600">Use this if the payment was entered by mistake or the cheque bounced. The receipt is kept and marked cancelled, and its amounts become due again.</p>
+        <Card title="Cancel this receipt" icon={XCircle} className="max-w-xl border-danger-line print:hidden">
+          <p className="mb-3 text-sm text-muted">Use this if the payment was entered by mistake or the cheque bounced. The receipt is kept and marked cancelled, and its amounts become due again.</p>
           <ActionForm action={cancelReceipt.bind(null, receipt.id)} className="space-y-3">
             <Field label="Reason" name="reason" required>
               <input name="reason" maxLength={200} required className={inputClass} />

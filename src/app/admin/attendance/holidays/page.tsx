@@ -1,6 +1,6 @@
 import { CalendarOff, PartyPopper, Trash2 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui";
+import { Badge, Card, EmptyState, PageHeader, PagedList } from "@/components/ui";
 import { attendanceWindow } from "@/lib/attendance";
 import { groupHolidays, isoDate, parseISODate, shortDate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
@@ -8,6 +8,7 @@ import { getCurrentSchool } from "@/lib/school";
 import { deleteSchoolHolidays } from "../actions";
 import { HolidayForm } from "./holiday-form";
 
+const monthShort = new Intl.DateTimeFormat("en-IN", { month: "short", timeZone: "UTC" });
 const dayMonth = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 /** School-wide holidays for the current session. */
@@ -44,14 +45,19 @@ export default async function HolidaysPage() {
           {groups.length === 0 ? (
             <EmptyState icon={CalendarOff} title="No holidays yet" description="Add festivals, vacations and other days the school is closed." />
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <PagedList pageSize={10} noun="holidays">
               {groups.map((g) => {
                 const past = g.to < win.today;
+                const d = parseISODate(g.from)!;
                 return (
-                  <li key={g.ids[0]} className={`flex flex-wrap items-center gap-3 px-6 py-3 ${past ? "opacity-60" : ""}`}>
+                  <li key={g.ids[0]} className={`flex flex-wrap items-center gap-4 px-4 py-3 sm:px-6 ${past ? "opacity-60" : ""}`}>
+                    <span aria-hidden className="flex h-12 w-12 shrink-0 flex-col items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-2 text-center">
+                      <span className="w-full bg-danger-solid py-0.5 text-[10px] font-semibold uppercase leading-none text-white">{monthShort.format(d)}</span>
+                      <span className="flex-1 pt-0.5 text-base font-semibold leading-tight text-fg">{d.getUTCDate()}</span>
+                    </span>
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-900">{g.name}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="font-medium text-fg">{g.name}</p>
+                      <p className="text-xs text-muted">
                         {g.from === g.to ? fmt(g.from) : `${fmt(g.from)} – ${fmt(g.to)} · ${g.ids.length} days`}
                         {g.from.slice(0, 4) !== g.to.slice(0, 4) && ` ${shortDate.format(parseISODate(g.to)!).slice(-4)}`}
                       </p>
@@ -66,7 +72,7 @@ export default async function HolidaysPage() {
                   </li>
                 );
               })}
-            </ul>
+            </PagedList>
           )}
         </Card>
       </div>

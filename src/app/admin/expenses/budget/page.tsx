@@ -29,10 +29,10 @@ export default async function BudgetPage() {
           </ActionForm>
         </Card>
         <Card title="Categories" icon={Tags} padded={false}>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-line">
             {rows.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-3 px-6 py-2 text-sm">
-                <span className="text-slate-800">{r.name}</span>
+                <span className="text-fg">{r.name}</span>
                 {!r.isSalaries && (
                   <ActionForm action={deleteCategory.bind(null, r.id)} compact className="flex flex-row-reverse items-center gap-2">
                     <SubmitButton variant="dangerGhost" size="sm" confirm={`Remove the “${r.name}” category?`} icon={<Trash2 className="h-4 w-4" />}>

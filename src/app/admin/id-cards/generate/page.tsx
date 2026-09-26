@@ -41,7 +41,7 @@ export default async function GenerateIdCardsPage({ searchParams }: PageProps<"/
             icon={IdCard}
             title="No students chosen"
             action={
-              <Link href="/admin/id-cards" className="text-sm font-medium text-indigo-600">
+              <Link href="/admin/id-cards" className="text-sm font-medium text-accent-text">
                 Choose a class
               </Link>
             }

@@ -38,13 +38,13 @@ export default async function ClassesPage() {
           return (
             <article
               key={c.id}
-              className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_4px_16px_-8px_rgba(15,23,42,0.08)] transition hover:border-indigo-200 hover:shadow-md"
+              className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-card transition hover:border-accent-line hover:shadow-lift"
             >
-              <Link href={`/admin/classes/${c.id}`} className="flex items-center gap-4 border-b border-slate-100 px-5 py-4">
+              <Link href={`/admin/classes/${c.id}`} className="flex items-center gap-4 border-b border-line px-5 py-4">
                 <IconTile icon={School} tone="sky" />
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-semibold text-slate-900 group-hover:text-indigo-600">{c.name}</h2>
-                  <p className="mt-0.5 flex items-center gap-3 text-xs text-slate-500">
+                  <h2 className="font-semibold text-fg group-hover:text-accent-text">{c.name}</h2>
+                  <p className="mt-0.5 flex items-center gap-3 text-xs text-muted">
                     <span className="inline-flex items-center gap-1">
                       <Users className="h-3.5 w-3.5" />
                       {students} students
@@ -55,19 +55,19 @@ export default async function ClassesPage() {
                     </span>
                   </p>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500" />
+                <ArrowRight className="h-4 w-4 text-subtle transition group-hover:translate-x-0.5 group-hover:text-accent-text" />
               </Link>
 
-              <ul className="flex-1 divide-y divide-slate-100">
-                {c.sections.length === 0 && <li className="px-5 py-4 text-sm text-slate-500">No sections yet.</li>}
+              <ul className="flex-1 divide-y divide-line">
+                {c.sections.length === 0 && <li className="px-5 py-4 text-sm text-muted">No sections yet.</li>}
                 {c.sections.map((s) => (
                   <li key={s.id} className="flex items-center gap-3 px-5 py-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-semibold text-slate-700">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-sm font-semibold text-fg-2">
                       {s.name}
                     </span>
                     <div className="min-w-0 flex-1">
                       {s.classTeacher ? (
-                        <span className="flex items-center gap-2 text-sm text-slate-700">
+                        <span className="flex items-center gap-2 text-sm text-fg-2">
                           <Avatar name={fullName(s.classTeacher)} src={photoUrl(s.classTeacher.photoId)} size="sm" />
                           <span className="truncate">{fullName(s.classTeacher)}</span>
                         </span>
@@ -77,14 +77,14 @@ export default async function ClassesPage() {
                         </Badge>
                       )}
                     </div>
-                    <span className="text-xs tabular-nums text-slate-500">{s._count.students} students</span>
+                    <span className="text-xs tabular-nums text-muted">{s._count.students} students</span>
                   </li>
                 ))}
               </ul>
 
               <Link
                 href={`/admin/classes/${c.id}`}
-                className="border-t border-slate-100 bg-slate-50/60 px-5 py-3 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50/60"
+                className="border-t border-line bg-surface-2/60 px-5 py-3 text-sm font-medium text-accent-text transition hover:bg-accent-soft/60"
               >
                 Manage class
               </Link>
@@ -93,12 +93,12 @@ export default async function ClassesPage() {
         })}
 
         {/* Add class */}
-        <section className="flex flex-col rounded-2xl border-2 border-dashed border-slate-200 bg-white/60 p-6">
+        <section className="flex flex-col rounded-2xl border-2 border-dashed border-line bg-surface/60 p-6">
           <div className="flex items-center gap-3">
             <IconTile icon={Plus} tone="indigo" />
             <div>
-              <h2 className="font-semibold text-slate-900">Add a class</h2>
-              <p className="text-xs text-slate-500">You can add sections and subjects next.</p>
+              <h2 className="font-semibold text-fg">Add a class</h2>
+              <p className="text-xs text-muted">You can add sections and subjects next.</p>
             </div>
           </div>
           <ActionForm action={createClass} className="mt-5 space-y-4">

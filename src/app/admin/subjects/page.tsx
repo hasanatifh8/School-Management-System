@@ -77,13 +77,13 @@ export default async function SubjectsPage() {
                     <td className={tdClass}>
                       <div className="flex items-center gap-3">
                         <span
-                          className={`flex h-9 w-12 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br font-mono text-[11px] font-bold text-white shadow-sm ${tileColor(s.code)}`}
+                          className={`flex h-9 w-12 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br font-mono text-[11px] font-bold text-white shadow-card ${tileColor(s.code)}`}
                         >
                           {s.code.slice(0, 4)}
                         </span>
                         <div>
-                          <div className="font-medium text-slate-900">{s.name}</div>
-                          <div className="font-mono text-xs text-slate-400">{s.code}</div>
+                          <div className="font-medium text-fg">{s.name}</div>
+                          <div className="font-mono text-xs text-subtle">{s.code}</div>
                         </div>
                       </div>
                     </td>

@@ -61,7 +61,7 @@ export default async function TeacherStudentPage({ params }: PageProps<"/teacher
           <Card title="Details" description="Only the school admin can change these.">
             <div className="mb-5 flex items-center gap-4">
               <Avatar name={name} src={photoUrl(student.photoId)} size="xl" />
-              <div className="text-sm text-slate-600">
+              <div className="text-sm text-fg-2">
                 {student.gender && <p>{student.gender === "MALE" ? "Boy" : student.gender === "FEMALE" ? "Girl" : "Other"}</p>}
                 {student.bloodGroup && (
                   <Badge tone="red">
@@ -80,7 +80,7 @@ export default async function TeacherStudentPage({ params }: PageProps<"/teacher
               </InfoItem>
               <InfoItem icon={UserRound} label="Father">
                 {student.fatherName ?? "—"}
-                {student.fatherOccupation && <span className="block text-slate-500">{student.fatherOccupation}</span>}
+                {student.fatherOccupation && <span className="block text-muted">{student.fatherOccupation}</span>}
               </InfoItem>
               <InfoItem icon={UserRound} label="Mother">
                 {student.motherName ?? "—"}
@@ -114,13 +114,13 @@ export default async function TeacherStudentPage({ params }: PageProps<"/teacher
           <AttendanceSummaryCard schoolId={ctx.school.id} studentId={student.id} registerHref="/teacher/attendance/register" />
           <Card title="Subjects" icon={BookOpen} padded={false}>
             {student.subjects.length === 0 ? (
-              <p className="p-6 text-sm text-slate-500">No subjects allotted.</p>
+              <p className="p-6 text-sm text-muted">No subjects allotted.</p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line">
                 {student.subjects.map((s) => (
                   <li key={s.subjectId} className="flex items-center justify-between px-6 py-2.5 text-sm">
-                    <span className="text-slate-800">{s.subject.name}</span>
-                    <span className="font-mono text-xs text-slate-400">{s.subject.code}</span>
+                    <span className="text-fg">{s.subject.name}</span>
+                    <span className="font-mono text-xs text-subtle">{s.subject.code}</span>
                   </li>
                 ))}
               </ul>
@@ -129,7 +129,7 @@ export default async function TeacherStudentPage({ params }: PageProps<"/teacher
         </div>
       </div>
 
-      <h2 className="mb-4 mt-10 text-lg font-semibold text-slate-900">Documents</h2>
+      <h2 className="mb-4 mt-10 text-lg font-semibold text-fg">Documents</h2>
       <DocumentsPanel ownerKind="student" ownerId={student.id} documents={student.documents} />
     </>
   );

@@ -53,13 +53,13 @@ export function SameAs({
   return (
     <>
       {checked ? (
-        <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-500">
+        <p className="rounded-lg border border-dashed border-line bg-surface-2 px-3.5 py-2.5 text-sm text-muted">
           {note}
         </p>
       ) : (
         children
       )}
-      <label className="mt-2 flex w-fit cursor-pointer items-center gap-2 text-sm text-slate-600">
+      <label className="mt-2 flex w-fit cursor-pointer items-center gap-2 text-sm text-fg-2">
         <input
           ref={boxRef}
           type="checkbox"

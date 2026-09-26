@@ -14,10 +14,10 @@ export function TrendChart({ data, selected }: { data: { month: string; spent: n
   const budget = data.at(-1)?.budget ?? null;
   return (
     <figure>
-      <div className="relative h-52 border-b border-slate-200 pt-6">
+      <div className="relative h-52 border-b border-line pt-6">
         {budget != null && (
-          <div className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-dashed border-slate-400" style={{ bottom: `${(budget / max) * 100}%` }}>
-            <span className="absolute -top-5 right-0 rounded bg-white px-1 text-[11px] font-medium text-slate-500">Budget {rupees(budget)}</span>
+          <div className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-dashed border-line-strong" style={{ bottom: `${(budget / max) * 100}%` }}>
+            <span className="absolute -top-5 right-0 rounded bg-surface px-1 text-[11px] font-medium text-muted">Budget {rupees(budget)}</span>
           </div>
         )}
         <div className="flex h-full items-end gap-[2px]">
@@ -27,28 +27,28 @@ export function TrendChart({ data, selected }: { data: { month: string; spent: n
             return (
               <div key={d.month} className="group relative flex h-full flex-1 flex-col items-center justify-end">
                 {(isSelected || over) && d.spent > 0 && (
-                  <span className="mb-1 flex items-center gap-0.5 whitespace-nowrap text-[11px] font-medium text-slate-700">
-                    {over && <TriangleAlert className="h-3 w-3 text-rose-500" aria-label="Over budget" />}
+                  <span className="mb-1 flex items-center gap-0.5 whitespace-nowrap text-[11px] font-medium text-fg-2">
+                    {over && <TriangleAlert className="h-3 w-3 text-danger" aria-label="Over budget" />}
                     {isSelected ? rupees(d.spent) : "Over"}
                   </span>
                 )}
                 <div
-                  className={`w-full max-w-14 rounded-t-[4px] transition ${isSelected ? "bg-indigo-600" : "bg-indigo-300 group-hover:bg-indigo-400"}`}
+                  className={`w-full max-w-14 rounded-t-[4px] transition ${isSelected ? "bg-accent" : "bg-accent/35 group-hover:bg-accent/60"}`}
                   style={{ height: `${(d.spent / max) * 100}%`, minHeight: d.spent ? 2 : 0 }}
                 />
-                <div className="pointer-events-none absolute left-1/2 top-0 z-20 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs text-white shadow-lg group-hover:block">
+                <div className="pointer-events-none absolute left-1/2 top-0 z-20 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-fg px-2.5 py-1.5 text-xs text-canvas shadow-pop group-hover:block">
                   <p className="font-semibold">{label(d.month)}</p>
                   <p>Spent {rupees(d.spent)}</p>
-                  {d.budget != null && <p className="text-slate-300">{over ? `${rupees(d.spent - d.budget)} over budget` : `${rupees(d.budget - d.spent)} under budget`}</p>}
+                  {d.budget != null && <p className="opacity-70">{over ? `${rupees(d.spent - d.budget)} over budget` : `${rupees(d.budget - d.spent)} under budget`}</p>}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
-      <div className="mt-2 flex gap-[2px] text-center text-[11px] text-slate-500">
+      <div className="mt-2 flex gap-[2px] text-center text-[11px] text-muted">
         {data.map((d) => (
-          <span key={d.month} className={`flex-1 ${d.month === selected ? "font-semibold text-slate-900" : ""}`}>
+          <span key={d.month} className={`flex-1 ${d.month === selected ? "font-semibold text-fg" : ""}`}>
             {label(d.month)}
           </span>
         ))}

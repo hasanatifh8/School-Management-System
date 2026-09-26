@@ -64,11 +64,11 @@ export default async function IdCardsPage({ searchParams }: PageProps<"/admin/id
                 key={s.id}
                 href={`/admin/id-cards?section=${s.id}`}
                 aria-disabled={empty}
-                className={`group flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md ${empty ? "pointer-events-none opacity-50" : ""}`}
+                className={`group flex items-center gap-4 rounded-2xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-accent-line hover:shadow-lift ${empty ? "pointer-events-none opacity-50" : ""}`}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-slate-900">{sectionLabel(s)}</p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                  <p className="font-semibold text-fg">{sectionLabel(s)}</p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-muted">
                     {s._count.students} student{s._count.students === 1 ? "" : "s"}
                     {missing > 0 && (
                       <Badge tone="amber">
@@ -78,7 +78,7 @@ export default async function IdCardsPage({ searchParams }: PageProps<"/admin/id
                     )}
                   </p>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500" />
+                <ArrowRight className="h-4 w-4 text-subtle transition group-hover:translate-x-0.5 group-hover:text-accent-text" />
               </Link>
             );
           })}

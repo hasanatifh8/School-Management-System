@@ -27,7 +27,7 @@ export async function NoticeDetail({ noticeId }: { noticeId: string }) {
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-3">
         <Card title={notice.title} description={`${notice.audience} · ${notice.channels.map((c) => CHANNEL_LABELS[c]).join(" + ")} · by ${notice.sentBy}, ${when.format(notice.createdAt)}`} className="xl:col-span-2">
-          <p className="whitespace-pre-wrap text-sm text-slate-800">{notice.body}</p>
+          <p className="whitespace-pre-wrap text-sm text-fg">{notice.body}</p>
         </Card>
         <Card title="Delivery" className="self-start">
           <DeliveryProgress key={counts.PENDING} initial={counts} process={processNotice.bind(null, notice.id)} />
@@ -57,8 +57,8 @@ export async function NoticeDetail({ noticeId }: { noticeId: string }) {
               return (
                 <tr key={r.id}>
                   <td className={tdClass}>
-                    <p className="font-medium text-slate-900">{r.name}</p>
-                    <p className="text-xs text-slate-500">{r.className ?? "—"}</p>
+                    <p className="font-medium text-fg">{r.name}</p>
+                    <p className="text-xs text-muted">{r.className ?? "—"}</p>
                   </td>
                   <td className={tdClass}>{CHANNEL_LABELS[r.channel]}</td>
                   <td className={`${tdClass} font-mono text-xs`}>{r.phone ?? "—"}</td>
@@ -67,7 +67,7 @@ export async function NoticeDetail({ noticeId }: { noticeId: string }) {
                       <s.icon className="h-3 w-3" />
                       {s.label}
                     </Badge>
-                    {r.error && <p className="mt-1 max-w-md text-xs text-slate-500">{r.error}</p>}
+                    {r.error && <p className="mt-1 max-w-md text-xs text-muted">{r.error}</p>}
                   </td>
                 </tr>
               );
@@ -98,20 +98,20 @@ export async function NoticeList({
     take: paging.take,
     include: { recipients: { select: { status: true } } },
   });
-  if (!notices.length) return <p className="p-6 text-sm text-slate-500">No notices sent yet.</p>;
+  if (!notices.length) return <p className="p-6 text-sm text-muted">No notices sent yet.</p>;
   return (
     <>
-      <ul className="divide-y divide-slate-100">
+      <ul className="divide-y divide-line">
         {notices.map((n) => {
           const sent = n.recipients.filter((r) => r.status === "SENT").length;
           const failed = n.recipients.filter((r) => r.status === "FAILED").length;
           const waiting = n.recipients.filter((r) => r.status === "PENDING").length;
           return (
             <li key={n.id}>
-              <Link href={href(n.id)} className="flex flex-wrap items-center gap-3 px-6 py-3 hover:bg-slate-50">
+              <Link href={href(n.id)} className="flex flex-wrap items-center gap-3 px-6 py-3 hover:bg-surface-2">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-slate-900">{n.title}</p>
-                  <p className="truncate text-xs text-slate-500">
+                  <p className="truncate font-medium text-fg">{n.title}</p>
+                  <p className="truncate text-xs text-muted">
                     {n.audience} · {n.channels.map((c) => CHANNEL_LABELS[c]).join(" + ")} · {n.sentBy} · {when.format(n.createdAt)}
                   </p>
                 </div>

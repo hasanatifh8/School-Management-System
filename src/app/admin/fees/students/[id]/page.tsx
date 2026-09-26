@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bus, Receipt } from "lucide-react";
+import { Bus, Receipt, TriangleAlert } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Avatar, Badge, Card, EmptyState } from "@/components/ui";
+import { Avatar, Badge, Breadcrumbs, Callout, Card, EmptyState, PagedList, ProgressBar } from "@/components/ui";
+import { photoUrl } from "@/lib/photos";
 import { loadStudentAccount, getFeesAccess } from "@/lib/fees";
 import { FREQUENCY_META, MODE_LABELS, rupees } from "@/lib/fees-shared";
 import { fullName, sectionLabel } from "@/lib/queries";
@@ -23,18 +24,17 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+      <section className="rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <div className="flex flex-wrap items-center gap-4">
-          <Avatar name={name} size="lg" />
+          <Avatar name={name} src={photoUrl(student.photoId)} size="lg" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-slate-500">
-              <Link href="/admin/fees/collect" className="hover:text-indigo-600">
-                Collect fees
-              </Link>{" "}
-              ›
-            </p>
-            <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
-            <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+            <Breadcrumbs items={[{ label: "Collect fees", href: "/admin/fees/collect" }, { label: name }]} />
+            <h2 className="text-h2 font-semibold text-fg">
+              <Link href={`/admin/students/${student.id}`} className="rounded transition hover:text-accent-text">
+                {name}
+              </Link>
+            </h2>
+            <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-muted">
               <span className="font-mono">{student.studentCode}</span>
               {student.section ? <Badge tone="indigo">{sectionLabel(student.section)}</Badge> : <Badge tone="amber">No class</Badge>}
               {student.rollNumber != null && <Badge>Roll {student.rollNumber}</Badge>}
@@ -44,16 +44,21 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
             </p>
           </div>
         </div>
-        <dl className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-5 sm:grid-cols-4">
+        <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-line pt-6 sm:grid-cols-4">
           <Tile label={`Fees for ${session.name}`} value={rupees(totals.total)} />
-          <Tile label="Paid" value={rupees(totals.paid)} tone="text-emerald-600" />
-          <Tile label="Due now" value={rupees(totals.dueNow)} tone={totals.dueNow ? "text-rose-600" : "text-slate-900"} />
+          <Tile label="Paid" value={rupees(totals.paid)} tone="text-success" />
+          <Tile label="Due now" value={rupees(totals.dueNow)} tone={totals.dueNow ? "text-danger" : "text-fg"} />
           <Tile label="Upcoming" value={rupees(totals.upcoming)} />
         </dl>
+        {totals.total > 0 && (
+          <ProgressBar value={(totals.paid / totals.total) * 100} tone="success" className="mt-4" label="Share of the session's fees paid" />
+        )}
       </section>
 
       {!student.section && active && (
-        <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">This student has no class, so no class fees apply. Assign a class first.</p>
+        <Callout icon={TriangleAlert} tone="warning">
+          This student has no class, so no class fees apply. Assign a class first.
+        </Callout>
       )}
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -62,7 +67,7 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
             <CollectForm dues={dues} today={today} minDate={session.startDate.toISOString().slice(0, 10)} action={collectFee.bind(null, student.id)} />
           ) : (
             <Card>
-              <p className="text-sm text-slate-600">This student was removed, so no new payments can be taken. Past receipts are listed alongside.</p>
+              <p className="text-sm text-fg-2">This student was removed, so no new payments can be taken. Past receipts are listed alongside.</p>
             </Card>
           )}
         </div>
@@ -74,8 +79,8 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
                 {optionalHeads.map((h) => (
                   <li key={h.id} className="flex items-center justify-between gap-3 text-sm">
                     <span>
-                      <span className="font-medium text-slate-900">{h.name}</span>
-                      <span className="block text-xs text-slate-500">
+                      <span className="font-medium text-fg">{h.name}</span>
+                      <span className="block text-xs text-muted">
                         {rupees(h.amount)} · {FREQUENCY_META[h.frequency].short}
                       </span>
                     </span>
@@ -94,22 +99,22 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
             {receipts.length === 0 ? (
               <EmptyState icon={Receipt} title="No payments yet" />
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <PagedList pageSize={8} noun="receipts">
                 {receipts.map((r) => (
                   <li key={r.id}>
-                    <Link href={`/admin/fees/receipts/${r.id}`} className="flex items-center justify-between gap-3 px-6 py-3 text-sm hover:bg-slate-50">
+                    <Link href={`/admin/fees/receipts/${r.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm transition hover:bg-surface-2 sm:px-6">
                       <span>
-                        <span className="font-mono text-xs font-medium text-indigo-600">{r.number}</span>
-                        <span className="block text-xs text-slate-500">
+                        <span className="font-mono text-xs font-medium text-accent-text">{r.number}</span>
+                        <span className="block text-xs text-muted">
                           {shortDate.format(r.date)} · {MODE_LABELS[r.mode]}
                           {r.session.name !== session.name && ` · ${r.session.name}`}
                         </span>
                       </span>
-                      {r.cancelledAt ? <Badge tone="red">Cancelled</Badge> : <span className="font-semibold tabular-nums text-slate-900">{rupees(r.total)}</span>}
+                      {r.cancelledAt ? <Badge tone="red">Cancelled</Badge> : <span className="font-semibold tabular-nums text-fg">{rupees(r.total)}</span>}
                     </Link>
                   </li>
                 ))}
-              </ul>
+              </PagedList>
             )}
           </Card>
         </div>
@@ -118,11 +123,11 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
   );
 }
 
-function Tile({ label, value, tone = "text-slate-900" }: { label: string; value: string; tone?: string }) {
+function Tile({ label, value, tone = "text-fg" }: { label: string; value: string; tone?: string }) {
   return (
     <div>
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
-      <dd className={`mt-0.5 text-xl font-semibold tabular-nums ${tone}`}>{value}</dd>
+      <dt className="text-eyebrow uppercase text-muted">{label}</dt>
+      <dd className={`mt-1 text-xl font-semibold tabular-nums sm:text-2xl ${tone}`}>{value}</dd>
     </div>
   );
 }

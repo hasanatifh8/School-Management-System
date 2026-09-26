@@ -2,7 +2,7 @@ import { CalendarCheck, Megaphone, Table2 } from "lucide-react";
 import { AttendanceSheet } from "@/components/attendance/attendance-sheet";
 import { DateNav } from "@/components/attendance/date-nav";
 import { UpcomingHolidays } from "@/components/attendance/upcoming-holidays";
-import { ButtonLink, Card, EmptyState, PageHeader } from "@/components/ui";
+import { ButtonLink, Card, EmptyState, MenuLink, MoreMenu, PageHeader } from "@/components/ui";
 import { attendanceSheetProps, attendanceWindow, pickDate } from "@/lib/attendance";
 import { formatISO } from "@/lib/attendance-shared";
 import { sectionLabel } from "@/lib/queries";
@@ -39,12 +39,15 @@ export default async function TeacherAttendancePage({ searchParams }: PageProps<
           <>
             {sheet.initial && Object.values(sheet.initial).some((m) => m.status === "ABSENT") && (
               <ButtonLink href={`/teacher/notices?absent=${date}`} variant="secondary" icon={Megaphone}>
-                Message absent parents
+                <span className="hidden sm:inline">Message absent parents</span>
+                <span className="sm:hidden">Message parents</span>
               </ButtonLink>
             )}
-            <ButtonLink href="/teacher/attendance/register" variant="secondary" icon={Table2}>
-              Monthly register
-            </ButtonLink>
+            <MoreMenu>
+              <MenuLink href="/teacher/attendance/register" icon={<Table2 />}>
+                Monthly register
+              </MenuLink>
+            </MoreMenu>
           </>
         }
       />

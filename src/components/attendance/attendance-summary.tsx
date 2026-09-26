@@ -16,8 +16,8 @@ export async function AttendanceSummaryCard({
 }) {
   const { counts, percent, session } = await studentAttendanceSummary(schoolId, studentId);
   const days = ATTENDANCE_STATUSES.reduce((n, s) => n + counts[s], 0);
-  const tone = percent == null ? "text-slate-400" : percent >= 90 ? "text-emerald-600" : percent >= 75 ? "text-amber-600" : "text-rose-600";
-  const bar = percent == null ? "bg-slate-200" : percent >= 90 ? "bg-emerald-500" : percent >= 75 ? "bg-amber-500" : "bg-rose-500";
+  const tone = percent == null ? "text-subtle" : percent >= 90 ? "text-success" : percent >= 75 ? "text-warning" : "text-danger";
+  const bar = percent == null ? "bg-surface-3" : percent >= 90 ? "bg-success-solid" : percent >= 75 ? "bg-warning-solid" : "bg-danger-solid";
   return (
     <Card
       title="Attendance"
@@ -25,30 +25,30 @@ export async function AttendanceSummaryCard({
       description={`Session ${session.name}`}
       action={
         registerHref && (
-          <Link href={registerHref} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+          <Link href={registerHref} className="text-sm font-medium text-accent-text underline-offset-4 hover:underline">
             Register
           </Link>
         )
       }
     >
       {days === 0 ? (
-        <p className="text-sm text-slate-500">No attendance marked yet this session.</p>
+        <p className="text-sm text-muted">No attendance marked yet this session.</p>
       ) : (
         <>
           <div className="flex items-baseline justify-between">
-            <p className={`text-3xl font-semibold tabular-nums ${tone}`}>{percent}%</p>
-            <p className="text-xs text-slate-500">{days} school days</p>
+            <p className={`text-display-sm font-semibold tabular-nums ${tone}`}>{percent}%</p>
+            <p className="text-xs text-muted">{days} school days</p>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-3">
             <div className={`h-full rounded-full ${bar}`} style={{ width: `${percent}%` }} />
           </div>
           <dl className="mt-4 grid grid-cols-5 gap-1 text-center">
             {ATTENDANCE_STATUSES.map((s) => (
-              <div key={s} className="rounded-lg bg-slate-50 py-2">
+              <div key={s} className="rounded-lg bg-surface-2 py-2">
                 <dt className={`text-[11px] font-semibold ${STATUS_META[s].text}`} title={STATUS_META[s].label}>
                   {STATUS_META[s].short}
                 </dt>
-                <dd className="text-sm font-semibold tabular-nums text-slate-900">{counts[s]}</dd>
+                <dd className="text-sm font-semibold tabular-nums text-fg">{counts[s]}</dd>
               </div>
             ))}
           </dl>

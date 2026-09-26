@@ -37,33 +37,33 @@ export function DeliveryProgress({ initial, process }: { initial: Counts; proces
   return (
     <div>
       <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-2 font-medium text-slate-700">
-          {counts.PENDING > 0 && <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />}
+        <span className="flex items-center gap-2 font-medium text-fg-2">
+          {counts.PENDING > 0 && <Loader2 className="h-4 w-4 animate-spin text-accent-text" />}
           {counts.PENDING > 0 ? `Sending… ${done} of ${counts.total}` : "Finished"}
         </span>
-        <span className="tabular-nums text-slate-500">{pct}%</span>
+        <span className="tabular-nums text-muted">{pct}%</span>
       </div>
-      <div className="mt-2 flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-slate-100">
-        <div className="bg-emerald-500" style={{ width: `${(counts.SENT / Math.max(1, counts.total)) * 100}%` }} />
-        <div className="bg-rose-500" style={{ width: `${(counts.FAILED / Math.max(1, counts.total)) * 100}%` }} />
-        <div className="bg-amber-400" style={{ width: `${(counts.SKIPPED / Math.max(1, counts.total)) * 100}%` }} />
+      <div className="mt-2 flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-surface-3">
+        <div className="bg-success-solid" style={{ width: `${(counts.SENT / Math.max(1, counts.total)) * 100}%` }} />
+        <div className="bg-danger-solid" style={{ width: `${(counts.FAILED / Math.max(1, counts.total)) * 100}%` }} />
+        <div className="bg-warning-solid" style={{ width: `${(counts.SKIPPED / Math.max(1, counts.total)) * 100}%` }} />
       </div>
       <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
         <div>
-          <dt className="inline text-slate-500">Sent </dt>
-          <dd className="inline font-semibold tabular-nums text-emerald-700">{counts.SENT}</dd>
+          <dt className="inline text-muted">Sent </dt>
+          <dd className="inline font-semibold tabular-nums text-success">{counts.SENT}</dd>
         </div>
         <div>
-          <dt className="inline text-slate-500">Failed </dt>
-          <dd className="inline font-semibold tabular-nums text-rose-700">{counts.FAILED}</dd>
+          <dt className="inline text-muted">Failed </dt>
+          <dd className="inline font-semibold tabular-nums text-danger">{counts.FAILED}</dd>
         </div>
         <div>
-          <dt className="inline text-slate-500">Skipped (no number) </dt>
-          <dd className="inline font-semibold tabular-nums text-amber-700">{counts.SKIPPED}</dd>
+          <dt className="inline text-muted">Skipped (no number) </dt>
+          <dd className="inline font-semibold tabular-nums text-warning">{counts.SKIPPED}</dd>
         </div>
         {counts.PENDING > 0 && (
           <div>
-            <dt className="inline text-slate-500">Waiting </dt>
+            <dt className="inline text-muted">Waiting </dt>
             <dd className="inline font-semibold tabular-nums">{counts.PENDING}</dd>
           </div>
         )}

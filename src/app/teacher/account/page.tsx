@@ -24,7 +24,7 @@ export default async function TeacherAccountPage() {
             <InfoItem icon={Phone} label="Phone">{teacher.phone ?? "—"}</InfoItem>
             <InfoItem icon={Mail} label="Email">{teacher.email ?? "—"}</InfoItem>
           </dl>
-          <p className="mt-4 text-xs text-slate-500">To correct your details or username, ask your school admin.</p>
+          <p className="mt-4 text-xs text-muted">To correct your details or username, ask your school admin.</p>
         </Card>
         <Card title="My classes & subjects" icon={BookOpen} description="Assigned by your school admin." className="self-start xl:col-span-2 xl:order-last">
           <dl className="space-y-4">

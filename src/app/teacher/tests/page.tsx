@@ -42,7 +42,7 @@ export default async function TeacherTestsPage({ searchParams }: PageProps<"/tea
         }
       />
       <Card padded={false}>
-        <div className="flex gap-6 border-b border-slate-100 px-6 pt-4 text-sm font-medium">
+        <div className="flex gap-6 overflow-x-auto border-b border-line px-4 pt-4 text-sm font-medium sm:px-6">
           <StatusTab href="/teacher/tests" active={!schoolView} label="My tests" count={myCount} />
           <StatusTab href="/teacher/tests?view=school" active={schoolView} label="School exams & class tests" count={schoolCount} />
         </div>

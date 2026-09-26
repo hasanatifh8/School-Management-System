@@ -91,16 +91,16 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
       />
 
       {created && (
-        <p role="status" className="mb-6 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
+        <p role="status" className="mb-6 flex items-center gap-2 rounded-xl bg-success-soft px-4 py-3 text-sm text-success ring-1 ring-inset ring-success-line">
           <CircleCheck className="h-4 w-4" /> School created. Click “Open Admin Portal” to start adding classes, teachers and students.
         </p>
       )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
         {counts.map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium text-slate-500">{label}</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{value}</p>
+          <div key={label} className="rounded-2xl border border-line bg-surface p-4 shadow-card">
+            <p className="text-xs font-medium text-muted">{label}</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{value}</p>
           </div>
         ))}
       </div>
@@ -114,7 +114,7 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
           <AdminsCard schoolId={id} schoolName={school.name} admins={school.admins} />
 
           <Card title="Status" icon={active ? PauseCircle : PlayCircle}>
-            <p className="mb-3 text-sm text-slate-500">
+            <p className="mb-3 text-sm text-muted">
               {active
                 ? "Suspending hides the school from the Admin Portal. Its data is kept."
                 : "This school is hidden from the Admin Portal. Activate it to use it again."}
@@ -133,8 +133,8 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
           <Card title="Data tools" icon={Wrench}>
             <div className="space-y-5 text-sm">
               <div>
-                <p className="font-medium text-slate-800">Backup</p>
-                <p className="mb-2 text-slate-500">Everything in one Excel file: profile, students, teachers, classes, subjects, houses and sessions.</p>
+                <p className="font-medium text-fg">Backup</p>
+                <p className="mb-2 text-muted">Everything in one Excel file: profile, students, teachers, classes, subjects, houses and sessions.</p>
                 <a href={`/api/power/schools/${id}/backup`} className={`${buttonVariants.secondary} !py-2`} download>
                   <Download className="h-4 w-4" />
                   Download backup
@@ -142,9 +142,9 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
               </div>
 
               {empty && (
-                <div className="border-t border-slate-100 pt-5">
-                  <p className="font-medium text-slate-800">Demo data</p>
-                  <p className="mb-2 text-slate-500">Classes 1–5, subjects, houses, 4 teachers and 20 students.</p>
+                <div className="border-t border-line pt-5">
+                  <p className="font-medium text-fg">Demo data</p>
+                  <p className="mb-2 text-muted">Classes 1–5, subjects, houses, 4 teachers and 20 students.</p>
                   <ActionForm action={loadDemoIntoSchool.bind(null, id)} compact className="flex flex-col items-start gap-2">
                     <SubmitButton variant="secondary" size="sm" icon={<Sparkles className="h-4 w-4" />}>
                       Load demo data
@@ -153,14 +153,14 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
                 </div>
               )}
 
-              <div className="border-t border-slate-100 pt-5">
-                <p className="font-medium text-slate-800">Purge removed records</p>
-                <p className="mb-2 text-slate-500">
+              <div className="border-t border-line pt-5">
+                <p className="font-medium text-fg">Purge removed records</p>
+                <p className="mb-2 text-muted">
                   Permanently deletes removed students ({removedStudents}) and teachers ({removedTeachers}) with their photos
                   and documents.
                 </p>
                 <ActionForm action={purgeRemovedPeople.bind(null, id)} compact className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2 text-slate-600">
+                  <label className="flex items-center gap-2 text-fg-2">
                     removed at least
                     <input name="days" type="number" min={0} max={3650} defaultValue={30} className={`${inputClass} !w-20 !py-1.5`} />
                     days ago
@@ -178,16 +178,16 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
             </div>
           </Card>
 
-          <section className="rounded-2xl border border-rose-200 bg-rose-50/40 p-6">
-            <h2 className="font-semibold text-rose-900">Danger zone</h2>
-            <p className="mt-1 text-sm text-rose-800/80">
+          <section className="rounded-2xl border border-danger-line bg-danger-soft/40 p-6">
+            <h2 className="font-semibold text-fg">Danger zone</h2>
+            <p className="mt-1 text-sm text-danger/80">
               These can&apos;t be undone. Download a backup first. Type <strong className="font-mono">{school.code}</strong> to
               confirm.
             </p>
 
             <ActionForm action={resetSchoolData.bind(null, id)} className="mt-5 space-y-2">
-                  <p className="text-sm font-medium text-slate-800">Reset school data</p>
-                  <p className="text-xs text-slate-500">Deletes all students, teachers, classes, subjects, houses, sessions and files. Keeps the school and its profile.</p>
+                  <p className="text-sm font-medium text-fg">Reset school data</p>
+                  <p className="text-xs text-muted">Deletes all students, teachers, classes, subjects, houses, sessions and files. Keeps the school and its profile.</p>
                   <div className="flex flex-wrap gap-2">
                     <input
                       name="confirm"
@@ -202,9 +202,9 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
                   </div>
             </ActionForm>
 
-            <ActionForm action={deleteSchool.bind(null, id)} className="mt-6 space-y-2 border-t border-rose-200 pt-5">
-                  <p className="text-sm font-medium text-slate-800">Delete school</p>
-                  <p className="text-xs text-slate-500">Removes the school and everything in it.</p>
+            <ActionForm action={deleteSchool.bind(null, id)} className="mt-6 space-y-2 border-t border-danger-line pt-5">
+                  <p className="text-sm font-medium text-fg">Delete school</p>
+                  <p className="text-xs text-muted">Removes the school and everything in it.</p>
                   <div className="flex flex-wrap gap-2">
                     <input
                       name="confirm"

@@ -7,7 +7,7 @@ import { Select } from "@/components/select";
 import { AadhaarInput } from "@/components/aadhaar-input";
 import { PhotoInput } from "@/components/photo-input";
 import { SameAs } from "@/components/same-as";
-import { FormSection, buttonVariants, inputClass, selectClass } from "@/components/ui";
+import { buttonVariants, FormActions, FormSection, inputClass, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import {
@@ -127,7 +127,7 @@ export function StudentForm({
                 />
               </Field>
               <div>
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Guardian name</span>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">Guardian name</span>
                 <SameAs
                   name="guardianIsFather"
                   label="Father is the guardian"
@@ -293,7 +293,7 @@ export function StudentForm({
                 <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={student?.phone ?? ""} className={inputClass} />
               </Field>
               <div>
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">WhatsApp number</span>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
                 <SameAs
                   name="whatsappSameAsPhone"
                   label="Same as phone"
@@ -312,7 +312,7 @@ export function StudentForm({
                   />
                 </SameAs>
                 {e?.whatsappNumber?.[0] && (
-                  <span className="mt-1.5 block text-xs font-medium text-rose-600">{e.whatsappNumber[0]}</span>
+                  <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>
                 )}
               </div>
             </FormSection>
@@ -322,7 +322,7 @@ export function StudentForm({
                 <textarea name="primaryAddress" rows={2} defaultValue={student?.primaryAddress ?? ""} className={inputClass} />
               </Field>
               <div className="sm:col-span-2">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Correspondence address</span>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">Correspondence address</span>
                 <SameAs
                   name="correspondenceSameAsPrimary"
                   label="Same as primary address"
@@ -340,14 +340,14 @@ export function StudentForm({
               </div>
             </FormSection>
 
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-6">
+            <FormActions>
               {cancelHref && (
                 <Link href={cancelHref} className={buttonVariants.secondary}>
                   Cancel
                 </Link>
               )}
               <SubmitButton icon={<Save className="h-4 w-4" />}>{submitLabel}</SubmitButton>
-            </div>
+            </FormActions>
           </>
         );
       }}

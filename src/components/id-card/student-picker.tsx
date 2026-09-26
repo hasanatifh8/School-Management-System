@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowRight, IdCard, Search } from "lucide-react";
-import { Avatar, Badge, buttonVariants, checkboxClass, inputClass } from "@/components/ui";
+import { Avatar, Badge, PagedList, buttonVariants, checkboxClass, inputClass } from "@/components/ui";
 
 type Student = { id: string; name: string; code: string; roll: number | null; photoUrl: string | null; missing: string[] };
 
@@ -48,34 +48,35 @@ export function StudentPicker({
   const withoutPhoto = students.filter((s) => s.missing.includes("photo")).length;
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 sm:px-6">
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+    <div className="rounded-2xl border border-line bg-surface shadow-card">
+      <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-6">
+        <label className="flex items-center gap-2 text-sm font-medium text-fg-2">
           <input type="checkbox" checked={allShown} onChange={toggleShown} className={checkboxClass} aria-label="Select all" />
           Select all{query ? " shown" : ""}
         </label>
         <div className="relative ml-auto w-full sm:w-64">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name, ID or roll"
             aria-label="Search students"
-            className={`${inputClass} !py-2 pl-9`}
+            className={`${inputClass} pl-9`}
           />
         </div>
       </div>
 
       {withoutPhoto > 0 && (
-        <p className="border-b border-slate-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800 sm:px-6">
+        <p className="border-b border-line bg-warning-soft/60 px-4 py-2 text-xs text-warning sm:px-6">
           {withoutPhoto} student{withoutPhoto === 1 ? " has" : "s have"} no photo. Their card shows a placeholder until a photo is added.
         </p>
       )}
 
-      <ul className="divide-y divide-slate-100">
+      {shown.length === 0 && <p className="px-6 py-10 text-center text-sm text-muted">No students match “{query}”.</p>}
+      <PagedList key={query} pageSize={20} noun="students">
         {shown.map((s) => (
-          <li key={s.id} className={`flex items-center gap-3 px-4 py-2.5 sm:px-6 ${selected.has(s.id) ? "bg-indigo-50/40" : ""}`}>
+          <li key={s.id} className={`flex items-center gap-3 px-4 py-2.5 sm:px-6 transition-colors ${selected.has(s.id) ? "bg-accent-soft" : ""}`}>
             <input
               type="checkbox"
               checked={selected.has(s.id)}
@@ -83,12 +84,12 @@ export function StudentPicker({
               className={checkboxClass}
               aria-label={`Select ${s.name}`}
             />
-            <span className="w-7 shrink-0 text-right font-mono text-xs text-slate-400">{s.roll ?? "—"}</span>
+            <span className="w-7 shrink-0 text-right font-mono text-xs text-subtle">{s.roll ?? "—"}</span>
             <button type="button" onClick={() => toggle(s.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
               <Avatar name={s.name} src={s.photoUrl} size="sm" />
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-slate-900">{s.name}</span>
-                <span className="block font-mono text-[11px] text-slate-400">{s.code}</span>
+                <span className="block truncate text-sm font-medium text-fg">{s.name}</span>
+                <span className="block font-mono text-[11px] text-subtle">{s.code}</span>
               </span>
             </button>
             <span className="hidden flex-wrap justify-end gap-1 sm:flex">
@@ -98,20 +99,19 @@ export function StudentPicker({
                 </Link>
               ))}
             </span>
-            <Link href={`${generatePath}?ids=${s.id}`} className="shrink-0 text-sm font-medium text-indigo-600 hover:text-indigo-500">
+            <Link href={`${generatePath}?ids=${s.id}`} className="shrink-0 rounded text-sm font-medium text-accent-text underline-offset-4 hover:underline">
               Card
             </Link>
           </li>
         ))}
-        {shown.length === 0 && <li className="px-6 py-10 text-center text-sm text-slate-500">No students match “{query}”.</li>}
-      </ul>
+      </PagedList>
 
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
-        <p className="text-sm text-slate-600">
+      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-line bg-glass px-4 py-3 backdrop-blur-xl sm:px-6 md:bottom-0">
+        <p className="text-sm text-fg-2">
           {ids.length ? (
             <>
-              <strong className="text-slate-900">{ids.length}</strong> selected
-              {tooMany && <span className="ml-2 text-rose-600">Choose at most {max} at a time.</span>}
+              <strong className="text-fg">{ids.length}</strong> selected
+              {tooMany && <span className="ml-2 text-danger">Choose at most {max} at a time.</span>}
             </>
           ) : (
             "Tick the students whose ID cards you want."

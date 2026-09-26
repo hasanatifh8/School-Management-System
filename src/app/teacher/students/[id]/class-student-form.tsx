@@ -51,11 +51,11 @@ export function ClassStudentForm({
                 <input type="email" name="email" defaultValue={student.email ?? ""} className={inputClass} />
               </Field>
               <div>
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">WhatsApp number</span>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
                 <SameAs name="whatsappSameAsPhone" label="Same as phone" initial={whatsappSameAsPhone} note="Uses the phone number above.">
                   <input type="tel" name="whatsappNumber" aria-label="WhatsApp number" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={student.whatsappNumber ?? ""} className={inputClass} />
                 </SameAs>
-                {e?.whatsappNumber?.[0] && <span className="mt-1.5 block text-xs font-medium text-rose-600">{e.whatsappNumber[0]}</span>}
+                {e?.whatsappNumber?.[0] && <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>}
               </div>
             </FormSection>
             <FormSection title="Address">
@@ -63,13 +63,13 @@ export function ClassStudentForm({
                 <textarea name="primaryAddress" rows={2} defaultValue={student.primaryAddress ?? ""} className={inputClass} />
               </Field>
               <div className="sm:col-span-2">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Correspondence address</span>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">Correspondence address</span>
                 <SameAs name="correspondenceSameAsPrimary" label="Same as primary address" initial={correspondenceSame} note="Uses the primary address above.">
                   <textarea name="correspondenceAddress" aria-label="Correspondence address" rows={2} defaultValue={student.correspondenceAddress ?? ""} className={inputClass} />
                 </SameAs>
               </div>
             </FormSection>
-            <div className="flex justify-end border-t border-slate-100 pt-6">
+            <div className="flex justify-end border-t border-line pt-6">
               <SubmitButton icon={<Save className="h-4 w-4" />}>Save changes</SubmitButton>
             </div>
           </>

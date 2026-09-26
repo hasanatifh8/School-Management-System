@@ -41,7 +41,7 @@ export default async function TeacherNoticesPage({ searchParams }: PageProps<"/t
           send={sendNotice}
         />
       )}
-      <h2 className="mb-4 mt-10 text-lg font-semibold text-slate-900">My sent notices</h2>
+      <h2 className="mb-4 mt-10 text-lg font-semibold text-fg">My sent notices</h2>
       <Card padded={false}>
         <NoticeList where={{ schoolId: ctx.school.id, teacherId: ctx.teacher.id }} href={(id) => `/teacher/notices/${id}`} params={params} />
       </Card>

@@ -117,15 +117,15 @@ export function TimetableEditor(props: Props) {
     startTransition(() => formAction(fd));
   };
 
-  const th = "whitespace-nowrap px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 first:pl-4";
+  const th = "whitespace-nowrap px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted first:pl-4";
   const cell = "px-2 py-2 align-top first:pl-4";
   const small = `${inputClass} !px-2.5 !py-2`;
-  const err = (msg?: string) => (msg ? <p className="mt-1 max-w-56 text-xs font-medium leading-snug text-rose-600">{msg}</p> : null);
-  const bad = (msg?: string) => (msg ? "!border-rose-400 !ring-rose-500/10" : "");
+  const err = (msg?: string) => (msg ? <p className="mt-1 max-w-56 text-xs font-medium leading-snug text-danger">{msg}</p> : null);
+  const bad = (msg?: string) => (msg ? "!border-danger-solid !ring-danger-solid/15" : "");
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-6 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-6 py-3">
         <button type="button" onClick={addRow} disabled={rows.length >= MAX_PAPERS} className={`${buttonVariants.secondary} !py-2`}>
           <Plus className="h-4 w-4" />
           Add paper
@@ -140,9 +140,9 @@ export function TimetableEditor(props: Props) {
             Sort by date
           </button>
         )}
-        <span className="ml-auto text-xs text-slate-500">
+        <span className="ml-auto text-xs text-muted">
           {rows.length} paper{rows.length === 1 ? "" : "s"}
-          {dirty && <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700 ring-1 ring-inset ring-amber-200">Unsaved changes</span>}
+          {dirty && <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 font-medium text-warning ring-1 ring-inset ring-warning-line">Unsaved changes</span>}
         </span>
       </div>
 
@@ -164,18 +164,18 @@ export function TimetableEditor(props: Props) {
 
       {rows.length === 0 ? (
         <div className="flex flex-col items-center px-6 py-12 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-3 text-subtle">
             <CalendarPlus className="h-6 w-6" />
           </span>
-          <p className="mt-4 text-sm font-semibold text-slate-900">No papers yet</p>
-          <p className="mt-1 max-w-sm text-sm text-slate-500">
+          <p className="mt-4 text-sm font-semibold text-fg">No papers yet</p>
+          <p className="mt-1 max-w-sm text-sm text-muted">
             Add papers one by one, or use “Fill from subjects” to add one paper per subject on consecutive days.
           </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="border-b border-slate-100 bg-slate-50/80">
+            <thead className="border-b border-line bg-surface-2/80">
               <tr>
                 <th className={th}>#</th>
                 <th className={th}>Date</th>
@@ -191,13 +191,13 @@ export function TimetableEditor(props: Props) {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {rows.map((r, i) => {
                 const { first, rest } = subjectChoices(r.classId);
                 const listed = new Set([...first, ...rest].map((s) => s.id));
                 return (
-                  <tr key={i} className={Object.keys(errors ?? {}).some((k) => k.startsWith(`papers.${i}.`)) ? "bg-rose-50/40" : ""}>
-                    <td className={`${cell} pt-4 text-xs font-medium tabular-nums text-slate-400`}>{i + 1}</td>
+                  <tr key={i} className={Object.keys(errors ?? {}).some((k) => k.startsWith(`papers.${i}.`)) ? "bg-danger-soft/40" : ""}>
+                    <td className={`${cell} pt-4 text-xs font-medium tabular-nums text-subtle`}>{i + 1}</td>
                     <td className={cell}>
                       <input
                         type="date"
@@ -209,7 +209,7 @@ export function TimetableEditor(props: Props) {
                         className={`${small} w-40 ${bad(cellError(i, "date"))}`}
                       />
                       {r.date && !cellError(i, "date") && (
-                        <p className={`mt-1 text-xs ${isSunday(r.date) ? "font-medium text-amber-600" : "text-slate-500"}`}>{formatDay(r.date)}</p>
+                        <p className={`mt-1 text-xs ${isSunday(r.date) ? "font-medium text-warning" : "text-muted"}`}>{formatDay(r.date)}</p>
                       )}
                       {err(cellError(i, "date"))}
                     </td>
@@ -360,7 +360,7 @@ export function TimetableEditor(props: Props) {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-t border-line px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <FormMessage state={dirty && state.ok ? {} : state} />
         </div>
@@ -387,7 +387,7 @@ function IconButton({ label, onClick, disabled, danger, children }: { label: str
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-md p-1.5 transition disabled:pointer-events-none disabled:opacity-30 ${danger ? "text-rose-500 hover:bg-rose-50" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"}`}
+      className={`rounded-md p-1.5 transition disabled:pointer-events-none disabled:opacity-30 ${danger ? "text-danger hover:bg-danger-soft" : "text-subtle hover:bg-surface-3 hover:text-fg-2"}`}
     >
       {children}
     </button>
@@ -442,12 +442,12 @@ function FillPanel({
     onFill(out);
   };
 
-  const label = "mb-1.5 block text-xs font-medium text-slate-600";
+  const label = "mb-1.5 block text-xs font-medium text-fg-2";
   return (
-    <div className="border-b border-slate-100 bg-slate-50/60 px-6 py-4">
+    <div className="border-b border-line bg-surface-2/60 px-6 py-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-900">Fill from subjects</p>
-        <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700">
+        <p className="text-sm font-semibold text-fg">Fill from subjects</p>
+        <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 text-subtle hover:bg-surface-3 hover:text-fg-2">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -493,13 +493,13 @@ function FillPanel({
       <div className="mt-3">
         <span className={label}>Subjects, in this order</span>
         {options.length === 0 ? (
-          <p className="text-sm text-slate-500">No subjects available for this choice.</p>
+          <p className="text-sm text-muted">No subjects available for this choice.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {options.map((s) => (
               <label
                 key={s.id}
-                className={`flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-sm ring-1 ring-inset ${picked.has(s.id) ? "bg-indigo-50 text-indigo-700 ring-indigo-200" : "bg-white text-slate-600 ring-slate-200"}`}
+                className={`flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-sm ring-1 ring-inset ${picked.has(s.id) ? "bg-accent-soft text-accent-text ring-accent-line" : "bg-surface text-fg-2 ring-line"}`}
               >
                 <input
                   type="checkbox"
@@ -521,7 +521,7 @@ function FillPanel({
         )}
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-sm text-fg-2">
           <input type="checkbox" checked={skipSundays} onChange={(e) => setSkipSundays(e.target.checked)} className={checkboxClass} />
           Skip Sundays
         </label>

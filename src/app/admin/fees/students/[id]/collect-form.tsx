@@ -1,14 +1,16 @@
 "use client";
 
 import { startTransition, useActionState, useMemo, useState } from "react";
-import { IndianRupee, Loader2 } from "lucide-react";
+import { Banknote, Building2, CreditCard, FileCheck2, IndianRupee, QrCode, Wallet } from "lucide-react";
 import { Field, FormMessage } from "@/components/forms";
-import { Badge, buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
+import { Badge, Button, SegmentedControl, SuccessState, checkboxClass, inputClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { MODE_LABELS, PAYMENT_MODES, dueKey, rupees, type DueItem } from "@/lib/fees-shared";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 const fmt = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
+
+const MODE_ICONS = { CASH: Banknote, UPI: QrCode, CARD: CreditCard, CHEQUE: FileCheck2, BANK_TRANSFER: Building2, OTHER: Wallet };
 
 const STATUS = {
   PAID: { tone: "green", label: "Paid" },
@@ -60,19 +62,19 @@ export function CollectForm({
         const fd = new FormData(e.currentTarget);
         startTransition(() => formAction(fd));
       }}
-      className="rounded-2xl border border-slate-200/80 bg-white shadow-sm"
+      className="overflow-clip rounded-2xl border border-line bg-surface shadow-card"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6">
-        <h2 className="text-[15px] font-semibold text-slate-900">Collect payment</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-6">
+        <h2 className="text-base font-semibold text-fg">Collect payment</h2>
         <div className="flex items-center gap-3 text-xs">
-          <button type="button" onClick={() => setSelected(new Set(open.filter((d) => d.due <= today).map((d) => dueKey(d.headId, d.period))))} className="font-medium text-indigo-600 hover:text-indigo-500">
+          <button type="button" onClick={() => setSelected(new Set(open.filter((d) => d.due <= today).map((d) => dueKey(d.headId, d.period))))} className="font-medium text-accent-text underline-offset-4 hover:underline">
             Tick all due
           </button>
-          <button type="button" onClick={() => setSelected(new Set())} className="font-medium text-slate-500 hover:text-slate-800">
+          <button type="button" onClick={() => setSelected(new Set())} className="font-medium text-muted hover:text-fg">
             Clear
           </button>
           {paidCount > 0 && (
-            <button type="button" onClick={() => setShowPaid((v) => !v)} className="font-medium text-slate-500 hover:text-slate-800">
+            <button type="button" onClick={() => setShowPaid((v) => !v)} className="font-medium text-muted hover:text-fg">
               {showPaid ? "Hide paid" : `Show paid (${paidCount})`}
             </button>
           )}
@@ -80,11 +82,11 @@ export function CollectForm({
       </div>
 
       {rows.length === 0 ? (
-        <p className="px-6 py-10 text-center text-sm text-emerald-700">Nothing to pay. All fees for this session are paid.</p>
+        <SuccessState title="All paid up" description="Every fee for this session is paid." />
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50/80 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-left text-eyebrow uppercase text-muted">
               <tr>
                 <th className="w-10 px-4 py-2.5 sm:px-6" />
                 <th className="px-3 py-2.5">Fee</th>
@@ -94,22 +96,22 @@ export function CollectForm({
                 <th className="px-3 py-2.5 pr-4 text-right sm:pr-6">Paying now</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {rows.map((d) => {
                 const k = dueKey(d.headId, d.period);
                 const on = selected.has(k);
                 const payable = d.balance > 0;
                 return (
-                  <tr key={k} className={on ? "bg-indigo-50/40" : payable ? "" : "text-slate-400"}>
+                  <tr key={k} className={`transition-colors ${on ? "bg-accent-soft" : payable ? "" : "text-subtle"}`}>
                     <td className="px-4 py-2.5 sm:px-6">
                       {payable && <input type="checkbox" checked={on} onChange={() => toggle(k)} className={checkboxClass} aria-label={`Pay ${d.headName} ${d.label}`} />}
                     </td>
                     <td className="px-3 py-2.5">
-                      <p className={`font-medium ${payable ? "text-slate-900" : ""}`}>{d.headName}</p>
-                      <p className="text-xs text-slate-500">{d.label}</p>
+                      <p className={`font-medium ${payable ? "text-fg" : ""}`}>{d.headName}</p>
+                      <p className="text-xs text-muted">{d.label}</p>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
-                      <span className="mr-2 text-xs text-slate-500">{fmt(d.due)}</span>
+                      <span className="mr-2 text-xs text-muted">{fmt(d.due)}</span>
                       <Badge tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Badge>
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{rupees(d.amount)}</td>
@@ -123,7 +125,7 @@ export function CollectForm({
                           value={amounts[k]}
                           onChange={(e) => setAmounts((a) => ({ ...a, [k]: e.target.value.replace(/[^\d]/g, "") }))}
                           aria-label={`Amount for ${d.headName} ${d.label}`}
-                          className="h-8 w-24 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums focus:border-indigo-500 focus:outline-none disabled:bg-slate-50 disabled:text-slate-300"
+                          className="h-9 w-24 rounded-lg border border-line-strong bg-surface px-2 text-right text-sm tabular-nums transition focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 disabled:bg-surface-2 disabled:text-subtle"
                         />
                       )}
                     </td>
@@ -136,20 +138,24 @@ export function CollectForm({
       )}
 
       {open.length > 0 && (
-        <div className="space-y-4 border-t border-slate-100 px-4 py-5 sm:px-6">
+        <div className="space-y-4 border-t border-line px-4 py-5 sm:px-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Field label="Payment date" name="date" errors={state.fieldErrors} required>
               <input type="date" name="date" defaultValue={today} min={minDate} max={today} required className={inputClass} />
             </Field>
-            <Field label="Paid by" name="mode" errors={state.fieldErrors} required>
-              <select name="mode" value={mode} onChange={(e) => setMode(e.target.value)} className={selectClass}>
-                {PAYMENT_MODES.map((m) => (
-                  <option key={m} value={m}>
-                    {MODE_LABELS[m]}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <fieldset className="sm:col-span-2 xl:col-span-4">
+              <legend className="mb-1.5 block text-sm font-medium text-fg-2">
+                Paid by<span className="ml-0.5 text-danger" aria-hidden>*</span>
+              </legend>
+              <SegmentedControl
+                name="mode"
+                label="Payment mode"
+                value={mode}
+                onChange={setMode}
+                className="flex-wrap"
+                options={PAYMENT_MODES.map((m) => ({ value: m, label: MODE_LABELS[m], icon: MODE_ICONS[m] }))}
+              />
+            </fieldset>
             <Field
               label={mode === "CHEQUE" ? "Cheque number" : mode === "UPI" ? "UPI reference" : mode === "CASH" ? "Reference (optional)" : "Transaction number"}
               name="reference"
@@ -163,15 +169,17 @@ export function CollectForm({
             </Field>
           </div>
           <FormMessage state={state} />
-          <div className="flex flex-wrap items-center justify-end gap-4">
-            <p className="text-sm text-slate-600">
-              Total <span className="ml-1 text-xl font-semibold tabular-nums text-slate-900">{rupees(total)}</span>
-            </p>
-            <button type="submit" disabled={pending || total <= 0} className={buttonVariants.primary}>
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <IndianRupee className="h-4 w-4" />}
-              {pending ? "Saving…" : `Collect ${rupees(total)} & make receipt`}
-            </button>
+        </div>
+      )}
+      {open.length > 0 && (
+        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-between gap-4 rounded-b-2xl border-t border-line bg-glass px-4 py-4 backdrop-blur-xl sm:px-6 md:bottom-0">
+          <div>
+            <p className="text-eyebrow uppercase text-muted">Total</p>
+            <p className="text-display-sm font-semibold tabular-nums text-fg">{rupees(total)}</p>
           </div>
+          <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={total <= 0}>
+            Collect & make receipt
+          </Button>
         </div>
       )}
     </form>

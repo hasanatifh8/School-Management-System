@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Banknote, CircleCheck, Undo2, Users } from "lucide-react";
 import { MonthPicker } from "@/components/expenses/month-picker";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, EmptyState, inputClass, selectClass } from "@/components/ui";
+import { Badge, Card, EmptyState, inputClass, PagedList, selectClass } from "@/components/ui";
 import { addMonths, todayISO } from "@/lib/attendance-shared";
 import { isMonth, loadPayroll, requireExpensesAccess } from "@/lib/expenses";
 import { MODE_LABELS, MONTH_NAMES, PAYMENT_MODES, rupees } from "@/lib/fees-shared";
@@ -32,26 +32,26 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
             title={type === "TEACHER" ? "No teachers" : "No non-teaching staff yet"}
             action={
               type === "STAFF" && (
-                <Link href="/admin/staff" className="text-sm font-medium text-indigo-600">
+                <Link href="/admin/staff" className="text-sm font-medium text-accent-text">
                   Add staff
                 </Link>
               )
             }
           />
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <PagedList pageSize={15} noun="people">
             {list.map((r) => (
               <li key={r.key} className="px-6 py-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-slate-900">{r.name}</p>
-                    <p className="text-xs text-slate-500">{r.role}</p>
+                    <p className="font-medium text-fg">{r.name}</p>
+                    <p className="text-xs text-muted">{r.role}</p>
                   </div>
-                  <p className="text-sm tabular-nums text-slate-500">
+                  <p className="text-sm tabular-nums text-muted">
                     {r.salary ? (
                       `${rupees(r.salary)}/mo`
                     ) : !r.payment ? (
-                      <Link href={r.type === "TEACHER" ? `/admin/teachers/${r.id}` : "/admin/staff"} className="text-amber-700 underline">
+                      <Link href={r.type === "TEACHER" ? `/admin/teachers/${r.id}` : "/admin/staff"} className="text-warning underline">
                         Set salary
                       </Link>
                     ) : null}
@@ -74,20 +74,20 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
                 </div>
                 {!r.payment && r.key[1] === ":" && (
                   <details className="mt-2">
-                    <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500">
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-accent-text underline-offset-4 hover:underline">
                       <Banknote className="h-3.5 w-3.5" /> Pay {r.name.split(" ")[0]}
                     </summary>
                     <ActionForm action={paySalary.bind(null, r.key, month)} className="mt-2 flex flex-wrap items-end gap-2">
                       <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-slate-600">Amount (₹)</span>
+                        <span className="mb-1 block text-xs font-medium text-fg-2">Amount (₹)</span>
                         <input name="amount" inputMode="numeric" defaultValue={r.salary ?? ""} required className={`${inputClass} !w-32 !py-2`} />
                       </label>
                       <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-slate-600">Paid on</span>
+                        <span className="mb-1 block text-xs font-medium text-fg-2">Paid on</span>
                         <input type="date" name="paidOn" defaultValue={today} max={today} required className={`${inputClass} !py-2`} />
                       </label>
                       <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-slate-600">Mode</span>
+                        <span className="mb-1 block text-xs font-medium text-fg-2">Mode</span>
                         <select name="mode" defaultValue="BANK_TRANSFER" className={`${selectClass} !w-40 !py-2`}>
                           {PAYMENT_MODES.map((m) => (
                             <option key={m} value={m}>
@@ -97,7 +97,7 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
                         </select>
                       </label>
                       <label className="block min-w-40 flex-1">
-                        <span className="mb-1 block text-xs font-medium text-slate-600">Note</span>
+                        <span className="mb-1 block text-xs font-medium text-fg-2">Note</span>
                         <input name="note" maxLength={200} placeholder="e.g. 2 days leave deducted" className={`${inputClass} !py-2`} />
                       </label>
                       <SubmitButton size="sm">Mark paid</SubmitButton>
@@ -106,7 +106,7 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
                 )}
               </li>
             ))}
-          </ul>
+          </PagedList>
         )}
       </Card>
     );
@@ -116,42 +116,42 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
     <div className="space-y-6">
       <MonthPicker basePath="/admin/expenses/salaries" month={month} max={addMonths(current, 1)} current={current} />
 
-      <section className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+      <section className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <dl className="grid grid-cols-2 gap-x-10 gap-y-3 sm:grid-cols-4">
           <div>
-            <dt className="text-xs font-medium text-slate-500">Payroll for {monthName}</dt>
-            <dd className="text-xl font-semibold tabular-nums text-slate-900">{rupees(sum(rows))}</dd>
+            <dt className="text-xs font-medium text-muted">Payroll for {monthName}</dt>
+            <dd className="text-xl font-semibold tabular-nums text-fg">{rupees(sum(rows))}</dd>
           </div>
           <div>
-            <dt className="text-xs font-medium text-slate-500">Paid</dt>
-            <dd className="text-xl font-semibold tabular-nums text-emerald-600">{rupees(sum(paid))}</dd>
+            <dt className="text-xs font-medium text-muted">Paid</dt>
+            <dd className="text-xl font-semibold tabular-nums text-success">{rupees(sum(paid))}</dd>
           </div>
           <div>
-            <dt className="text-xs font-medium text-slate-500">Teaching / non-teaching paid</dt>
-            <dd className="text-sm font-medium tabular-nums text-slate-900">
+            <dt className="text-xs font-medium text-muted">Teaching / non-teaching paid</dt>
+            <dd className="text-sm font-medium tabular-nums text-fg">
               {rupees(sum(paid, "TEACHER"))} / {rupees(sum(paid, "STAFF"))}
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-medium text-slate-500">Still to pay</dt>
-            <dd className={`text-xl font-semibold tabular-nums ${unpaid.length ? "text-amber-600" : "text-slate-900"}`}>
-              {rupees(sum(unpaid))} <span className="text-xs font-normal text-slate-500">({unpaid.length})</span>
+            <dt className="text-xs font-medium text-muted">Still to pay</dt>
+            <dd className={`text-xl font-semibold tabular-nums ${unpaid.length ? "text-warning" : "text-fg"}`}>
+              {rupees(sum(unpaid))} <span className="text-xs font-normal text-muted">({unpaid.length})</span>
             </dd>
           </div>
         </dl>
         {unpaid.length === 0 && paid.length > 0 && (
-          <p className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+          <p className="flex items-center gap-2 text-sm font-medium text-success">
             <CircleCheck className="h-4 w-4" /> Everyone with a salary is paid for {monthName}.
           </p>
         )}
         {unpaid.length > 0 && (
           <ActionForm action={payAllSalaries.bind(null, month)} className="flex flex-wrap items-end gap-2">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-slate-600">Paid on</span>
+              <span className="mb-1 block text-xs font-medium text-fg-2">Paid on</span>
               <input type="date" name="paidOn" defaultValue={today} max={today} required className={`${inputClass} !py-2`} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-slate-600">Mode</span>
+              <span className="mb-1 block text-xs font-medium text-fg-2">Mode</span>
               <select name="mode" defaultValue="BANK_TRANSFER" className={`${selectClass} !w-40 !py-2`}>
                 {PAYMENT_MODES.map((m) => (
                   <option key={m} value={m}>

@@ -14,13 +14,13 @@ export async function UpcomingHolidays({ schoolId, from, action }: { schoolId: s
   return (
     <Card title="Upcoming holidays" icon={PartyPopper} padded={false} action={action}>
       {holidays.length === 0 ? (
-        <p className="p-6 text-sm text-slate-500">No school holidays coming up.</p>
+        <p className="p-6 text-sm text-muted">No school holidays coming up.</p>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-line">
           {holidays.map((h) => (
             <li key={h.ids[0]} className="flex items-center justify-between gap-3 px-6 py-2.5 text-sm">
-              <span className="truncate text-slate-800">{h.name}</span>
-              <span className="shrink-0 text-xs text-slate-500">
+              <span className="truncate text-fg">{h.name}</span>
+              <span className="shrink-0 text-xs text-muted">
                 {h.from <= from ? "Today" : fmt(h.from)}
                 {h.to !== h.from && ` – ${fmt(h.to)}`}
               </span>

@@ -54,15 +54,15 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
       <Card>
         <form className="flex flex-wrap items-end gap-3" action="/admin/fees/receipts">
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">From</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-2">From</span>
             <input type="date" name="from" defaultValue={from} max={today} className={inputClass} />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">To</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-2">To</span>
             <input type="date" name="to" defaultValue={to} max={today} className={inputClass} />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Mode</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-2">Mode</span>
             <select name="mode" defaultValue={mode ?? ""} className={`${selectClass} !w-40`}>
               <option value="">All</option>
               {PAYMENT_MODES.map((m) => (
@@ -73,7 +73,7 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
             </select>
           </label>
           <label className="block min-w-52 flex-1">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Search</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-2">Search</span>
             <input name="q" defaultValue={q} placeholder="Receipt no., student, ID or reference" className={inputClass} />
           </label>
           <button type="submit" className={buttonVariants.primary}>
@@ -103,23 +103,23 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
             </thead>
             <tbody className={tbodyClass}>
               {receipts.map((r) => (
-                <tr key={r.id} className={`${trClass} ${r.cancelledAt ? "text-slate-400" : ""}`}>
+                <tr key={r.id} className={`${trClass} ${r.cancelledAt ? "text-subtle" : ""}`}>
                   <td className={tdClass}>
-                    <Link href={`/admin/fees/receipts/${r.id}`} className="font-mono text-xs font-medium text-indigo-600 hover:underline">
+                    <Link href={`/admin/fees/receipts/${r.id}`} className="font-mono text-xs font-medium text-accent-text hover:underline">
                       {r.number}
                     </Link>
                   </td>
                   <td className={`${tdClass} whitespace-nowrap`}>{dateFmt.format(r.date)}</td>
                   <td className={tdClass}>
-                    <p className="font-medium text-slate-900">{r.studentName}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="font-medium text-fg">{r.studentName}</p>
+                    <p className="text-xs text-muted">
                       {r.studentCode}
                       {r.className && ` · ${r.className}`}
                     </p>
                   </td>
                   <td className={tdClass}>
                     {MODE_LABELS[r.mode]}
-                    {r.reference && <p className="text-xs text-slate-500">{r.reference}</p>}
+                    {r.reference && <p className="text-xs text-muted">{r.reference}</p>}
                   </td>
                   <td className={tdClass}>{r.collectedBy}</td>
                   <td className={`${tdClass} text-right font-semibold tabular-nums`}>

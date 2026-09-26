@@ -1,28 +1,385 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. Components use the semantic names (bg-surface, text-muted,
+ * border-line, bg-accent, text-success …) so light and dark themes both work.
+ * Theme: follows the device unless <html data-theme="light|dark"> overrides it.
+ */
+
+/* `dark:` variant for the rare case a token isn't enough. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"] *) {
+    @slot;
+  }
+}
+
+:root {
+  color-scheme: light;
+  /* Neutrals */
+  --canvas: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --surface-3: #eef0f3;
+  --line: #e4e6ea;
+  --line-strong: #d3d6dc;
+  --fg: #0f1115;
+  --fg-2: #3d4350;
+  --muted: #5e6573;
+  --subtle: #8a909c;
+  /* Accent (indigo-violet) */
+  --accent: #5b4ee8;
+  --accent-hover: #4b3fd6;
+  --accent-fg: #ffffff;
+  --accent-soft: #efeefe;
+  --accent-text: #4b3fd6;
+  --accent-line: #d4d0fb;
+  /* Status tones: text / soft background / border / solid */
+  --success: #047857;
+  --success-soft: #ecfdf5;
+  --success-line: #a7f3d0;
+  --success-solid: #10b981;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --warning-line: #fde68a;
+  --warning-solid: #f59e0b;
+  --danger: #be123c;
+  --danger-soft: #fff1f2;
+  --danger-line: #fecdd3;
+  --danger-solid: #e11d48;
+  --info: #0369a1;
+  --info-soft: #f0f9ff;
+  --info-line: #bae6fd;
+  --info-solid: #0ea5e9;
+  /* Elevation */
+  --sh-card: 0 1px 2px rgb(15 17 21 / 0.04), 0 4px 16px -8px rgb(15 17 21 / 0.08);
+  --sh-lift: 0 2px 4px rgb(15 17 21 / 0.04), 0 12px 32px -12px rgb(15 17 21 / 0.18);
+  --sh-pop: 0 4px 8px rgb(15 17 21 / 0.04), 0 24px 48px -16px rgb(15 17 21 / 0.25);
+  --sh-accent: 0 6px 20px -6px rgb(91 78 232 / 0.45);
+  --glass: rgb(255 255 255 / 0.72);
+  --backdrop: rgb(15 17 21 / 0.4);
+}
+
+/* Dark palette. Repeated below for the "follow device" media query — keep the two in sync. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #0e0f12;
+  --surface: #16181d;
+  --surface-2: #1b1e24;
+  --surface-3: #242832;
+  --line: rgb(255 255 255 / 0.08);
+  --line-strong: rgb(255 255 255 / 0.14);
+  --fg: #ecedef;
+  --fg-2: #c5c9d0;
+  --muted: #9ba1ac;
+  --subtle: #6e7482;
+  --accent: #6d60f2;
+  --accent-hover: #7d71f5;
+  --accent-fg: #ffffff;
+  --accent-soft: rgb(124 111 247 / 0.14);
+  --accent-text: #aea5fb;
+  --accent-line: rgb(124 111 247 / 0.32);
+  --success: #34d399;
+  --success-soft: rgb(16 185 129 / 0.12);
+  --success-line: rgb(52 211 153 / 0.28);
+  --success-solid: #10b981;
+  --warning: #fbbf24;
+  --warning-soft: rgb(245 158 11 / 0.12);
+  --warning-line: rgb(251 191 36 / 0.28);
+  --warning-solid: #f59e0b;
+  --danger: #fb7185;
+  --danger-soft: rgb(244 63 94 / 0.12);
+  --danger-line: rgb(251 113 133 / 0.28);
+  --danger-solid: #f43f5e;
+  --info: #38bdf8;
+  --info-soft: rgb(14 165 233 / 0.12);
+  --info-line: rgb(56 189 248 / 0.28);
+  --info-solid: #0ea5e9;
+  /* In the dark, elevation comes from lighter surfaces and borders. */
+  --sh-card: 0 0 0 0 transparent;
+  --sh-lift: 0 16px 40px -16px rgb(0 0 0 / 0.6);
+  --sh-pop: 0 24px 64px -16px rgb(0 0 0 / 0.7);
+  --sh-accent: 0 6px 24px -6px rgb(109 96 242 / 0.55);
+  --glass: rgb(22 24 29 / 0.72);
+  --backdrop: rgb(0 0 0 / 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --canvas: #0e0f12;
+    --surface: #16181d;
+    --surface-2: #1b1e24;
+    --surface-3: #242832;
+    --line: rgb(255 255 255 / 0.08);
+    --line-strong: rgb(255 255 255 / 0.14);
+    --fg: #ecedef;
+    --fg-2: #c5c9d0;
+    --muted: #9ba1ac;
+    --subtle: #6e7482;
+    --accent: #6d60f2;
+    --accent-hover: #7d71f5;
+    --accent-fg: #ffffff;
+    --accent-soft: rgb(124 111 247 / 0.14);
+    --accent-text: #aea5fb;
+    --accent-line: rgb(124 111 247 / 0.32);
+    --success: #34d399;
+    --success-soft: rgb(16 185 129 / 0.12);
+    --success-line: rgb(52 211 153 / 0.28);
+    --success-solid: #10b981;
+    --warning: #fbbf24;
+    --warning-soft: rgb(245 158 11 / 0.12);
+    --warning-line: rgb(251 191 36 / 0.28);
+    --warning-solid: #f59e0b;
+    --danger: #fb7185;
+    --danger-soft: rgb(244 63 94 / 0.12);
+    --danger-line: rgb(251 113 133 / 0.28);
+    --danger-solid: #f43f5e;
+    --info: #38bdf8;
+    --info-soft: rgb(14 165 233 / 0.12);
+    --info-line: rgb(56 189 248 / 0.28);
+    --info-solid: #0ea5e9;
+    --sh-card: 0 0 0 0 transparent;
+    --sh-lift: 0 16px 40px -16px rgb(0 0 0 / 0.6);
+    --sh-pop: 0 24px 64px -16px rgb(0 0 0 / 0.7);
+    --sh-accent: 0 6px 24px -6px rgb(109 96 242 / 0.55);
+    --glass: rgb(22 24 29 / 0.72);
+    --backdrop: rgb(0 0 0 / 0.6);
+  }
+}
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-accent-line: var(--accent-line);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
+  --color-success-solid: var(--success-solid);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
+  --color-warning-solid: var(--warning-solid);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-danger-solid: var(--danger-solid);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+  --color-info-solid: var(--info-solid);
+  --color-glass: var(--glass);
+  --color-backdrop: var(--backdrop);
+
+  --shadow-card: var(--sh-card);
+  --shadow-lift: var(--sh-lift);
+  --shadow-pop: var(--sh-pop);
+  --shadow-accent: var(--sh-accent);
 }
 
-body {
-  background-color: #f6f7fb;
-  background-image: radial-gradient(1200px 400px at 80% -120px, rgb(99 102 241 / 0.07), transparent);
-  background-repeat: no-repeat;
-  color: var(--color-slate-900);
-  -webkit-font-smoothing: antialiased;
+@theme {
+  /* Type scale: caption 12 · body 14 · h2 20 · h1 28 · display-sm 32 · display 48 */
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1rem;
+  --text-eyebrow--letter-spacing: 0.06em;
+  --text-eyebrow--font-weight: 600;
+  --text-h2: 1.25rem;
+  --text-h2--line-height: 1.75rem;
+  --text-h2--letter-spacing: -0.01em;
+  --text-h1: 1.75rem;
+  --text-h1--line-height: 2.25rem;
+  --text-h1--letter-spacing: -0.02em;
+  --text-display-sm: 2rem;
+  --text-display-sm--line-height: 2.5rem;
+  --text-display-sm--letter-spacing: -0.03em;
+  --text-display: 3rem;
+  --text-display--line-height: 3.25rem;
+  --text-display--letter-spacing: -0.035em;
+
+  /* Motion: 150 micro · 200 press/toggle · 250 menus/toasts · 350 page/modal */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-fade-in: fade-in 250ms var(--ease-out) both;
+  --animate-rise: rise 350ms var(--ease-out) both;
+  --animate-pop: pop 250ms var(--ease-out) both;
+  --animate-slide-in-right: slide-in-right 350ms var(--ease-out) both;
+  --animate-slide-in-left: slide-in-left 350ms var(--ease-out) both;
+  --animate-toast: toast 250ms var(--ease-out) both;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: scale(0.96); }
+  }
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); }
+  }
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+  }
+  @keyframes toast {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
 }
 
-::selection {
-  background: rgb(99 102 241 / 0.2);
+@layer base {
+  body {
+    background-color: var(--canvas);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+
+  /* One visible focus ring for every keyboard-focused control. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
+
+  /* Native date/time pickers follow the theme via color-scheme; keep icons visible. */
+  ::-webkit-calendar-picker-indicator {
+    opacity: 0.6;
+  }
 }
 
 /* Custom chevron for native <select> elements. */
 .select-chevron {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238a909c' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   background-position: right 0.6rem center;
   background-repeat: no-repeat;
   background-size: 1.25rem;
   padding-right: 2.25rem;
+}
+
+/* Loading placeholder with a soft moving sheen. */
+.skeleton {
+  border-radius: 0.5rem;
+  background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-2) 50%, var(--surface-3) 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Success tick drawing itself in. */
+.check-draw {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: check-draw 450ms 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes check-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Page transitions (React <ViewTransition>): a quick crossfade with a small rise. */
+::view-transition-old(.page) {
+  animation: 150ms ease-in both vt-fade-out;
+}
+::view-transition-new(.page) {
+  animation: 300ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both vt-rise-in;
+}
+@keyframes vt-fade-out {
+  to { opacity: 0; }
+}
+@keyframes vt-rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* <dialog> open/close: fade the backdrop, pop or slide the panel. */
+dialog[open] {
+  animation: var(--animate-pop);
+}
+dialog[data-variant="drawer"][open] {
+  animation: var(--animate-slide-in-right);
+}
+dialog[data-variant="drawer-left"][open] {
+  animation: var(--animate-slide-in-left);
+}
+dialog::backdrop {
+  background: var(--backdrop);
+  backdrop-filter: blur(2px);
+  animation: var(--animate-fade-in);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Paper is always light. */
+@media print {
+  :root,
+  :root[data-theme="dark"],
+  :root:not([data-theme="light"]) {
+    color-scheme: light;
+    --canvas: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f7f8fa;
+    --surface-3: #eef0f3;
+    --line: #e4e6ea;
+    --line-strong: #d3d6dc;
+    --fg: #0f1115;
+    --fg-2: #3d4350;
+    --muted: #5e6573;
+    --subtle: #8a909c;
+    --accent: #5b4ee8;
+    --accent-soft: #efeefe;
+    --accent-text: #4b3fd6;
+    --accent-line: #d4d0fb;
+    --success: #047857;
+    --success-soft: #ecfdf5;
+    --warning: #b45309;
+    --warning-soft: #fffbeb;
+    --danger: #be123c;
+    --danger-soft: #fff1f2;
+    --info: #0369a1;
+    --info-soft: #f0f9ff;
+    --sh-card: none;
+  }
 }

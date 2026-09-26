@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CalendarDays, IndianRupee, Receipt, TriangleAlert, Wallet } from "lucide-react";
-import { Badge, ButtonLink, Card, EmptyState, IconTile, Table, tbodyClass, tdClass, thClass, theadClass, trClass, type IconTone } from "@/components/ui";
+import { Badge, ButtonLink, Card, EmptyState, PagedList, ProgressBar, StatCard, StatGrid, Table, tbodyClass, tdClass, TextLink, thClass, theadClass, trClass } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, outstandingByStudent } from "@/lib/fees";
@@ -44,15 +44,15 @@ export default async function FeesOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <Stat icon={IndianRupee} tone="emerald" label="Collected today" value={rupees(todayAgg._sum.total ?? 0)} detail={`${todayAgg._count} receipt(s)`} />
-        <Stat icon={CalendarDays} tone="indigo" label="This month" value={rupees(monthAgg._sum.total ?? 0)} detail={`${monthAgg._count} receipt(s)`} />
-        <Stat icon={Receipt} tone="sky" label={`Session ${session.name}`} value={rupees(sessionAgg._sum.total ?? 0)} detail={`${sessionAgg._count} receipt(s)`} />
-        <Stat icon={TriangleAlert} tone="rose" label="Due now" value={rupees(dueNow)} detail="Instalments due up to today" />
-      </div>
+      <StatGrid>
+        <StatCard icon={IndianRupee} tone="emerald" label="Collected today" value={todayAgg._sum.total ?? 0} prefix="₹" detail={`${todayAgg._count} receipt(s)`} href="/admin/fees/receipts" />
+        <StatCard icon={CalendarDays} tone="indigo" label="This month" value={monthAgg._sum.total ?? 0} prefix="₹" detail={`${monthAgg._count} receipt(s)`} />
+        <StatCard icon={Receipt} tone="sky" label={`Session ${session.name}`} value={sessionAgg._sum.total ?? 0} prefix="₹" detail={`${sessionAgg._count} receipt(s)`} />
+        <StatCard icon={TriangleAlert} tone="rose" label="Due now" value={dueNow} prefix="₹" detail="Instalments due up to today" href="/admin/fees/collect" />
+      </StatGrid>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <Card title="Recent receipts" padded={false} className="xl:col-span-2" action={<Link href="/admin/fees/receipts" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">All receipts</Link>}>
+        <Card title="Recent receipts" padded={false} className="xl:col-span-2" action={<TextLink href="/admin/fees/receipts">All receipts</TextLink>}>
           {recent.length === 0 ? (
             <EmptyState icon={Receipt} title="No payments yet" description="Payments you collect appear here." action={<ButtonLink href="/admin/fees/collect">Collect fees</ButtonLink>} />
           ) : (
@@ -69,14 +69,14 @@ export default async function FeesOverviewPage() {
                 {recent.map((r) => (
                   <tr key={r.id} className={trClass}>
                     <td className={tdClass}>
-                      <Link href={`/admin/fees/receipts/${r.id}`} className="font-mono text-xs font-medium text-indigo-600 hover:underline">
+                      <Link href={`/admin/fees/receipts/${r.id}`} className="font-mono text-xs font-medium text-accent-text hover:underline">
                         {r.number}
                       </Link>
-                      <p className="text-xs text-slate-500">{shortDate.format(r.date)}</p>
+                      <p className="text-xs text-muted">{shortDate.format(r.date)}</p>
                     </td>
                     <td className={tdClass}>
-                      <p className="font-medium text-slate-900">{r.studentName}</p>
-                      <p className="text-xs text-slate-500">{r.className ?? r.studentCode}</p>
+                      <p className="font-medium text-fg">{r.studentName}</p>
+                      <p className="text-xs text-muted">{r.className ?? r.studentCode}</p>
                     </td>
                     <td className={tdClass}>{MODE_LABELS[r.mode]}</td>
                     <td className={`${tdClass} text-right font-medium tabular-nums`}>
@@ -92,46 +92,38 @@ export default async function FeesOverviewPage() {
         <div className="space-y-6 self-start">
           <Card title="Today by payment mode">
             {todayByMode.length === 0 ? (
-              <p className="text-sm text-slate-500">Nothing collected yet today.</p>
+              <p className="text-sm text-muted">Nothing collected yet today.</p>
             ) : (
-              <dl className="space-y-2 text-sm">
+              <dl className="space-y-3 text-sm">
                 {todayByMode.map((m) => (
-                  <div key={m.mode} className="flex justify-between">
-                    <dt className="text-slate-600">{MODE_LABELS[m.mode]}</dt>
-                    <dd className="font-medium tabular-nums text-slate-900">{rupees(m._sum.total ?? 0)}</dd>
+                  <div key={m.mode}>
+                    <div className="flex justify-between">
+                      <dt className="text-fg-2">{MODE_LABELS[m.mode]}</dt>
+                      <dd className="font-medium tabular-nums text-fg">{rupees(m._sum.total ?? 0)}</dd>
+                    </div>
+                    <ProgressBar value={((m._sum.total ?? 0) / Math.max(1, todayAgg._sum.total ?? 0)) * 100} tone="success" className="mt-1.5 !h-1.5" label={`${MODE_LABELS[m.mode]} share`} />
                   </div>
                 ))}
               </dl>
             )}
           </Card>
           <Card title="Due now by class" padded={false}>
-            <ul className="divide-y divide-slate-100">
+            <PagedList pageSize={8} noun="classes">
               {byClass.map(({ s, due, owing }) => (
                 <li key={s.id}>
-                  <Link href={`/admin/fees/collect?section=${s.id}`} className="flex items-center justify-between gap-3 px-6 py-2.5 text-sm hover:bg-slate-50">
+                  <Link href={`/admin/fees/collect?section=${s.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm transition hover:bg-surface-2 sm:px-6">
                     <span>
-                      <span className="font-medium text-slate-900">{sectionLabel(s)}</span>
-                      <span className="block text-xs text-slate-500">{owing ? `${owing} of ${s.students.length} students owe` : "All clear"}</span>
+                      <span className="font-medium text-fg">{sectionLabel(s)}</span>
+                      <span className="block text-xs text-muted">{owing ? `${owing} of ${s.students.length} students owe` : "All clear"}</span>
                     </span>
-                    <span className={`font-semibold tabular-nums ${due ? "text-rose-600" : "text-emerald-600"}`}>{due ? rupees(due) : "₹0"}</span>
+                    <span className={`font-semibold tabular-nums ${due ? "text-danger" : "text-success"}`}>{due ? rupees(due) : "₹0"}</span>
                   </Link>
                 </li>
               ))}
-            </ul>
+            </PagedList>
           </Card>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Stat({ icon, tone, label, value, detail }: { icon: typeof Wallet; tone: IconTone; label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-      <IconTile icon={icon} tone={tone} />
-      <p className="mt-3 text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{detail}</p>
     </div>
   );
 }

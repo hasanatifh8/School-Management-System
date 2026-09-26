@@ -35,7 +35,7 @@ export function ChannelForm({
               ))}
             </select>
           </Field>
-          {def && <p className="text-xs text-slate-500">{def.description}</p>}
+          {def && <p className="text-xs text-muted">{def.description}</p>}
           {def?.fields.map((f) => {
             const saved = same && f.secret && current.savedSecrets.includes(f.key);
             const common = {

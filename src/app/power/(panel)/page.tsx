@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import {
   ArrowRight,
+  CircleCheck,
   Database,
   ExternalLink,
   GraduationCap,
@@ -14,7 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, ButtonLink, Card, EmptyState, PageHeader, buttonVariants } from "@/components/ui";
+import { Badge, ButtonLink, Callout, Card, EmptyState, PageHeader, buttonVariants } from "@/components/ui";
 import { db } from "@/lib/db";
 import { formatBytes } from "@/lib/document-types";
 import { storageBySchool, systemInfo } from "@/lib/power-tools";
@@ -61,17 +62,14 @@ export default async function PowerDashboard({ searchParams }: PageProps<"/power
       />
 
       {sp.setup === "1" && schools.length === 0 && (
-        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
-          <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" />
-          <p>
-            <strong>Welcome!</strong> There are no schools yet. Add your first school to start using the Admin Portal.
-          </p>
-        </div>
+        <Callout icon={Sparkles} className="mb-6">
+          <strong className="font-semibold">Welcome!</strong> There are no schools yet. Add your first school to start using the Admin Portal.
+        </Callout>
       )}
       {sp.deleted === "1" && (
-        <p role="status" className="mb-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
+        <Callout icon={CircleCheck} tone="success" className="mb-6">
           The school and all its data were deleted.
-        </p>
+        </Callout>
       )}
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -96,12 +94,12 @@ export default async function PowerDashboard({ searchParams }: PageProps<"/power
                 return (
                   <li
                     key={s.id}
-                    className={`flex flex-col rounded-2xl border bg-white p-5 shadow-sm ${active ? "border-slate-200/80" : "border-dashed border-slate-300 opacity-80"}`}
+                    className={`flex flex-col rounded-2xl border bg-surface p-4 shadow-card transition duration-200 sm:p-6 ${active ? "border-line hover:-translate-y-0.5 hover:shadow-lift" : "border-dashed border-line-strong opacity-80"}`}
                   >
                     <div className="flex items-start gap-4">
                       <SchoolLogo name={s.name} url={schoolLogoUrl(s)} />
                       <div className="min-w-0 flex-1">
-                        <Link href={`/power/schools/${s.id}`} className="font-semibold text-slate-900 hover:text-indigo-600">
+                        <Link href={`/power/schools/${s.id}`} className="rounded font-semibold text-fg transition hover:text-accent-text">
                           {s.name}
                         </Link>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -115,13 +113,13 @@ export default async function PowerDashboard({ searchParams }: PageProps<"/power
                         </div>
                       </div>
                     </div>
-                    <dl className="mt-4 grid grid-cols-4 gap-2 text-center text-xs text-slate-500">
-                      <Stat icon={GraduationCap} value={s._count.students} label="students" />
-                      <Stat icon={Presentation} value={s._count.teachers} label="teachers" />
-                      <Stat icon={School} value={s._count.classes} label="classes" />
-                      <Stat icon={HardDrive} value={formatBytes(storage.get(s.id) ?? 0)} label="files" />
+                    <dl className="mt-4 grid grid-cols-4 gap-2 text-center text-xs text-muted">
+                      <Metric icon={GraduationCap} value={s._count.students} label="students" />
+                      <Metric icon={Presentation} value={s._count.teachers} label="teachers" />
+                      <Metric icon={School} value={s._count.classes} label="classes" />
+                      <Metric icon={HardDrive} value={formatBytes(storage.get(s.id) ?? 0)} label="files" />
                     </dl>
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
                       <Link href={`/power/schools/${s.id}`} className={`${buttonVariants.ghost} !px-2`}>
                         Manage <ArrowRight className="h-4 w-4" />
                       </Link>
@@ -145,22 +143,22 @@ export default async function PowerDashboard({ searchParams }: PageProps<"/power
           <Card title="System" icon={Database}>
             <dl className="space-y-3 text-sm">
               <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Database size</dt>
-                <dd className="font-medium tabular-nums text-slate-900">{formatBytes(system.databaseBytes)}</dd>
+                <dt className="text-muted">Database size</dt>
+                <dd className="font-medium tabular-nums text-fg">{formatBytes(system.databaseBytes)}</dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Migrations applied</dt>
-                <dd className="font-medium tabular-nums text-slate-900">{system.migrations}</dd>
+                <dt className="text-muted">Migrations applied</dt>
+                <dd className="font-medium tabular-nums text-fg">{system.migrations}</dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Latest migration</dt>
-                <dd className="truncate font-mono text-xs text-slate-700" title={system.latestMigration}>
+                <dt className="text-muted">Latest migration</dt>
+                <dd className="truncate font-mono text-xs text-fg-2" title={system.latestMigration}>
                   {system.latestMigration}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Unused stored files</dt>
-                <dd className="font-medium tabular-nums text-slate-900">{system.orphanFiles}</dd>
+                <dt className="text-muted">Unused stored files</dt>
+                <dd className="font-medium tabular-nums text-fg">{system.orphanFiles}</dd>
               </div>
             </dl>
             <ActionForm action={cleanOrphanFiles} compact className="mt-4 flex flex-col items-start gap-2">
@@ -175,22 +173,22 @@ export default async function PowerDashboard({ searchParams }: PageProps<"/power
             icon={History}
             padded={false}
             action={
-              <Link href="/power/activity" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+              <Link href="/power/activity" className="text-sm font-medium text-accent-text underline-offset-4 hover:underline">
                 View all
               </Link>
             }
           >
             {activity.length === 0 ? (
-              <p className="p-6 text-sm text-slate-500">Nothing yet.</p>
+              <p className="p-6 text-sm text-muted">Nothing yet.</p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line">
                 {activity.map((a) => (
                   <li key={a.id} className="px-6 py-3 text-sm">
-                    <p className="font-medium text-slate-800">
+                    <p className="font-medium text-fg">
                       {a.action}
-                      {a.schoolName && <span className="font-normal text-slate-500"> · {a.schoolName}</span>}
+                      {a.schoolName && <span className="font-normal text-muted"> · {a.schoolName}</span>}
                     </p>
-                    <p className="text-xs text-slate-400">{when.format(a.createdAt)}</p>
+                    <p className="text-xs text-subtle">{when.format(a.createdAt)}</p>
                   </li>
                 ))}
               </ul>
@@ -202,11 +200,11 @@ export default async function PowerDashboard({ searchParams }: PageProps<"/power
   );
 }
 
-function Stat({ icon: Icon, value, label }: { icon: LucideIcon; value: number | string; label: string }) {
+function Metric({ icon: Icon, value, label }: { icon: LucideIcon; value: number | string; label: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 px-1 py-2">
-      <Icon className="mx-auto h-4 w-4 text-slate-400" />
-      <dd className="mt-1 font-semibold tabular-nums text-slate-900">{value}</dd>
+    <div className="rounded-lg bg-surface-2 px-1 py-2">
+      <Icon className="mx-auto h-4 w-4 text-subtle" />
+      <dd className="mt-1 font-semibold tabular-nums text-fg">{value}</dd>
       <dt>{label}</dt>
     </div>
   );

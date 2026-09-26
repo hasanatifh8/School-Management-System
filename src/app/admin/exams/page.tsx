@@ -35,7 +35,7 @@ export default async function ExamsPage({ searchParams }: PageProps<"/admin/exam
         }
       />
       <Card padded={false}>
-        <div className="flex gap-6 border-b border-slate-100 px-6 pt-4 text-sm font-medium">
+        <div className="flex gap-6 overflow-x-auto border-b border-line px-4 pt-4 text-sm font-medium sm:px-6">
           <StatusTab href="/admin/exams" active={!tests} label="School exams" count={examCount} />
           <StatusTab href="/admin/exams?kind=tests" active={tests} label="Teachers' tests" count={testCount} />
         </div>

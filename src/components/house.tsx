@@ -17,15 +17,15 @@ export function HouseBadge({ house }: { house: { name: string; color: string } }
 export function HouseColorPicker({ defaultValue = "green" }: { defaultValue?: string }) {
   return (
     <fieldset>
-      <legend className="mb-1.5 block text-sm font-medium text-slate-700">
-        Colour<span className="ml-0.5 text-rose-500">*</span>
+      <legend className="mb-1.5 block text-sm font-medium text-fg-2">
+        Colour<span className="ml-0.5 text-danger">*</span>
       </legend>
       <div className="flex flex-wrap gap-2">
         {HOUSE_COLOR_KEYS.map((key) => (
           <label
             key={key}
             title={HOUSE_COLORS[key].label}
-            className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full ring-offset-2 transition has-[:checked]:ring-2 has-[:checked]:ring-slate-900 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500"
+            className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full ring-offset-2 ring-offset-surface transition has-[:checked]:ring-2 has-[:checked]:ring-fg-2 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent"
           >
             <input
               type="radio"

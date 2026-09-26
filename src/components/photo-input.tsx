@@ -100,26 +100,26 @@ export function PhotoInput({
   return (
     <div className="flex items-start gap-5 sm:col-span-2">
       <div
-        className={`relative flex aspect-[7/9] w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-slate-50 ${
-          message ? "border-rose-300" : "border-slate-200"
+        className={`relative flex aspect-[7/9] w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-surface-2 ${
+          message ? "border-danger-line" : "border-line"
         }`}
       >
         {shown ? (
           // eslint-disable-next-line @next/next/no-img-element -- local blob / API image
           <img src={shown} alt="Photo preview" className="h-full w-full object-cover" />
         ) : (
-          <UserRound className="h-12 w-12 text-slate-300" />
+          <UserRound className="h-12 w-12 text-subtle" />
         )}
         {busy && (
-          <span className="absolute inset-0 flex items-center justify-center bg-white/70">
-            <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+          <span className="absolute inset-0 flex items-center justify-center bg-surface/70">
+            <Loader2 className="h-5 w-5 animate-spin text-accent-text" />
           </span>
         )}
       </div>
 
       <div className="min-w-0 pt-1">
-        <p className="text-sm font-medium text-slate-700">Passport photo</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">
+        <p className="text-sm font-medium text-fg-2">Passport photo</p>
+        <p className="mt-1 text-xs leading-5 text-muted">
           JPG, PNG or WebP. It is cropped to passport size (35 × 45 mm) automatically.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -134,10 +134,10 @@ export function PhotoInput({
             </button>
           )}
         </div>
-        {preview && <p className="mt-2 text-xs text-indigo-600">New photo selected. Save to apply.</p>}
-        {removed && !preview && <p className="mt-2 text-xs text-amber-600">Photo will be removed when you save.</p>}
+        {preview && <p className="mt-2 text-xs text-accent-text">New photo selected. Save to apply.</p>}
+        {removed && !preview && <p className="mt-2 text-xs text-warning">Photo will be removed when you save.</p>}
         {message && (
-          <p className="mt-2 flex items-center gap-1 text-xs font-medium text-rose-600">
+          <p className="mt-2 flex items-center gap-1 text-xs font-medium text-danger">
             <CircleAlert className="h-3.5 w-3.5" />
             {message}
           </p>

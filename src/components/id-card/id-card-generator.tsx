@@ -140,11 +140,11 @@ export function IdCardGenerator({
     <>
       <div className="space-y-6 print:hidden">
         {/* Download settings */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
-          <h2 className="text-[15px] font-semibold text-slate-900">Download as image</h2>
+        <div className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-6">
+          <h2 className="text-base font-semibold text-fg">Download as image</h2>
           <div className="mt-4 flex flex-wrap items-end gap-3">
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Size</span>
+              <span className="mb-1.5 block text-sm font-medium text-fg-2">Size</span>
               <select value={size} onChange={(e) => setSize(e.target.value as ImageSizeKey)} className={`${selectClass} !w-[22rem] max-w-full`}>
                 {Object.entries(IMAGE_SIZES).map(([key, s]) => (
                   <option key={key} value={key}>
@@ -156,7 +156,7 @@ export function IdCardGenerator({
             </label>
             {size === "custom" && (
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Width (px)</span>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">Width (px)</span>
                 <input
                   type="number"
                   min={CUSTOM_WIDTH.min}
@@ -169,13 +169,13 @@ export function IdCardGenerator({
               </label>
             )}
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Format</span>
+              <span className="mb-1.5 block text-sm font-medium text-fg-2">Format</span>
               <select value={format} onChange={(e) => setFormat(e.target.value as Format)} className={`${selectClass} !w-32`}>
                 <option value="png">PNG</option>
                 <option value="jpeg">JPG</option>
               </select>
             </label>
-            <p className="pb-2.5 text-xs text-slate-500">
+            <p className="pb-2.5 text-xs text-muted">
               Each image: {width} × {height} px
             </p>
           </div>
@@ -207,14 +207,14 @@ export function IdCardGenerator({
               </button>
             )}
           </div>
-          {!single && <p className="mt-2 text-xs text-slate-500">The ZIP has each student&apos;s front and one back image (the back is the same for everyone).</p>}
-          {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
+          {!single && <p className="mt-2 text-xs text-muted">The ZIP has each student&apos;s front and one back image (the back is the same for everyone).</p>}
+          {error && <p className="mt-3 text-sm text-danger">{error}</p>}
         </div>
 
         {/* Print settings */}
-        <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-6">
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Print layout (A4)</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-2">Print layout (A4)</span>
             <select value={layout} onChange={(e) => setLayout(e.target.value)} className={`${selectClass} !w-80`}>
               {Object.entries(ID_CARD_LAYOUTS).map(([key, l]) => (
                 <option key={key} value={key}>
@@ -227,7 +227,7 @@ export function IdCardGenerator({
             <Printer className="h-4 w-4" />
             Print {items.length === 1 ? "card" : `${items.length} cards`}
           </button>
-          <p className="basis-full text-xs text-slate-500">
+          <p className="basis-full text-xs text-muted">
             In the print window, turn on <strong>Background graphics</strong> and keep the scale at 100% so cards print at their real size.
           </p>
         </div>
@@ -246,7 +246,7 @@ export function IdCardGenerator({
                   type="button"
                   disabled={!!busy}
                   onClick={() => downloadFront(item)}
-                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent-text hover:text-accent-text disabled:opacity-50"
                 >
                   {busy === `front-${item.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                   {item.name}
@@ -265,7 +265,7 @@ export function IdCardGenerator({
                 type="button"
                 disabled={!!busy}
                 onClick={downloadBack}
-                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent-text hover:text-accent-text disabled:opacity-50"
               >
                 {busy === "back" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                 Back (same for all)

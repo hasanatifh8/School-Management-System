@@ -208,7 +208,7 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
       {label}
     </label>
   );
-  const fieldLabel = "mb-1.5 block text-xs font-medium text-slate-600";
+  const fieldLabel = "mb-1.5 block text-xs font-medium text-fg-2";
 
   return (
     <div className="space-y-6">
@@ -224,16 +224,16 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
             <Printer className="h-4 w-4" />
             {printLabel}
           </button>
-          <span className="text-sm text-slate-500">
+          <span className="text-sm text-muted">
             {papers.length} paper{papers.length === 1 ? "" : "s"} · {dateSpan(papers.map((p) => p.date))}
           </span>
         </div>
 
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border border-line bg-surface p-5 shadow-card">
           <div className="mb-4 flex items-center gap-2">
-            <SlidersHorizontal className="h-4 w-4 text-indigo-600" />
-            <h2 className="text-sm font-semibold text-slate-900">Print options</h2>
-            <span className="text-xs text-slate-500">The preview below updates as you change them.</span>
+            <SlidersHorizontal className="h-4 w-4 text-accent-text" />
+            <h2 className="text-sm font-semibold text-fg">Print options</h2>
+            <span className="text-xs text-muted">The preview below updates as you change them.</span>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <label>
@@ -287,7 +287,7 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
             {check("showLogo", "School logo")}
             {perClass && only === "all" && check("pagePerClass", "Each class on a new page")}
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
             {save && (
               <button
                 type="button"
@@ -315,11 +315,11 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
             disabled={current <= 0}
             onClick={() => setOnly(classes[current - 1].id)}
             aria-label="Previous class"
-            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-40"
+            className="rounded-lg border border-line bg-surface p-2 text-fg-2 shadow-card hover:bg-surface-2 disabled:opacity-40"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <div className="flex flex-wrap justify-center gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Class to preview">
+          <div className="flex flex-wrap justify-center gap-1 rounded-xl bg-surface-3 p-1" role="tablist" aria-label="Class to preview">
             {classes.map((c) => (
               <button
                 key={c.id}
@@ -327,7 +327,7 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
                 role="tab"
                 aria-selected={only === c.id}
                 onClick={() => setOnly(c.id)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${only === c.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${only === c.id ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}
               >
                 {c.label}
               </button>
@@ -337,7 +337,7 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
               role="tab"
               aria-selected={only === "all"}
               onClick={() => setOnly("all")}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${only === "all" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${only === "all" ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}
             >
               All classes ({classes.length})
             </button>
@@ -347,7 +347,7 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
             disabled={current < 0 || current >= classes.length - 1}
             onClick={() => setOnly(classes[current + 1].id)}
             aria-label="Next class"
-            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-40"
+            className="rounded-lg border border-line bg-surface p-2 text-fg-2 shadow-card hover:bg-surface-2 disabled:opacity-40"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -359,7 +359,7 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
         {pages.map((page, i) => (
           <article
             key={page.key}
-            className={`bg-white p-[12mm] text-slate-900 shadow-md ring-1 ring-slate-200 print:p-0 print:shadow-none print:ring-0 ${FONT[s.fontSize]} ${
+            className={`rounded-sm bg-white p-[12mm] text-slate-900 shadow-lift ring-1 ring-slate-200 print:p-0 print:shadow-none print:ring-0 ${FONT[s.fontSize]} ${
               i > 0 && (layout === "grid" || s.pagePerClass) ? "print:break-before-page" : i > 0 ? "print:mt-[8mm]" : ""
             }`}
           >

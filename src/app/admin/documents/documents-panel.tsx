@@ -29,7 +29,7 @@ function FileIcon({ mimeType }: { mimeType: string }) {
   const image = mimeType.startsWith("image/");
   const pdf = mimeType === "application/pdf";
   const Icon = image ? FileImage : FileText;
-  const tone = pdf ? "bg-rose-50 text-rose-600" : image ? "bg-sky-50 text-sky-600" : "bg-indigo-50 text-indigo-600";
+  const tone = pdf ? "bg-danger-soft text-danger" : image ? "bg-info-soft text-info" : "bg-accent-soft text-accent-text";
   return (
     <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}>
       <Icon className="h-5 w-5" />
@@ -58,7 +58,7 @@ export function DocumentsPanel({
           title="Key documents"
           description={`${done} of ${expected.length} uploaded`}
           action={
-            <div className="hidden h-2 w-32 overflow-hidden rounded-full bg-slate-100 sm:block">
+            <div className="hidden h-2 w-32 overflow-hidden rounded-full bg-surface-3 sm:block">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
                 style={{ width: `${(done / expected.length) * 100}%` }}
@@ -73,13 +73,13 @@ export function DocumentsPanel({
                 <li
                   key={t}
                   className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${
-                    ok ? "bg-emerald-50/70 text-emerald-800" : "bg-slate-50 text-slate-500"
+                    ok ? "bg-success-soft/70 text-success" : "bg-surface-2 text-muted"
                   }`}
                 >
                   {ok ? (
-                    <CircleCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+                    <CircleCheck className="h-4 w-4 shrink-0 text-success" />
                   ) : (
-                    <CircleDashed className="h-4 w-4 shrink-0 text-slate-400" />
+                    <CircleDashed className="h-4 w-4 shrink-0 text-subtle" />
                   )}
                   <span className="font-medium">{DOCUMENT_LABELS[t]}</span>
                   {!ok && <span className="ml-auto text-xs">Missing</span>}
@@ -97,7 +97,7 @@ export function DocumentsPanel({
               description="Upload Aadhaar, certificates and other records using the form."
             />
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line">
               {documents.map((d) => (
                 <li key={d.id} className="flex flex-wrap items-center gap-4 px-6 py-4">
                   <FileIcon mimeType={d.mimeType} />
@@ -107,18 +107,18 @@ export function DocumentsPanel({
                         href={`/api/documents/${d.id}`}
                         target="_blank"
                         rel="noopener"
-                        className="truncate font-medium text-slate-900 hover:text-indigo-600"
+                        className="truncate font-medium text-fg hover:text-accent-text"
                       >
                         {d.title}
                       </a>
                       {d.title !== DOCUMENT_LABELS[d.type] && <Badge>{DOCUMENT_LABELS[d.type]}</Badge>}
                       {d.documentNumber && (
-                        <span className="font-mono text-xs tracking-wider text-slate-500">
+                        <span className="font-mono text-xs tracking-wider text-muted">
                           {maskDocumentNumber(d.documentNumber)}
                         </span>
                       )}
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                    <p className="mt-0.5 truncate text-xs text-muted">
                       {d.fileName} · {formatBytes(d.size)} · Uploaded {dateFormat.format(d.createdAt)}
                     </p>
                   </div>

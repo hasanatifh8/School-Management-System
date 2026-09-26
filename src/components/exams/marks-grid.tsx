@@ -4,7 +4,7 @@ import Link from "next/link";
 import { startTransition, useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { CircleCheck, EyeOff, FileBarChart, Loader2, Lock, Save, Send } from "lucide-react";
 import { FormMessage } from "@/components/forms";
-import { Badge, buttonVariants } from "@/components/ui";
+import { Badge, buttonVariants, useConfirm, useToast } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { PASS_PERCENT, formatExamDate, formatMarks, gradeFor, parseMark } from "@/lib/exams-shared";
 
@@ -47,6 +47,8 @@ export function MarksGrid({
   const [errors, setErrors] = useState<Record<string, string[] | undefined>>({});
   const [publishState, setPublishState] = useState<ActionState>({});
   const [publishing, startPublishing] = useTransition();
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const changed = Object.keys({ ...values, ...saved }).filter((k) => (values[k] ?? "") !== (saved[k] ?? ""));
   const dirty = changed.length > 0;
@@ -64,6 +66,11 @@ export function MarksGrid({
     setSeen(state);
     setErrors(state.fieldErrors ?? {});
   }
+
+  useEffect(() => {
+    if (state.ok) toast({ title: state.message ?? "Marks saved" });
+    else if (state.error) toast({ title: state.error, tone: "error" });
+  }, [state, toast]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -138,11 +145,11 @@ export function MarksGrid({
     el?.select();
   };
 
-  const th = "whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500";
+  const th = "whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted";
   return (
     <div>
       {/* Status bar */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-6 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 text-sm sm:px-6">
         {locked ? (
           <Badge tone="green">
             <Lock className="h-3 w-3" />
@@ -155,32 +162,32 @@ export function MarksGrid({
         )}
         <Progress label={data.enterAll ? "All marks" : "Your papers"} done={data.enterAll ? filled : mineFilled} total={data.enterAll ? required : mine} />
         {!data.enterAll && <Progress label="Whole class" done={filled} total={required} />}
-        <Link href={resultsHref} className="ml-auto inline-flex items-center gap-1.5 font-medium text-indigo-600 hover:text-indigo-500">
+        <Link href={resultsHref} className="ml-auto inline-flex items-center gap-1.5 font-medium text-accent-text underline-offset-4 hover:underline">
           <FileBarChart className="h-4 w-4" />
           {locked ? "Results & report cards" : data.canPublish ? "Preview results" : "Results"}
         </Link>
       </div>
 
       {data.ungraded > 0 && (
-        <p className="border-b border-slate-100 bg-slate-50 px-6 py-2 text-xs text-slate-500">
+        <p className="border-b border-line bg-surface-2 px-6 py-2 text-xs text-muted">
           {data.ungraded} paper{data.ungraded === 1 ? " has" : "s have"} no max marks, so {data.ungraded === 1 ? "it isn't" : "they aren't"} graded. Add max marks in the timetable to include {data.ungraded === 1 ? "it" : "them"}.
         </p>
       )}
 
       {papers.length === 0 || students.length === 0 ? (
-        <p className="px-6 py-12 text-center text-sm text-slate-500">
+        <p className="px-6 py-12 text-center text-sm text-muted">
           {students.length === 0 ? "There are no students in this section." : "No paper for this class has max marks yet. Add max marks in the timetable to enter marks."}
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="border-b border-slate-100 bg-slate-50/80">
+            <thead className="border-b border-line bg-surface-2/80">
               <tr>
-                <th className={`${th} sticky left-0 z-10 bg-slate-50 pl-6`}>Student</th>
+                <th className={`${th} sticky left-0 z-10 bg-surface-2 pl-6`}>Student</th>
                 {papers.map((p) => (
                   <th key={p.id} className={`${th} text-center normal-case tracking-normal`}>
-                    <span className={`block text-xs font-semibold ${p.editable && !locked ? "text-slate-900" : "text-slate-500"}`}>{p.name}</span>
-                    <span className="block text-[11px] font-normal text-slate-500">
+                    <span className={`block text-xs font-semibold ${p.editable && !locked ? "text-fg" : "text-muted"}`}>{p.name}</span>
+                    <span className="block text-[11px] font-normal text-muted">
                       {formatExamDate(p.date)} · MM {p.maxMarks}
                     </span>
                   </th>
@@ -189,21 +196,21 @@ export function MarksGrid({
                 <th className={`${th} pr-6 text-right`}>%</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {students.map((s, row) => {
                 const t = totals[row];
                 return (
-                  <tr key={s.id} className="hover:bg-slate-50/60">
-                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-3 py-2 pl-6">
-                      <span className="mr-2 inline-block w-6 text-right text-xs tabular-nums text-slate-400">{s.rollNumber ?? "—"}</span>
-                      <span className="font-medium text-slate-900">{s.name}</span>
+                  <tr key={s.id} className="hover:bg-surface-2/60">
+                    <td className="sticky left-0 z-10 whitespace-nowrap bg-surface px-3 py-2 pl-6">
+                      <span className="mr-2 inline-block w-6 text-right text-xs tabular-nums text-subtle">{s.rollNumber ?? "—"}</span>
+                      <span className="font-medium text-fg">{s.name}</span>
                     </td>
                     {papers.map((p, col) => {
                       const k = key(p.id, s.id);
                       const err = errors[`m.${p.id}.${s.id}`]?.[0];
                       if (!s.eligible.includes(p.id)) {
                         return (
-                          <td key={p.id} className="px-3 py-2 text-center text-xs text-slate-300" title={`${s.name} doesn't take this subject`}>
+                          <td key={p.id} className="px-3 py-2 text-center text-xs text-subtle" title={`${s.name} doesn't take this subject`}>
                             N/A
                           </td>
                         );
@@ -213,8 +220,8 @@ export function MarksGrid({
                       const low = "marks" in parsed && (parsed.marks / p.maxMarks) * 100 < PASS_PERCENT;
                       if (!p.editable || locked) {
                         return (
-                          <td key={p.id} className={`px-3 py-2 text-center tabular-nums ${v === "AB" ? "font-medium text-rose-600" : low ? "text-rose-600" : "text-slate-700"}`}>
-                            {v || <span className="text-slate-300">—</span>}
+                          <td key={p.id} className={`px-3 py-2 text-center tabular-nums ${v === "AB" ? "font-medium text-danger" : low ? "text-danger" : "text-fg-2"}`}>
+                            {v || <span className="text-subtle">—</span>}
                           </td>
                         );
                       }
@@ -238,23 +245,23 @@ export function MarksGrid({
                                 move(row - 1, col);
                               }
                             }}
-                            className={`w-16 rounded-md border px-2 py-1.5 text-center tabular-nums outline-none transition focus:ring-4 ${
+                            className={`w-16 rounded-lg border px-2 py-1.5 text-center tabular-nums outline-none transition focus:ring-4 ${
                               err || "error" in parsed
-                                ? "border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-500/10"
+                                ? "border-danger-solid bg-danger-soft text-danger focus:ring-danger-solid/15"
                                 : v === "AB"
-                                  ? "border-rose-200 bg-rose-50/50 font-medium text-rose-600 focus:border-indigo-500 focus:ring-indigo-500/10"
-                                  : `border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10 ${low ? "text-rose-600" : "text-slate-900"} ${(saved[k] ?? "") !== v ? "bg-amber-50" : "bg-white"}`
+                                  ? "border-danger-line bg-danger-soft/50 font-medium text-danger focus:border-accent focus:ring-accent/15"
+                                  : `border-line focus:border-accent focus:ring-accent/15 ${low ? "text-danger" : "text-fg"} ${(saved[k] ?? "") !== v ? "bg-warning-soft" : "bg-surface"}`
                             }`}
                           />
-                          {(err || "error" in parsed) && <p className="mt-0.5 text-[11px] leading-tight text-rose-600">{err ?? ("error" in parsed ? parsed.error : "")}</p>}
+                          {(err || "error" in parsed) && <p className="mt-0.5 text-[11px] leading-tight text-danger">{err ?? ("error" in parsed ? parsed.error : "")}</p>}
                         </td>
                       );
                     })}
-                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-700">
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-fg-2">
                       {t.max ? (
                         <>
-                          <span className="font-semibold text-slate-900">{formatMarks(t.got)}</span>
-                          <span className="text-slate-400">/{t.max}</span>
+                          <span className="font-semibold text-fg">{formatMarks(t.got)}</span>
+                          <span className="text-subtle">/{t.max}</span>
                         </>
                       ) : (
                         "—"
@@ -262,11 +269,11 @@ export function MarksGrid({
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 pr-6 text-right tabular-nums">
                       {t.complete && t.max ? (
-                        <span className={t.failed ? "text-rose-600" : "text-slate-900"}>
-                          {t.percent.toFixed(1)} <span className="text-xs text-slate-400">{gradeFor(t.percent)}</span>
+                        <span className={t.failed ? "text-danger" : "text-fg"}>
+                          {t.percent.toFixed(1)} <span className="text-xs text-subtle">{gradeFor(t.percent)}</span>
                         </span>
                       ) : (
-                        <span className="text-slate-300">—</span>
+                        <span className="text-subtle">—</span>
                       )}
                     </td>
                   </tr>
@@ -278,19 +285,19 @@ export function MarksGrid({
       )}
 
       {/* Save and publish */}
-      <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 lg:flex-row lg:items-center">
+      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 flex flex-col gap-3 rounded-b-2xl border-t border-line bg-glass px-4 py-4 backdrop-blur-xl sm:px-6 md:bottom-0 lg:flex-row lg:items-center">
         <div className="min-w-0 flex-1 space-y-2">
-          <FormMessage state={dirty && state.ok ? {} : state} />
+          <FormMessage state={state.error ? state : {}} />
           <FormMessage state={publishState} />
           {!locked && papers.some((p) => p.editable) && (
-            <p className="text-xs text-slate-500">Type marks, or AB for absent. Enter moves down. Marks below {PASS_PERCENT}% show in red.</p>
+            <p className="text-xs text-muted">Type marks, or AB for absent. Enter moves down. Marks below {PASS_PERCENT}% show in red.</p>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!locked && papers.some((p) => p.editable) && (
             <button type="button" onClick={submit} disabled={saving || !dirty} className={buttonVariants.primary}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? "Saving…" : dirty ? `Save ${changed.length} change${changed.length === 1 ? "" : "s"}` : "Saved"}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : dirty ? <Save className="h-4 w-4" /> : <CircleCheck className="h-4 w-4" />}
+              {dirty ? `Save ${changed.length} change${changed.length === 1 ? "" : "s"}` : "All saved"}
             </button>
           )}
           {data.canPublish &&
@@ -298,9 +305,13 @@ export function MarksGrid({
               <button
                 type="button"
                 disabled={publishing}
-                onClick={() => {
-                  if (!window.confirm("Unpublish these results? Marks become editable again.")) return;
-                  startPublishing(async () => setPublishState(await unpublish()));
+                onClick={async () => {
+                  if (!(await confirm({ title: "Unpublish these results?", message: "Marks become editable again.", confirmLabel: "Unpublish" }))) return;
+                  startPublishing(async () => {
+                    const r = await unpublish();
+                    setPublishState(r);
+                    if (r.ok) toast({ title: r.message ?? "Results unpublished" });
+                  });
                 }}
                 className={buttonVariants.secondary}
               >
@@ -312,9 +323,13 @@ export function MarksGrid({
                 type="button"
                 disabled={publishing || dirty || filled < required || required === 0}
                 title={dirty ? "Save your changes first" : filled < required ? `${required - filled} mark(s) still missing` : undefined}
-                onClick={() => {
-                  if (!window.confirm(`Publish results for ${data.section.label}? Marks will be locked.`)) return;
-                  startPublishing(async () => setPublishState(await publish()));
+                onClick={async () => {
+                  if (!(await confirm({ title: `Publish results for ${data.section.label}?`, message: "Marks will be locked and report cards become available.", confirmLabel: "Publish" }))) return;
+                  startPublishing(async () => {
+                    const r = await publish();
+                    setPublishState(r);
+                    if (r.ok) toast({ title: r.message ?? "Results published", description: "Report cards are ready." });
+                  });
                 }}
                 className={filled >= required && required > 0 ? buttonVariants.primary : buttonVariants.secondary}
               >
@@ -331,10 +346,10 @@ export function MarksGrid({
 function Progress({ label, done, total }: { label: string; done: number; total: number }) {
   const pct = total ? Math.round((done / total) * 100) : 0;
   return (
-    <span className="flex items-center gap-2 text-xs text-slate-600">
+    <span className="flex items-center gap-2 text-xs text-fg-2">
       {label}
-      <span className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
-        <span className={`block h-full rounded-full ${pct === 100 ? "bg-emerald-500" : "bg-indigo-500"}`} style={{ width: `${pct}%` }} />
+      <span className="h-2 w-24 overflow-hidden rounded-full bg-surface-3">
+        <span className={`block h-full rounded-full transition-[width] duration-500 ease-out ${pct === 100 ? "bg-success-solid" : "bg-accent"}`} style={{ width: `${pct}%` }} />
       </span>
       <span className="tabular-nums">
         {done}/{total}

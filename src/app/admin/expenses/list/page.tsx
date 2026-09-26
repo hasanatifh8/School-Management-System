@@ -39,12 +39,12 @@ export default async function ExpenseListPage({ searchParams }: PageProps<"/admi
       <MonthPicker basePath="/admin/expenses/list" month={month} max={current} current={current} />
       <div className="grid gap-6 xl:grid-cols-3">
         <Card padded={false} className="xl:col-span-2" title={`${category ? category.name : "All expenses"} · ${rupees(total)}`} description={`${paging.total} entr${paging.total === 1 ? "y" : "ies"}. Salaries are on the Salaries tab.`}>
-          <div className="flex flex-wrap gap-1.5 border-b border-slate-100 px-6 py-3">
-            <Link href={base} className={`rounded-full px-3 py-1 text-xs font-medium ${!category ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+          <div className="flex flex-wrap gap-1.5 border-b border-line px-6 py-3">
+            <Link href={base} className={`rounded-full px-3 py-1 text-xs font-medium ${!category ? "bg-accent text-white" : "bg-surface-3 text-fg-2 hover:bg-surface-3"}`}>
               All
             </Link>
             {categories.map((c) => (
-              <Link key={c.id} href={`${base}&category=${c.id}`} className={`rounded-full px-3 py-1 text-xs font-medium ${category?.id === c.id ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+              <Link key={c.id} href={`${base}&category=${c.id}`} className={`rounded-full px-3 py-1 text-xs font-medium ${category?.id === c.id ? "bg-accent text-white" : "bg-surface-3 text-fg-2 hover:bg-surface-3"}`}>
                 {c.name}
               </Link>
             ))}
@@ -69,12 +69,12 @@ export default async function ExpenseListPage({ searchParams }: PageProps<"/admi
                   <tr key={e.id} className={trClass}>
                     <td className={`${tdClass} whitespace-nowrap`}>{dateFmt.format(e.date)}</td>
                     <td className={tdClass}>
-                      <p className="font-medium text-slate-900">{e.category.name}</p>
-                      <p className="text-xs text-slate-500">{[e.paidTo, e.description].filter(Boolean).join(" · ") || "—"}</p>
+                      <p className="font-medium text-fg">{e.category.name}</p>
+                      <p className="text-xs text-muted">{[e.paidTo, e.description].filter(Boolean).join(" · ") || "—"}</p>
                     </td>
                     <td className={tdClass}>
                       {MODE_LABELS[e.mode]}
-                      {e.reference && <p className="text-xs text-slate-500">{e.reference}</p>}
+                      {e.reference && <p className="text-xs text-muted">{e.reference}</p>}
                     </td>
                     <td className={`${tdClass} text-right font-semibold tabular-nums`}>{rupees(e.amount)}</td>
                     <td className={`${tdClass} text-right`}>

@@ -4,7 +4,7 @@ import { useActionState, startTransition } from "react";
 import { KeyRound, LogIn, Power, Trash2 } from "lucide-react";
 import { ActionForm, Field, FormMessage, SubmitButton } from "@/components/forms";
 import { CredentialsNotice } from "@/components/credentials-notice";
-import { Badge, Card, buttonVariants, inputClass } from "@/components/ui";
+import { Badge, Card, buttonVariants, inputClass, useConfirm } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 
 type Props = {
@@ -26,8 +26,9 @@ export function TeacherLoginCard({ username, hasLogin, enabled, lastLoginAt, iss
       op === "issue" ? issue() : op === "remove" ? remove() : setEnabled(op === "enable"),
     {},
   );
-  const act = (op: "issue" | "enable" | "disable" | "remove", confirmText?: string) => {
-    if (confirmText && !window.confirm(confirmText)) return;
+  const confirm = useConfirm();
+  const act = async (op: "issue" | "enable" | "disable" | "remove", confirmText?: string) => {
+    if (confirmText && !(await confirm({ title: confirmText }))) return;
     startTransition(() => run(op));
   };
 
@@ -52,13 +53,13 @@ export function TeacherLoginCard({ username, hasLogin, enabled, lastLoginAt, iss
           </button>
         ) : (
           <>
-            <dl className="space-y-1 text-slate-600">
+            <dl className="space-y-1 text-fg-2">
               <div>
-                <dt className="inline text-slate-400">Username: </dt>
-                <dd className="inline font-mono text-slate-900">{username}</dd>
+                <dt className="inline text-subtle">Username: </dt>
+                <dd className="inline font-mono text-fg">{username}</dd>
               </div>
               <div>
-                <dt className="inline text-slate-400">Last sign-in: </dt>
+                <dt className="inline text-subtle">Last sign-in: </dt>
                 <dd className="inline">{lastLoginAt ?? "never"}</dd>
               </div>
             </dl>
@@ -74,7 +75,7 @@ export function TeacherLoginCard({ username, hasLogin, enabled, lastLoginAt, iss
               </Field>
             </ActionForm>
 
-            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+            <div className="flex flex-wrap gap-2 border-t border-line pt-4">
               <button
                 type="button"
                 disabled={pending}

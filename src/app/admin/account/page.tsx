@@ -14,7 +14,7 @@ export default async function AccountPage() {
       <>
         <PageHeader title="Account" />
         <Card>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-fg-2">
             You are signed in as Power Admin. School admin accounts are managed from each school&apos;s page in Power Admin.
           </p>
         </Card>
@@ -24,7 +24,7 @@ export default async function AccountPage() {
   const { admin } = viewer;
   return (
     <>
-      <PageHeader title="Account" subtitle="Your sign-in details for the Admin Portal." />
+      <PageHeader title="Account" subtitle="Your sign-in details for the Admin Portal." breadcrumbs={admin.role === "ADMIN" ? [{ label: "Settings", href: "/admin/settings" }, { label: "Account" }] : undefined} />
       <div className="grid gap-6 xl:grid-cols-3">
         <Card title="Profile" className="self-start">
           <dl className="space-y-4">
@@ -35,7 +35,7 @@ export default async function AccountPage() {
               {admin.lastLoginAt ? when.format(admin.lastLoginAt) : "—"}
             </InfoItem>
           </dl>
-          <p className="mt-4 text-xs text-slate-500">To change your name or email, ask your Power Admin.</p>
+          <p className="mt-4 text-xs text-muted">To change your name or email, ask your Power Admin.</p>
         </Card>
         <Card title="Change password" description="Other devices are signed out when you change it." className="xl:col-span-2">
           <ChangePasswordForm />

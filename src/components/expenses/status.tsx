@@ -11,11 +11,11 @@ export function budgetStatus(c: { budget: number | null; spent: number; forecast
 }
 
 const META = {
-  over: { label: "Over budget", icon: OctagonAlert, cls: "bg-rose-50 text-rose-700 ring-rose-200", bar: "bg-rose-500" },
-  risk: { label: "Likely over", icon: TriangleAlert, cls: "bg-amber-50 text-amber-800 ring-amber-200", bar: "bg-amber-500" },
-  near: { label: "Near limit", icon: TriangleAlert, cls: "bg-amber-50 text-amber-800 ring-amber-200", bar: "bg-amber-500" },
-  under: { label: "Under budget", icon: CircleCheck, cls: "bg-emerald-50 text-emerald-700 ring-emerald-200", bar: "bg-emerald-500" },
-  none: { label: "No budget", icon: CircleMinus, cls: "bg-slate-100 text-slate-600 ring-slate-200", bar: "bg-slate-400" },
+  over: { label: "Over budget", icon: OctagonAlert, cls: "bg-danger-soft text-danger ring-danger-line", bar: "bg-danger-solid" },
+  risk: { label: "Likely over", icon: TriangleAlert, cls: "bg-warning-soft text-warning ring-warning-line", bar: "bg-warning-solid" },
+  near: { label: "Near limit", icon: TriangleAlert, cls: "bg-warning-soft text-warning ring-warning-line", bar: "bg-warning-solid" },
+  under: { label: "Under budget", icon: CircleCheck, cls: "bg-success-soft text-success ring-success-line", bar: "bg-success-solid" },
+  none: { label: "No budget", icon: CircleMinus, cls: "bg-surface-3 text-fg-2 ring-line", bar: "bg-line-strong" },
 } as const;
 
 export const statusBar = (s: BudgetStatus) => META[s].bar;

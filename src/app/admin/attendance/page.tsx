@@ -1,22 +1,26 @@
 import Link from "next/link";
-import { CalendarCheck, CalendarOff, Phone, Sun, UserRoundX, Users } from "lucide-react";
+import { CalendarCheck, CalendarOff, Megaphone, PartyPopper, Phone, Sun, Table2, UserRoundX, Users } from "lucide-react";
 import { DateNav } from "@/components/attendance/date-nav";
 import { UpcomingHolidays } from "@/components/attendance/upcoming-holidays";
 import {
   Badge,
   ButtonLink,
+  Callout,
   Card,
   EmptyState,
-  IconTile,
+  MenuLink,
+  MoreMenu,
+  PagedList,
   PageHeader,
   PersonCell,
+  StatCard,
+  StatGrid,
   Table,
   tbodyClass,
   tdClass,
   thClass,
   theadClass,
   trClass,
-  type IconTone,
 } from "@/components/ui";
 import { attendanceWindow, pickDate } from "@/lib/attendance";
 import {
@@ -94,6 +98,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
           x.records.filter((r) => r.status === "ABSENT").map((r) => ({ ...r, section: sections.find((s) => s.id === x.sectionId)! })),
         );
   const percent = attendancePercent(total);
+  const nextToMark = holiday ? null : rows.find((r) => !r.marked && !r.day?.holiday && r.section._count.students > 0);
 
   return (
     <>
@@ -101,9 +106,23 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
         title="Attendance"
         subtitle={`${formatISO(date)} · Session ${win.session.name}`}
         action={
-          <ButtonLink href="/admin/attendance/holidays" variant="secondary" icon={CalendarOff}>
-            Holidays
-          </ButtonLink>
+          <>
+            <MoreMenu>
+              <MenuLink href="/admin/attendance/holidays" icon={<CalendarOff />}>
+                School holidays
+              </MenuLink>
+              {absentees.length > 0 && (
+                <MenuLink href={`/admin/notices?absent=${date}`} icon={<Megaphone />}>
+                  Message absent parents
+                </MenuLink>
+              )}
+            </MoreMenu>
+            {nextToMark && (
+              <ButtonLink href={`/admin/attendance/${nextToMark.section.id}?date=${date}`} icon={CalendarCheck}>
+                Take · {sectionLabel(nextToMark.section)}
+              </ButtonLink>
+            )}
+          </>
         }
       />
       <div className="mb-6">
@@ -111,27 +130,23 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
       </div>
 
       {holiday ? (
-        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-violet-200 bg-violet-50/70 px-5 py-4 text-sm text-violet-900">
-          <CalendarOff className="h-5 w-5 text-violet-500" />
-          <span>
-            <strong>School holiday: {holiday.name}.</strong> No attendance is taken today.
-          </span>
-        </div>
+        <Callout icon={CalendarOff} className="mb-6">
+          <strong className="font-semibold">School holiday: {holiday.name}.</strong> No attendance is taken today.
+        </Callout>
       ) : (
         isSunday(date) && (
-          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-5 py-4 text-sm text-amber-900">
-            <Sun className="h-5 w-5 text-amber-500" />
+          <Callout icon={Sun} tone="warning" className="mb-6">
             Sunday is a weekly off. Classes that were open can still take attendance.
-          </div>
+          </Callout>
         )
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <Stat icon={CalendarCheck} tone="indigo" label="Classes marked" value={`${markedCount} / ${withStudents.length}`} detail={holiday ? "School holiday" : toMark > 0 ? `${toMark} still to mark` : "All done"} />
-        <Stat icon={Users} tone="emerald" label="Attending" value={String(total.PRESENT + total.LATE + total.HALF_DAY)} detail={percent == null ? "Nothing marked yet" : `${percent}% attendance`} />
-        <Stat icon={UserRoundX} tone="rose" label="Absent" value={String(total.ABSENT)} detail={total.LEAVE ? `${total.LEAVE} on leave` : "Across marked classes"} />
-        <Stat icon={CalendarOff} tone="violet" label="Classes off" value={String(classOff)} detail={holiday ? holiday.name : "Class holidays today"} />
-      </div>
+      <StatGrid>
+        <StatCard icon={CalendarCheck} tone="indigo" label="Classes marked" value={`${markedCount} / ${withStudents.length}`} detail={holiday ? "School holiday" : toMark > 0 ? `${toMark} still to mark` : "All done"} />
+        <StatCard icon={Users} tone="emerald" label="Attending" value={total.PRESENT + total.LATE + total.HALF_DAY} detail={percent == null ? "Nothing marked yet" : `${percent}% attendance`} />
+        <StatCard icon={UserRoundX} tone="rose" label="Absent" value={total.ABSENT} detail={total.LEAVE ? `${total.LEAVE} on leave` : "Across marked classes"} />
+        <StatCard icon={CalendarOff} tone="violet" label="Classes off" value={classOff} detail={holiday ? holiday.name : "Class holidays today"} />
+      </StatGrid>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <Card title="Classes" padded={false} className="xl:col-span-2">
@@ -144,7 +159,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
                   <th className={thClass}>Class</th>
                   <th className={thClass}>Status</th>
                   {ATTENDANCE_STATUSES.map((s) => (
-                    <th key={s} title={STATUS_META[s].label} className={`${thClass} !px-2 text-center ${STATUS_META[s].text}`}>
+                    <th key={s} title={STATUS_META[s].label} className={`${thClass} hidden !px-2 text-center md:table-cell ${STATUS_META[s].text}`}>
                       {STATUS_META[s].short}
                     </th>
                   ))}
@@ -157,8 +172,8 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
                 {rows.map(({ section: s, day, counts, marked }) => (
                   <tr key={s.id} className={trClass}>
                     <td className={tdClass}>
-                      <p className="font-medium text-slate-900">{sectionLabel(s)}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="font-medium text-fg">{sectionLabel(s)}</p>
+                      <p className="text-xs text-muted">
                         {s._count.students} students · {s.classTeacher ? fullName(s.classTeacher) : "No class teacher"}
                       </p>
                     </td>
@@ -184,17 +199,28 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
                       )}
                     </td>
                     {ATTENDANCE_STATUSES.map((st) => (
-                      <td key={st} className={`${tdClass} !px-2 text-center tabular-nums`}>
-                        {marked ? counts[st] : <span className="text-slate-300">–</span>}
+                      <td key={st} className={`${tdClass} hidden !px-2 text-center tabular-nums md:table-cell`}>
+                        {marked ? counts[st] : <span className="text-subtle">–</span>}
                       </td>
                     ))}
                     <td className={`${tdClass} whitespace-nowrap text-right`}>
-                      <Link href={`/admin/attendance/${s.id}?date=${date}`} className="font-medium text-indigo-600 hover:text-indigo-500">
-                        {marked ? "Edit" : holiday ? "View" : "Take"}
-                      </Link>
-                      <Link href={`/admin/attendance/${s.id}/register?month=${date.slice(0, 7)}`} className="ml-4 text-slate-500 hover:text-slate-800">
-                        Register
-                      </Link>
+                      <div className="flex items-center justify-end gap-1">
+                        <ButtonLink
+                          href={`/admin/attendance/${s.id}?date=${date}`}
+                          size="sm"
+                          variant={marked || holiday || day?.holiday || !s._count.students ? "ghost" : "primary"}
+                        >
+                          {marked ? "Edit" : holiday || day?.holiday || !s._count.students ? "View" : "Take"}
+                        </ButtonLink>
+                        <Link
+                          href={`/admin/attendance/${s.id}/register?month=${date.slice(0, 7)}`}
+                          title="Monthly register"
+                          aria-label={`Monthly register for ${sectionLabel(s)}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-subtle transition hover:bg-surface-3 hover:text-fg"
+                        >
+                          <Table2 className="h-4 w-4" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -211,16 +237,16 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
             padded={false}
             action={
               absentees.length > 0 && (
-                <Link href={`/admin/notices?absent=${date}`} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                <Link href={`/admin/notices?absent=${date}`} className="text-sm font-medium text-accent-text underline-offset-4 hover:underline">
                   Message parents
                 </Link>
               )
             }
           >
             {absentees.length === 0 ? (
-              <p className="p-6 text-sm text-slate-500">{markedCount ? "No one is absent." : "No attendance marked yet."}</p>
+              <EmptyState compact icon={markedCount ? PartyPopper : UserRoundX} title={markedCount ? "No one is absent" : "No attendance marked yet"} />
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <PagedList pageSize={8} noun="absent">
                 {absentees.map((a) => (
                   <li key={a.student.id} className="flex items-center justify-between gap-3 px-6 py-3">
                     <div className="min-w-0">
@@ -233,20 +259,20 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
                       />
                     </div>
                     {a.student.phone && (
-                      <a href={`tel:${a.student.phone}`} title={`Call ${a.student.phone}`} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600">
+                      <a href={`tel:${a.student.phone}`} title={`Call ${a.student.phone}`} className="rounded-md p-1.5 text-subtle hover:bg-surface-3 hover:text-accent-text">
                         <Phone className="h-4 w-4" />
                       </a>
                     )}
                   </li>
                 ))}
-              </ul>
+              </PagedList>
             )}
           </Card>
           <UpcomingHolidays
             schoolId={school.id}
             from={win.today}
             action={
-              <Link href="/admin/attendance/holidays" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+              <Link href="/admin/attendance/holidays" className="text-sm font-medium text-accent-text underline-offset-4 hover:underline">
                 Manage
               </Link>
             }
@@ -254,16 +280,5 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
         </div>
       </div>
     </>
-  );
-}
-
-function Stat({ icon, tone, label, value, detail }: { icon: typeof Users; tone: IconTone; label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-      <IconTile icon={icon} tone={tone} />
-      <p className="mt-3 text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">{value}</p>
-      <p className="mt-1 truncate text-xs text-slate-500">{detail}</p>
-    </div>
   );
 }

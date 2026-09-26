@@ -32,8 +32,8 @@ export function SelectionControls({ total }: { total: number }) {
 
   return (
     <div ref={ref} className="flex flex-wrap items-center justify-between gap-2">
-      <span className="text-sm text-slate-500">
-        <span className="font-semibold text-slate-900 tabular-nums">{count}</span> of {total} selected
+      <span className="text-sm text-muted">
+        <span className="font-semibold text-fg tabular-nums">{count}</span> of {total} selected
       </span>
       <div className="flex gap-1">
         <button type="button" onClick={() => setAll(true)} className={`${buttonVariants.ghost} !px-2 !py-1`}>

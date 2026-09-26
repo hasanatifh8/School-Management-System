@@ -72,7 +72,7 @@ export default async function FeeStructurePage() {
       <Table>
         <thead className={theadClass}>
           <tr>
-            <th className={`${thClass} sticky left-0 z-10 bg-slate-50`}>Fee</th>
+            <th className={`${thClass} sticky left-0 z-10 bg-surface-2`}>Fee</th>
             {classes.map((c) => (
               <th key={c.id} className={`${thClass} text-right`}>
                 {c.name}
@@ -88,12 +88,12 @@ export default async function FeeStructurePage() {
         <tbody className={tbodyClass}>
           {heads.map((h) => (
             <tr key={h.id}>
-              <td className={`${tdClass} sticky left-0 z-10 bg-white`}>
-                <p className="font-medium text-slate-900">{h.name}</p>
+              <td className={`${tdClass} sticky left-0 z-10 bg-surface`}>
+                <p className="font-medium text-fg">{h.name}</p>
                 <p className="mt-1 flex flex-wrap gap-1">
                   <Badge tone="indigo">{FREQUENCY_META[h.frequency].short}</Badge>
                   {h.optional && <Badge tone="sky">Opt-in</Badge>}
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-muted">
                     {h.frequency === "YEARLY"
                       ? `due ${h.dueDay} ${MONTH_NAMES[(h.dueMonth ?? 4) - 1]}`
                       : h.frequency === "ONE_TIME"
@@ -104,13 +104,13 @@ export default async function FeeStructurePage() {
               </td>
               {classes.map((c) => (
                 <td key={c.id} className={`${tdClass} text-right tabular-nums`}>
-                  {h.amounts[c.id] ? rupees(h.amounts[c.id]) : <span className="text-slate-300">—</span>}
+                  {h.amounts[c.id] ? rupees(h.amounts[c.id]) : <span className="text-subtle">—</span>}
                 </td>
               ))}
               {canManage && (
                 <td className={`${tdClass} whitespace-nowrap`}>
                   <div className="flex items-center gap-1">
-                    <Link href={`/admin/fees/structure/${h.id}`} title={`Edit ${h.name}`} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600">
+                    <Link href={`/admin/fees/structure/${h.id}`} title={`Edit ${h.name}`} className="rounded-md p-1.5 text-subtle hover:bg-surface-3 hover:text-accent-text">
                       <Pencil className="h-4 w-4" />
                     </Link>
                     <ActionForm action={deleteFeeHead.bind(null, h.id)} compact className="flex flex-row-reverse items-center gap-2">
@@ -124,14 +124,14 @@ export default async function FeeStructurePage() {
             </tr>
           ))}
         </tbody>
-        <tfoot className="border-t-2 border-slate-200 bg-slate-50/80">
+        <tfoot className="border-t-2 border-line bg-surface-2/80">
           <tr>
-            <td className={`${tdClass} sticky left-0 z-10 bg-slate-50 font-semibold text-slate-900`}>
+            <td className={`${tdClass} sticky left-0 z-10 bg-surface-2 font-semibold text-fg`}>
               Yearly per student
-              <span className="block text-xs font-normal text-slate-500">Regular fees for the whole session</span>
+              <span className="block text-xs font-normal text-muted">Regular fees for the whole session</span>
             </td>
             {classes.map((c) => (
-              <td key={c.id} className={`${tdClass} text-right font-semibold tabular-nums text-slate-900`}>
+              <td key={c.id} className={`${tdClass} text-right font-semibold tabular-nums text-fg`}>
                 {rupees(regular.reduce((n, h) => n + perYear(h, c.id), 0))}
               </td>
             ))}
@@ -139,9 +139,9 @@ export default async function FeeStructurePage() {
           </tr>
           {oneTime.length > 0 && (
             <tr>
-              <td className={`${tdClass} sticky left-0 z-10 bg-slate-50 text-slate-700`}>+ one time for new admissions</td>
+              <td className={`${tdClass} sticky left-0 z-10 bg-surface-2 text-fg-2`}>+ one time for new admissions</td>
               {classes.map((c) => (
-                <td key={c.id} className={`${tdClass} text-right tabular-nums text-slate-700`}>
+                <td key={c.id} className={`${tdClass} text-right tabular-nums text-fg-2`}>
                   {rupees(oneTime.reduce((n, h) => n + perYear(h, c.id), 0))}
                 </td>
               ))}

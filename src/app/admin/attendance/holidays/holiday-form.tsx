@@ -21,7 +21,7 @@ export function HolidayForm({ min, max }: { min: string; max: string }) {
               <input type="date" name="to" min={min} max={max} className={inputClass} />
             </Field>
           </div>
-          <p className="text-xs text-slate-500">Sundays inside a range are skipped because they are already off.</p>
+          <p className="text-xs text-muted">Sundays inside a range are skipped because they are already off.</p>
           <SubmitButton icon={<Plus className="h-4 w-4" />}>Add holiday</SubmitButton>
         </>
       )}

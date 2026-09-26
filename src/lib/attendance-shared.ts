@@ -6,13 +6,13 @@ export type AttendanceStatusKey = (typeof ATTENDANCE_STATUSES)[number];
 
 export const STATUS_META: Record<
   AttendanceStatusKey,
-  { label: string; short: string; on: string; text: string }
+  { label: string; short: string; on: string; text: string; bar: string; key: string }
 > = {
-  PRESENT: { label: "Present", short: "P", on: "bg-emerald-600 text-white ring-emerald-600", text: "text-emerald-700" },
-  ABSENT: { label: "Absent", short: "A", on: "bg-rose-600 text-white ring-rose-600", text: "text-rose-700" },
-  LATE: { label: "Late", short: "L", on: "bg-amber-500 text-white ring-amber-500", text: "text-amber-700" },
-  HALF_DAY: { label: "Half day", short: "HD", on: "bg-sky-600 text-white ring-sky-600", text: "text-sky-700" },
-  LEAVE: { label: "Leave", short: "LV", on: "bg-violet-600 text-white ring-violet-600", text: "text-violet-700" },
+  PRESENT: { label: "Present", short: "P", on: "bg-emerald-600 text-white ring-emerald-600", text: "text-success", bar: "bg-emerald-500", key: "p" },
+  ABSENT: { label: "Absent", short: "A", on: "bg-rose-600 text-white ring-rose-600", text: "text-danger", bar: "bg-rose-500", key: "a" },
+  LATE: { label: "Late", short: "L", on: "bg-amber-500 text-white ring-amber-500", text: "text-warning", bar: "bg-amber-400", key: "l" },
+  HALF_DAY: { label: "Half day", short: "HD", on: "bg-sky-600 text-white ring-sky-600", text: "text-info", bar: "bg-sky-500", key: "h" },
+  LEAVE: { label: "Leave", short: "LV", on: "bg-violet-600 text-white ring-violet-600", text: "text-violet-700 dark:text-violet-300", bar: "bg-violet-500", key: "v" },
 };
 
 export type AttendanceCounts = Record<AttendanceStatusKey, number>;
@@ -70,6 +70,31 @@ export function addMonths(month: string, n: number) {
   const d = new Date(Date.UTC(y, m - 1 + n, 1));
   return isoDate(d).slice(0, 7);
 }
+
+/** Every date from `from` to `to` (inclusive). */
+export function datesBetween(from: string, to: string) {
+  const out: string[] = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
+  return out;
+}
+
+/** The Monday on or before a date (school weeks run Monday to Sunday). */
+export function weekStart(iso: string) {
+  const day = parseISODate(iso)!.getUTCDay(); // 0 = Sunday
+  return addDays(iso, -((day + 6) % 7));
+}
+
+/** Periods the attendance register can show. "year" is the academic session. */
+export const REGISTER_PERIODS = [
+  { key: "week", label: "Week" },
+  { key: "month", label: "Month" },
+  { key: "year", label: "Session" },
+  { key: "custom", label: "Custom" },
+] as const;
+export type RegisterPeriod = (typeof REGISTER_PERIODS)[number]["key"];
+
+/** Longest range still shown day by day; longer ranges show the summary. */
+export const MAX_DAILY_DAYS = 62;
 
 export const longDate = new Intl.DateTimeFormat("en-IN", {
   weekday: "long",

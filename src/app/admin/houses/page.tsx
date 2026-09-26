@@ -48,7 +48,7 @@ export default async function HousesPage() {
             <Link
               key={h.id}
               href={`/admin/houses/${h.id}`}
-              className="group overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_4px_16px_-8px_rgba(15,23,42,0.08)] transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group overflow-hidden rounded-2xl border border-line bg-surface shadow-card transition hover:-translate-y-0.5 hover:shadow-lift"
             >
               <div className={`flex items-center gap-3 bg-gradient-to-r px-5 py-4 text-white ${c.banner}`}>
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur">
@@ -64,32 +64,32 @@ export default async function HousesPage() {
                 <ArrowRight className="h-4 w-4 text-white/70 transition group-hover:translate-x-0.5" />
               </div>
               <div className="px-5 py-4">
-                {h.description && <p className="mb-3 line-clamp-2 text-sm text-slate-600">{h.description}</p>}
+                {h.description && <p className="mb-3 line-clamp-2 text-sm text-fg-2">{h.description}</p>}
                 {h.students.length ? (
                   <div className="flex items-center">
                     <div className="flex -space-x-2">
                       {h.students.map((s) => (
-                        <span key={s.id} className="rounded-full ring-2 ring-white">
+                        <span key={s.id} className="rounded-full ring-2 ring-surface">
                           <Avatar name={fullName(s)} src={photoUrl(s.photoId)} size="sm" />
                         </span>
                       ))}
                     </div>
-                    {extra > 0 && <span className="ml-3 text-xs text-slate-500">+{extra} more</span>}
+                    {extra > 0 && <span className="ml-3 text-xs text-muted">+{extra} more</span>}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-400">No students yet. Open to assign students.</p>
+                  <p className="text-sm text-subtle">No students yet. Open to assign students.</p>
                 )}
               </div>
             </Link>
           );
         })}
 
-        <section className="rounded-2xl border-2 border-dashed border-slate-200 bg-white/60 p-6">
+        <section className="rounded-2xl border-2 border-dashed border-line bg-surface/60 p-6">
           <div className="flex items-center gap-3">
             <IconTile icon={Plus} tone="indigo" />
             <div>
-              <h2 className="font-semibold text-slate-900">Add a house</h2>
-              <p className="text-xs text-slate-500">e.g. Green House, Red House, Tagore House.</p>
+              <h2 className="font-semibold text-fg">Add a house</h2>
+              <p className="text-xs text-muted">e.g. Green House, Red House, Tagore House.</p>
             </div>
           </div>
           <ActionForm action={createHouse} className="mt-5 space-y-4">

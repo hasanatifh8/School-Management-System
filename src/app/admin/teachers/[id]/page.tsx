@@ -11,7 +11,7 @@ import {
   Droplet,
   FileText,
   GraduationCap,
-  Hash,
+  LayoutGrid,
   Mail,
   MapPin,
   MessageCircle,
@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DocumentsPanel } from "../../documents/documents-panel";
-import { Avatar, Badge, ButtonLink, Card, IconTile, PageHeader, StatusTab, type IconTone } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, Card, IconTile, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass } from "@/components/ui";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
@@ -117,146 +117,142 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
   return (
     <>
       <PageHeader
-        title="Teacher profile"
         breadcrumbs={[{ label: "Teachers", href: "/admin/teachers" }, { label: name }]}
-      />
-
-      {/* Profile summary */}
-      <section className="relative mb-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-        <div className="h-24 bg-gradient-to-r from-emerald-600 via-teal-500 to-sky-500" />
-        <div className="px-6 pb-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <span className="-mt-8 rounded-full ring-4 ring-white">
-                <Avatar name={name} src={photoUrl(teacher.photoId)} size="xl" />
-              </span>
-              <div className="pt-3">
-                <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
-                <p className="mt-0.5 text-sm text-slate-500">
-                  {[teacher.specialization, teacher.qualification].filter(Boolean).join(" · ") || "Teacher"}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Badge>
-                    <Hash className="h-3 w-3" />
-                    <span className="font-mono">{teacher.employeeCode}</span>
-                  </Badge>
-                  {teacher.bloodGroup && (
-                    <Badge tone="red">
-                      <Droplet className="h-3 w-3" />
-                      {BLOOD_GROUP_LABELS[teacher.bloodGroup]}
-                    </Badge>
-                  )}
-                  {teacher.classTeacherOf && (
-                    <Badge tone="indigo">
-                      <Crown className="h-3 w-3" />
-                      Class teacher · {sectionLabel(teacher.classTeacherOf)}
-                    </Badge>
-                  )}
-                  {removed ? (
-                    <Badge tone="red" dot>
-                      Removed
-                    </Badge>
-                  ) : (
-                    <Badge tone="green" dot>
-                      Active
-                    </Badge>
-                  )}
-                </div>
-                {subjects.size > 0 && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-medium text-slate-500">Subject teacher:</span>
-                    {[...subjects.values()].map((s) => (
-                      <Badge key={s.code} tone="sky">
-                        <BookOpen className="h-3 w-3" />
-                        {s.name} · {s.sections.map((sec) => sec.label).join(", ")}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 pt-3">
-              {tab !== "edit" && (
-                <ButtonLink href={`${base}?tab=edit`} icon={Pencil} variant="secondary">
-                  Edit profile
-                </ButtonLink>
+        leading={
+          <span className="rounded-full ring-4 ring-surface">
+            <Avatar name={name} src={photoUrl(teacher.photoId)} size="xl" />
+          </span>
+        }
+        eyebrow={<span className="font-mono normal-case tracking-normal">{teacher.employeeCode}</span>}
+        title={name}
+        subtitle={
+          <>
+            <span>{[teacher.specialization, teacher.qualification].filter(Boolean).join(" · ") || "Teacher"}</span>
+            <span className="mt-2 flex flex-wrap items-center gap-2">
+              {teacher.classTeacherOf && (
+                <Badge tone="indigo">
+                  <Crown className="h-3 w-3" />
+                  Class teacher · {sectionLabel(teacher.classTeacherOf)}
+                </Badge>
+              )}
+              {[...subjects.values()].slice(0, 3).map((s) => (
+                <Badge key={s.code} tone="sky">
+                  <BookOpen className="h-3 w-3" />
+                  {s.name}
+                </Badge>
+              ))}
+              {subjects.size > 3 && <Badge>+{subjects.size - 3} more</Badge>}
+              {teacher.bloodGroup && (
+                <Badge tone="red">
+                  <Droplet className="h-3 w-3" />
+                  {BLOOD_GROUP_LABELS[teacher.bloodGroup]}
+                </Badge>
               )}
               {removed ? (
-                <ActionForm action={restoreTeacher.bind(null, teacher.id)} compact className="flex items-center gap-3">
-                  <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
-                    Restore teacher
-                  </SubmitButton>
-                </ActionForm>
+                <Badge tone="red" dot>
+                  Removed
+                </Badge>
               ) : (
-                <ActionForm action={removeTeacher.bind(null, teacher.id)} compact className="flex items-center gap-3">
-                  <SubmitButton
-                    variant="dangerGhost"
-                    confirm={`Remove ${name}? Their class teacher and subject roles will be cleared.`}
-                    icon={<UserRoundX className="h-4 w-4" />}
-                  >
-                    Remove teacher
-                  </SubmitButton>
-                </ActionForm>
+                <Badge tone="green" dot>
+                  Active
+                </Badge>
               )}
-            </div>
-          </div>
-        </div>
-      </section>
+            </span>
+          </>
+        }
+        action={
+          tab !== "edit" && (
+            <ButtonLink href={`${base}?tab=edit`} icon={Pencil} variant="secondary">
+              Edit profile
+            </ButtonLink>
+          )
+        }
+      />
 
-      <div className="mb-6 border-b border-slate-200">
-        <nav className="-mb-px flex gap-6 text-sm font-medium">
-          <StatusTab href={base} active={tab === "overview"} label="Overview" />
-          <StatusTab href={`${base}?tab=edit`} active={tab === "edit"} label="Edit profile" />
-          <StatusTab href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" count={teacher.documents.length} />
+      <div className="mb-6 border-b border-line">
+        <nav aria-label="Teacher sections" className={tabBarClass}>
+          <StatusTab href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
+          <StatusTab href={`${base}?tab=edit`} active={tab === "edit"} label="Edit profile" icon={Pencil} />
+          <StatusTab href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={teacher.documents.length} />
         </nav>
       </div>
 
       {tab === "documents" && <DocumentsPanel ownerKind="teacher" ownerId={teacher.id} documents={teacher.documents} />}
 
       {tab === "edit" && (
-        <Card title="Edit profile" description="Changes are saved to the teacher's record." className="mx-auto max-w-5xl">
-          <TeacherForm
-            action={updateTeacher.bind(null, teacher.id)}
-            teacher={teacher}
-            photoUrl={photoUrl(teacher.photoId)}
-            submitLabel="Save changes"
-            cancelHref={base}
-          />
-        </Card>
+        <div className="space-y-6">
+          <Card title="Edit profile" description="Changes are saved to the teacher's record.">
+            <TeacherForm
+              action={updateTeacher.bind(null, teacher.id)}
+              teacher={teacher}
+              photoUrl={photoUrl(teacher.photoId)}
+              submitLabel="Save changes"
+              cancelHref={base}
+            />
+          </Card>
+          <Card
+            title={removed ? "Restore teacher" : "Remove teacher"}
+            description={
+              removed
+                ? "Bring this teacher back to the active list."
+                : "Their class teacher and subject roles are cleared. The record is kept and can be restored."
+            }
+            className={removed ? undefined : "border-danger-line"}
+          >
+            {removed ? (
+              <ActionForm action={restoreTeacher.bind(null, teacher.id)} compact className="flex items-center gap-3">
+                <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
+                  Restore teacher
+                </SubmitButton>
+              </ActionForm>
+            ) : (
+              <ActionForm action={removeTeacher.bind(null, teacher.id)} compact className="flex items-center gap-3">
+                <SubmitButton
+                  variant="danger"
+                  confirm={`Remove ${name}?`}
+                  confirmMessage="Their class teacher and subject roles will be cleared."
+                  icon={<UserRoundX className="h-4 w-4" />}
+                >
+                  Remove teacher
+                </SubmitButton>
+              </ActionForm>
+            )}
+          </Card>
+        </div>
       )}
 
       {tab === "overview" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Stat
+          <StatGrid>
+            <StatCard
               icon={CalendarDays}
               tone="emerald"
               label="At this school"
               value={durationSince(teacher.joiningDate)}
               detail={`Joined ${dateFormat.format(teacher.joiningDate)}`}
             />
-            <Stat
+            <StatCard
               icon={Briefcase}
               tone="sky"
               label="Experience"
               value={teacher.experienceYears == null ? "—" : `${teacher.experienceYears} yr${teacher.experienceYears === 1 ? "" : "s"}`}
               detail="Total teaching experience"
             />
-            <Stat
+            <StatCard
               icon={BookOpen}
               tone="violet"
               label="Teaches"
               value={`${subjects.size} subject${subjects.size === 1 ? "" : "s"}`}
               detail={`${teacher.subjectAssignments.length} class assignment${teacher.subjectAssignments.length === 1 ? "" : "s"}`}
             />
-            <Stat
+            <StatCard
               icon={Wallet}
               tone="amber"
               label="Monthly salary"
               value={teacher.monthlySalary == null ? "—" : rupees(teacher.monthlySalary)}
               detail={teacher.salaryPayments[0] ? `Last paid for ${monthFormat.format(new Date(`${teacher.salaryPayments[0].month}-01`))}` : "No payments yet"}
             />
-          </div>
+          </StatGrid>
 
           <div className="grid gap-6 xl:grid-cols-3">
             <div className="space-y-6 xl:col-span-2">
@@ -269,7 +265,7 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                       {teacher.dateOfBirth && (
                         <>
                           {dateFormat.format(teacher.dateOfBirth)}
-                          <span className="text-slate-500"> · {ageOn(teacher.dateOfBirth)} yrs</span>
+                          <span className="text-muted"> · {ageOn(teacher.dateOfBirth)} yrs</span>
                         </>
                       )}
                     </Detail>
@@ -281,21 +277,21 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                   <DetailList>
                     <Detail label="Phone" icon={Phone}>
                       {teacher.phone && (
-                        <a href={`tel:${teacher.phone}`} className="hover:text-indigo-600">
+                        <a href={`tel:${teacher.phone}`} className="rounded text-accent-text underline-offset-4 hover:underline">
                           {teacher.phone}
                         </a>
                       )}
                     </Detail>
                     <Detail label="WhatsApp" icon={MessageCircle}>
                       {teacher.whatsappNumber && (
-                        <a href={`https://wa.me/91${teacher.whatsappNumber}`} target="_blank" rel="noreferrer" className="hover:text-indigo-600">
+                        <a href={`https://wa.me/91${teacher.whatsappNumber}`} target="_blank" rel="noreferrer" className="rounded text-accent-text underline-offset-4 hover:underline">
                           {teacher.whatsappNumber}
                         </a>
                       )}
                     </Detail>
                     <Detail label="Email" icon={Mail}>
                       {teacher.email && (
-                        <a href={`mailto:${teacher.email}`} className="break-all hover:text-indigo-600">
+                        <a href={`mailto:${teacher.email}`} className="break-all rounded text-accent-text underline-offset-4 hover:underline">
                           {teacher.email}
                         </a>
                       )}
@@ -329,14 +325,14 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                 padded={false}
               >
                 {subjects.size === 0 ? (
-                  <p className="p-6 text-sm text-slate-500">No subjects assigned yet.</p>
+                  <p className="p-6 text-sm text-muted">No subjects assigned yet.</p>
                 ) : (
                   <ul className="grid gap-3 p-6 sm:grid-cols-2">
                     {[...subjects.values()].map((s) => (
-                      <li key={s.code} className="rounded-xl border border-slate-200 p-4">
+                      <li key={s.code} className="rounded-xl border border-line p-4">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-slate-900">{s.name}</p>
-                          <span className="font-mono text-xs text-slate-400">{s.code}</span>
+                          <p className="font-semibold text-fg">{s.name}</p>
+                          <span className="font-mono text-xs text-subtle">{s.code}</span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {s.sections.map((sec) => (
@@ -357,17 +353,17 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                 {teacher.classTeacherOf ? (
                   <Link
                     href={`/admin/classes/${teacher.classTeacherOf.classId}`}
-                    className="group flex items-center gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+                    className="group flex items-center gap-3 rounded-xl border border-line p-3 transition hover:-translate-y-px hover:border-accent-line hover:bg-accent-soft"
                   >
                     <IconTile icon={GraduationCap} tone="indigo" size="sm" />
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-900">{sectionLabel(teacher.classTeacherOf)}</p>
-                      <p className="text-xs text-slate-500">{teacher.classTeacherOf._count.students} active students</p>
+                      <p className="text-sm font-semibold text-fg">{sectionLabel(teacher.classTeacherOf)}</p>
+                      <p className="text-xs text-muted">{teacher.classTeacherOf._count.students} active students</p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-500" />
+                    <ArrowRight className="h-4 w-4 text-subtle group-hover:text-accent-text" />
                   </Link>
                 ) : (
-                  <p className="text-sm text-slate-500">Not a class teacher.</p>
+                  <p className="text-sm text-muted">Not a class teacher.</p>
                 )}
               </Card>
 
@@ -384,18 +380,18 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
 
               <Card title="Recent salary" icon={Wallet} padded={false}>
                 {teacher.salaryPayments.length === 0 ? (
-                  <p className="p-6 text-sm text-slate-500">No salary paid yet. Pay it from Expenses → Salaries.</p>
+                  <p className="p-6 text-sm text-muted">No salary paid yet. Pay it from Expenses → Salaries.</p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-line">
                     {teacher.salaryPayments.map((p) => (
                       <li key={p.id} className="flex items-center justify-between gap-3 px-6 py-3 text-sm">
                         <div>
-                          <p className="font-medium text-slate-800">{monthFormat.format(new Date(`${p.month}-01`))}</p>
-                          <p className="text-xs text-slate-500">
+                          <p className="font-medium text-fg">{monthFormat.format(new Date(`${p.month}-01`))}</p>
+                          <p className="text-xs text-muted">
                             {MODE_LABELS[p.mode]} · paid {dateFormat.format(p.paidOn)}
                           </p>
                         </div>
-                        <span className="font-semibold tabular-nums text-slate-900">{rupees(p.amount)}</span>
+                        <span className="font-semibold tabular-nums text-fg">{rupees(p.amount)}</span>
                       </li>
                     ))}
                   </ul>
@@ -403,12 +399,12 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
               </Card>
 
               <Card title="Documents" icon={FileText}>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-muted">
                   {teacher.documents.length
                     ? `${teacher.documents.length} document${teacher.documents.length === 1 ? "" : "s"} on file.`
                     : "No documents uploaded yet."}
                 </p>
-                <Link href={`${base}?tab=documents`} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                <Link href={`${base}?tab=documents`} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-accent-text underline-offset-4 hover:underline">
                   {teacher.documents.length ? "View documents" : "Upload documents"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -421,17 +417,6 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
   );
 }
 
-function Stat({ icon, tone, label, value, detail }: { icon: LucideIcon; tone: IconTone; label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-      <IconTile icon={icon} tone={tone} />
-      <p className="mt-3 text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-900 tabular-nums sm:text-2xl">{value}</p>
-      <p className="mt-1 truncate text-xs text-slate-500">{detail}</p>
-    </div>
-  );
-}
-
 function DetailList({ children, columns = false }: { children: ReactNode; columns?: boolean }) {
   return <dl className={columns ? "grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-4"}>{children}</dl>;
 }
@@ -441,10 +426,10 @@ function Detail({ label, icon: Icon, children }: { label: string; icon?: LucideI
   const empty = children == null || children === false || children === "";
   return (
     <div className="flex items-start gap-3">
-      {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />}
+      {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-subtle" />}
       <div className="min-w-0">
-        <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
-        <dd className={`mt-0.5 break-words text-sm ${empty ? "text-slate-400" : "text-slate-800"}`}>{empty ? "Not added" : children}</dd>
+        <dt className="text-eyebrow uppercase text-muted">{label}</dt>
+        <dd className={`mt-0.5 break-words text-sm ${empty ? "text-subtle" : "text-fg"}`}>{empty ? "Not added" : children}</dd>
       </div>
     </div>
   );

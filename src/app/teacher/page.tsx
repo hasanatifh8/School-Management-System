@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Cake, CalendarCheck, CalendarOff, Hash, School, Users } from "lucide-react";
+import { ArrowRight, BookOpen, Cake, CalendarCheck, CalendarOff, Hash, School, Sun, Users } from "lucide-react";
 import { UpcomingHolidays } from "@/components/attendance/upcoming-holidays";
-import { Badge, Card, EmptyState, IconTile, PageHeader, PersonCell } from "@/components/ui";
+import { Badge, Callout, Card, EmptyState, HeroCard, HeroGhostLink, HeroLink, IconTile, PageHeader, PagedList, PersonCell, StatCard, TextLink } from "@/components/ui";
 import { attendanceWindow } from "@/lib/attendance";
 import { isSunday, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
@@ -108,20 +108,35 @@ export default async function TeacherDashboard() {
         </Card>
       ) : (
         <>
+          {ctx.classSection && win.today === win.max && (
+            <TodayHero
+              className="mb-6"
+              section={sectionLabel(ctx.classSection)}
+              date={win.today}
+              holiday={todayHoliday?.name ?? todayDay?.holiday ?? null}
+              records={todayDay?.holiday ? null : todayDay?.records.length ? todayDay.records : null}
+              sunday={isSunday(win.today)}
+            />
+          )}
           <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-            <Stat
+            <StatCard
               icon={Users}
+              tone="indigo"
               label="My class"
               value={ctx.classSection ? sectionLabel(ctx.classSection) : "—"}
               detail={ctx.classSection ? `${classStudents.length} students` : "Not a class teacher"}
+              href={ctx.classSection ? "/teacher/class" : undefined}
             />
-            <Stat
+            <StatCard
               icon={BookOpen}
+              tone="emerald"
               label="Subjects I teach"
-              value={String(subjectCount)}
+              value={subjectCount}
               detail={teaching.length ? `in ${teaching.length} section${teaching.length === 1 ? "" : "s"}` : "none assigned"}
             />
-            <Stat icon={School} label="Students I teach" value={String(totalStudents)} detail="across all my classes" />
+            <div className="col-span-2 lg:col-span-1">
+              <StatCard icon={School} tone="sky" label="Students I teach" value={totalStudents} detail="across all my classes" />
+            </div>
           </div>
 
           <div className="mt-6 grid gap-6 xl:grid-cols-3">
@@ -131,53 +146,40 @@ export default async function TeacherDashboard() {
                   title={`My class · ${sectionLabel(ctx.classSection)}`}
                   icon={Users}
                   description="You are the class teacher."
-                  action={
-                    <Link href="/teacher/class" className="text-sm font-medium text-teal-700 hover:text-teal-600">
-                      Open class
-                    </Link>
-                  }
+                  action={<TextLink href="/teacher/class">Open class</TextLink>}
                 >
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <Mini label="Students" value={classStudents.length} />
                     <Mini label="Boys" value={boys} />
                     <Mini label="Girls" value={girls} />
                   </div>
-                  <TodayAttendance
-                    holiday={todayHoliday?.name ?? todayDay?.holiday ?? null}
-                    records={todayDay?.holiday ? null : todayDay?.records.length ? todayDay.records : null}
-                    sunday={isSunday(win.today)}
-                    inSession={win.today === win.max}
-                  />
                   {missingRolls > 0 && (
-                    <p className="mt-4 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                      <Hash className="h-4 w-4" /> {missingRolls} student(s) have no roll number.{" "}
-                      <Link href="/teacher/class" className="font-medium underline">
-                        Assign
-                      </Link>
-                    </p>
+                    <Callout icon={Hash} tone="warning" href="/teacher/class" action="Assign →" className="mt-4 !py-3">
+                      {missingRolls} student(s) have no roll number.
+                    </Callout>
                   )}
                 </Card>
               )}
 
               {teaching.length > 0 && (
                 <Card title="Subjects I teach" icon={BookOpen} description="Where you are the subject teacher." padded={false}>
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-line">
                     {teaching.map((s) => (
                       <li key={s.section.id}>
                         <Link
                           href={s.section.id === ctx.classSection?.id ? "/teacher/class" : `/teacher/sections/${s.section.id}`}
-                          className="flex items-center gap-4 px-6 py-3.5 transition hover:bg-slate-50"
+                          className="group flex items-center gap-4 px-4 py-3 transition hover:bg-surface-2 sm:px-6"
                         >
                           <IconTile icon={BookOpen} tone="emerald" size="sm" />
                           <div className="min-w-0 flex-1">
-                            <p className="flex items-center gap-2 font-medium text-slate-900">
+                            <p className="flex items-center gap-2 font-medium text-fg">
                               {sectionLabel(s.section)}
                               {s.section.id === ctx.classSection?.id && <Badge tone="indigo">My class</Badge>}
                             </p>
-                            <p className="truncate text-xs text-slate-500">{s.subjects.join(", ")}</p>
+                            <p className="truncate text-xs text-muted">{s.subjects.join(", ")}</p>
                           </div>
                           <Badge>{countBySection.get(s.section.id) ?? 0} students</Badge>
-                          <ArrowRight className="h-4 w-4 text-slate-300" />
+                          <ArrowRight className="h-4 w-4 text-subtle transition group-hover:translate-x-0.5 group-hover:text-accent-text" />
                         </Link>
                       </li>
                     ))}
@@ -190,16 +192,16 @@ export default async function TeacherDashboard() {
               {ctx.classSection && (
                 <Card title="Birthdays this month" icon={Cake} padded={false}>
                   {birthdays.length === 0 ? (
-                    <p className="p-6 text-sm text-slate-500">No birthdays in your class this month.</p>
+                    <EmptyState compact icon={Cake} title="No birthdays this month" />
                   ) : (
-                    <ul className="divide-y divide-slate-100">
+                    <PagedList pageSize={6} noun="birthdays">
                       {birthdays.map((s) => (
-                        <li key={s.id} className="flex items-center justify-between gap-3 px-6 py-3">
+                        <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
                           <PersonCell name={fullName(s)} photoUrl={photoUrl(s.photoId)} href={`/teacher/students/${s.id}`} size="sm" />
                           <Badge tone="amber">{dayMonth.format(s.dateOfBirth!)}</Badge>
                         </li>
                       ))}
-                    </ul>
+                    </PagedList>
                   )}
                 </Card>
               )}
@@ -212,64 +214,75 @@ export default async function TeacherDashboard() {
   );
 }
 
-function Stat({ icon, label, value, detail }: { icon: typeof Users; label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-      <IconTile icon={icon} tone="emerald" />
-      <p className="mt-3 text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{detail}</p>
-    </div>
-  );
-}
-
 function Mini({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <p className="text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
-      <p className="text-xs text-slate-500">{label}</p>
+    <div className="rounded-xl bg-surface-2 p-3">
+      <p className="text-2xl font-semibold tabular-nums text-fg">{value}</p>
+      <p className="text-xs text-muted">{label}</p>
     </div>
   );
 }
 
-function TodayAttendance({
+/** Today's attendance for the teacher's own class: the one thing to do first. */
+function TodayHero({
+  section,
+  date,
   holiday,
   records,
   sunday,
-  inSession,
+  className,
 }: {
+  section: string;
+  date: string;
   holiday: string | null;
   records: { status: string }[] | null;
   sunday: boolean;
-  inSession: boolean;
+  className?: string;
 }) {
-  if (!inSession) return null;
-  const box = "mt-4 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm";
-  if (holiday) {
+  if (holiday || (sunday && !records)) {
     return (
-      <p className={`${box} bg-violet-50 text-violet-800`}>
-        <CalendarOff className="h-4 w-4" /> Holiday today: {holiday}
-      </p>
+      <HeroCard icon={holiday ? CalendarOff : Sun} eyebrow={`Today · ${section}`} className={className}>
+        <p className="mt-4 text-display-sm font-semibold">{holiday ?? "Sunday"}</p>
+        <p className="mt-2 text-sm text-white/80">{holiday ? "Holiday — no attendance today." : "Weekly off. Take attendance only if the school is open."}</p>
+      </HeroCard>
     );
   }
   if (records) {
     const attending = records.filter((r) => r.status !== "ABSENT" && r.status !== "LEAVE").length;
+    const absent = records.filter((r) => r.status === "ABSENT").length;
     return (
-      <p className={`${box} bg-emerald-50 text-emerald-800`}>
-        <CalendarCheck className="h-4 w-4" /> Attendance taken today: {attending} of {records.length} attending.
-        <Link href="/teacher/attendance" className="font-medium underline">
-          View
-        </Link>
-      </p>
+      <HeroCard
+        icon={CalendarCheck}
+        eyebrow={`Attendance today · ${section}`}
+        className={className}
+        actions={
+          <>
+            <HeroGhostLink href="/teacher/attendance">Edit attendance</HeroGhostLink>
+            {absent > 0 && <HeroLink href={`/teacher/notices?absent=${date}`}>Message absent parents</HeroLink>}
+          </>
+        }
+      >
+        <p className="mt-4 text-display font-semibold tabular-nums">
+          {attending}
+          <span className="text-display-sm text-white/70"> / {records.length}</span>
+        </p>
+        <p className="text-sm text-white/80">attending{absent ? ` · ${absent} absent` : " · everyone's here"}</p>
+      </HeroCard>
     );
   }
-  if (sunday) return null;
   return (
-    <p className={`${box} bg-amber-50 text-amber-800`}>
-      <CalendarCheck className="h-4 w-4" /> Today&apos;s attendance isn&apos;t taken yet.
-      <Link href="/teacher/attendance" className="font-medium underline">
-        Take attendance
-      </Link>
-    </p>
+    <HeroCard
+      icon={CalendarCheck}
+      eyebrow={`Attendance today · ${section}`}
+      className={className}
+      actions={
+        <HeroLink href="/teacher/attendance">
+          Take attendance <ArrowRight />
+        </HeroLink>
+      }
+    >
+      <p className="mt-4 text-display-sm font-semibold">Not taken yet</p>
+      <p className="mt-2 text-sm text-white/80">Everyone starts as present — tap only the exceptions. It takes under a minute.</p>
+    </HeroCard>
   );
 }

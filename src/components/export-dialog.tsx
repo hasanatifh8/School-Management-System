@@ -1,9 +1,9 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
-import { Download, FileDown, X } from "lucide-react";
-import { buttonVariants, checkboxClass } from "@/components/ui";
+import { useState } from "react";
+import { Download, FileDown } from "lucide-react";
+import { Button, Modal, checkboxClass } from "@/components/ui";
 import { EXPORT_FIELDS, type ExportKind } from "@/lib/export/fields";
 
 const storageKey = (kind: ExportKind) => `export-fields:${kind}`;
@@ -26,7 +26,7 @@ export function ExportDialog({ kind, count, noun }: { kind: ExportKind; count: n
   const fields = EXPORT_FIELDS[kind];
   const defaults = fields.filter((f) => f.default).map((f) => f.key);
   const params = useSearchParams();
-  const dialog = useRef<HTMLDialogElement>(null);
+  const [isOpen, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set(defaults));
 
   const groups = [...new Set(fields.map((f) => f.group))];
@@ -35,7 +35,7 @@ export function ExportDialog({ kind, count, noun }: { kind: ExportKind; count: n
     // Start from the admin's last choice, if the browser remembers one.
     const saved = savedFields(kind)?.filter((k) => fields.some((f) => f.key === k));
     setSelected(new Set(saved?.length ? saved : defaults));
-    dialog.current?.showModal();
+    setOpen(true);
   }
 
   function toggle(key: string, on: boolean) {
@@ -61,61 +61,53 @@ export function ExportDialog({ kind, count, noun }: { kind: ExportKind; count: n
     document.body.appendChild(link);
     link.click();
     link.remove();
-    dialog.current?.close();
+    setOpen(false);
   }
 
   return (
     <>
-      <button type="button" onClick={open} className={buttonVariants.secondary}>
-        <FileDown className="h-4 w-4" />
-        Export
-      </button>
+      <Button variant="secondary" icon={FileDown} onClick={open} title={`Export ${noun} to Excel`}>
+        <span className="hidden sm:inline">Export</span>
+      </Button>
 
-      <dialog
-        ref={dialog}
-        className="m-auto w-[min(40rem,calc(100vw-2rem))] rounded-2xl p-0 shadow-2xl backdrop:bg-slate-900/40"
-        onClick={(e) => e.target === dialog.current && dialog.current?.close()}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Export {noun} to Excel</h2>
-            <p className="mt-0.5 text-sm text-slate-500">
-              {count} {noun} (the current search, filters and tab). Choose the columns to include.
-            </p>
+      <Modal
+        open={isOpen}
+        onClose={() => setOpen(false)}
+        size="lg"
+        title={`Export ${noun} to Excel`}
+        description={`${count.toLocaleString("en-IN")} ${noun} (the current search, filters and tab). Choose the columns to include.`}
+        footer={
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted">{selected.size} column(s) selected</span>
+            <Button icon={Download} onClick={download} disabled={!selected.size || !count}>
+              Download Excel
+            </Button>
           </div>
-          <button
-            type="button"
-            onClick={() => dialog.current?.close()}
-            aria-label="Close"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="max-h-[60vh] space-y-5 overflow-y-auto px-6 py-5">
-          <div className="flex flex-wrap gap-2 text-sm">
-            <button type="button" className={`${buttonVariants.ghost} !px-2 !py-1`} onClick={() => setSelected(new Set(fields.map((f) => f.key)))}>
+        }
+      >
+        <div className="space-y-6 px-6 py-6">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set(fields.map((f) => f.key)))}>
               Select all
-            </button>
-            <button type="button" className={`${buttonVariants.ghost} !px-2 !py-1`} onClick={() => setSelected(new Set())}>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
               Clear
-            </button>
-            <button type="button" className={`${buttonVariants.ghost} !px-2 !py-1`} onClick={() => setSelected(new Set(defaults))}>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set(defaults))}>
               Default columns
-            </button>
+            </Button>
           </div>
 
           {groups.map((group) => (
             <fieldset key={group}>
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{group}</legend>
+              <legend className="mb-2 text-eyebrow uppercase text-muted">{group}</legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {fields
                   .filter((f) => f.group === group)
                   .map((f) => (
                     <label
                       key={f.key}
-                      className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/60"
+                      className="flex cursor-pointer items-center gap-3 rounded-xl border border-line px-3 py-2 text-sm text-fg-2 transition hover:bg-surface-2 has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft has-[:checked]:text-fg"
                     >
                       <input
                         type="checkbox"
@@ -132,15 +124,7 @@ export function ExportDialog({ kind, count, noun }: { kind: ExportKind; count: n
             </fieldset>
           ))}
         </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-6 py-4">
-          <span className="text-sm text-slate-500">{selected.size} column(s) selected</span>
-          <button type="button" onClick={download} disabled={!selected.size || !count} className={buttonVariants.primary}>
-            <Download className="h-4 w-4" />
-            Download Excel
-          </button>
-        </div>
-      </dialog>
+      </Modal>
     </>
   );
 }

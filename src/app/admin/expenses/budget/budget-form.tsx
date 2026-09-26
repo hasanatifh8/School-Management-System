@@ -19,7 +19,7 @@ export function BudgetForm({ rows }: { rows: Row[] }) {
     <ActionForm action={saveBudgets} className="space-y-4">
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <thead className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted">
             <tr>
               <th className="py-2 pr-3">Category</th>
               <th className="py-2 pr-3">Monthly budget</th>
@@ -27,16 +27,16 @@ export function BudgetForm({ rows }: { rows: Row[] }) {
               <th className="py-2">Suggested</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-line">
             {rows.map((r) => (
               <tr key={r.id}>
-                <td className="py-2 pr-3 font-medium text-slate-900">
+                <td className="py-2 pr-3 font-medium text-fg">
                   {r.name}
-                  {r.isSalaries && <span className="block text-xs font-normal text-slate-500">Teaching + non-teaching payroll</span>}
+                  {r.isSalaries && <span className="block text-xs font-normal text-muted">Teaching + non-teaching payroll</span>}
                 </td>
                 <td className="py-2 pr-3">
                   <div className="relative w-40">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">₹</span>
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle">₹</span>
                     <input
                       name={`budget:${r.id}`}
                       inputMode="numeric"
@@ -47,27 +47,27 @@ export function BudgetForm({ rows }: { rows: Row[] }) {
                     />
                   </div>
                 </td>
-                <td className="py-2 pr-3 text-right tabular-nums text-slate-500">{r.average ? rupees(r.average) : "—"}</td>
+                <td className="py-2 pr-3 text-right tabular-nums text-muted">{r.average ? rupees(r.average) : "—"}</td>
                 <td className="py-2">
                   {r.suggested ? (
                     <button
                       type="button"
                       onClick={() => fill(r.id, r.suggested!)}
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-500"
+                      className="text-xs font-medium text-accent-text underline-offset-4 hover:underline"
                     >
                       Use {rupees(r.suggested)}
                     </button>
                   ) : (
-                    <span className="text-xs text-slate-400">—</span>
+                    <span className="text-xs text-subtle">—</span>
                   )}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-slate-200">
-              <td className="py-2 pr-3 font-semibold text-slate-900">Total monthly budget (saved)</td>
-              <td className="py-2 pr-3 font-semibold tabular-nums text-slate-900">{rupees(total)}</td>
+            <tr className="border-t-2 border-line">
+              <td className="py-2 pr-3 font-semibold text-fg">Total monthly budget (saved)</td>
+              <td className="py-2 pr-3 font-semibold tabular-nums text-fg">{rupees(total)}</td>
               <td colSpan={2} />
             </tr>
           </tfoot>
@@ -84,7 +84,7 @@ export function BudgetForm({ rows }: { rows: Row[] }) {
           Use all suggestions
         </button>
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted">
         Suggestions: salaries use this month&apos;s payroll; other categories use the last 3 months&apos; average plus 10%, rounded up to
         ₹500.
       </p>

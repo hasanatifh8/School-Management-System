@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileSpreadsheet, GraduationCap, Pencil, UserPlus } from "lucide-react";
+import { ChevronRight, Download, FileSpreadsheet, GraduationCap, IdCard, SearchX, UserPlus } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
@@ -8,7 +8,7 @@ import { HouseBadge } from "@/components/house";
 import { ExportDialog } from "@/components/export-dialog";
 import { Pagination } from "@/components/pagination";
 import { paginate } from "@/lib/pagination";
-import { FilterSelect, ListToolbar, ResetFilters, SearchBox } from "@/components/list-toolbar";
+import { FilterSelect, ListToolbar, MoreFilters, ResetFilters, SearchBox } from "@/components/list-toolbar";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { parseStudentFilters, studentOrder, studentWhere } from "@/lib/list-filters";
 import { CATEGORY_LABELS } from "@/lib/student-options";
@@ -16,12 +16,15 @@ import {
   Badge,
   ButtonLink,
   Card,
+  Dash,
   EmptyState,
+  MenuLink,
+  MoreMenu,
   PageHeader,
   PersonCell,
   StatusTab,
   Table,
-  buttonVariants,
+  tabBarClass,
   tbodyClass,
   tdClass,
   thClass,
@@ -71,9 +74,17 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
         action={
           <>
             <ExportDialog kind="students" count={paging.total} noun="students" />
-            <ButtonLink href="/admin/students/import" icon={FileSpreadsheet} variant="secondary">
-              Bulk upload
-            </ButtonLink>
+            <MoreMenu>
+              <MenuLink href="/admin/students/import" icon={<FileSpreadsheet />}>
+                Bulk upload from Excel
+              </MenuLink>
+              <MenuLink href="/api/templates/students" icon={<Download />} download>
+                Download Excel template
+              </MenuLink>
+              <MenuLink href="/admin/id-cards" icon={<IdCard />}>
+                Generate ID cards
+              </MenuLink>
+            </MoreMenu>
             <ButtonLink href="/admin/students/new" icon={UserPlus}>
               Add student
             </ButtonLink>
@@ -82,8 +93,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
       />
 
       <Card padded={false}>
-        <div className="flex flex-col gap-4 border-b border-slate-100 px-6 pt-4">
-          <div className="-mb-px flex gap-6 text-sm font-medium">
+        <div className="flex flex-col gap-4 border-b border-line px-4 pt-4 sm:px-6">
+          <div className={tabBarClass}>
             <StatusTab href={tabHref(false)} active={!showRemoved} label="Active" count={activeCount} />
             <StatusTab href={tabHref(true)} active={showRemoved} label="Removed" count={removedCount} />
           </div>
@@ -103,6 +114,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
                   options={sections.map((sec) => ({ value: sec.id, label: `Section ${sec.name}` }))}
                 />
               )}
+              <MoreFilters keys={["houseId", "gender", "category", "bloodGroup"]}>
               {houses.length > 0 && (
                 <FilterSelect
                   name="houseId"
@@ -129,6 +141,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
                 label="Any blood group"
                 options={BLOOD_GROUPS.map((b) => ({ value: b, label: BLOOD_GROUP_LABELS[b] }))}
               />
+              </MoreFilters>
               <ResetFilters keys={["q", "classId", "sectionId", "houseId", "gender", "category", "bloodGroup"]} />
             </ListToolbar>
           </div>
@@ -136,8 +149,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
 
         {students.length === 0 ? (
           <EmptyState
-            icon={GraduationCap}
             title={filtered ? "No students match your filters" : showRemoved ? "No removed students" : "No students yet"}
+            icon={filtered ? SearchX : GraduationCap}
             description={
               filtered
                 ? "Try a different name, ID or class."
@@ -147,9 +160,14 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
             }
             action={
               !filtered && !showRemoved ? (
-                <ButtonLink href="/admin/students/new" icon={UserPlus}>
-                  Add student
-                </ButtonLink>
+                <>
+                  <ButtonLink href="/admin/students/new" icon={UserPlus}>
+                    Add student
+                  </ButtonLink>
+                  <ButtonLink href="/admin/students/import" icon={FileSpreadsheet} variant="secondary">
+                    Bulk upload
+                  </ButtonLink>
+                </>
               ) : undefined
             }
           />
@@ -159,18 +177,17 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
               <tr>
                 <th className={thClass}>Student</th>
                 <th className={thClass}>Class</th>
-                <th className={thClass}>Roll</th>
-                <th className={thClass}>House</th>
-                <th className={thClass}>Parents</th>
-                <th className={thClass}>Subjects</th>
+                <th className={`${thClass} hidden md:table-cell`}>House</th>
+                <th className={`${thClass} hidden lg:table-cell`}>Parents</th>
+                <th className={`${thClass} hidden xl:table-cell`}>Subjects</th>
                 <th className={thClass}>
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">Open</span>
                 </th>
               </tr>
             </thead>
             <tbody className={tbodyClass}>
               {students.map((s) => (
-                <tr key={s.id} className={trClass}>
+                <tr key={s.id} className={`${trClass} group`}>
                   <td className={tdClass}>
                     <PersonCell
                       name={fullName(s)}
@@ -181,37 +198,38 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
                   </td>
                   <td className={tdClass}>
                     {s.section ? (
-                      <Badge tone="indigo">{sectionLabel(s.section)}</Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge tone="indigo">{sectionLabel(s.section)}</Badge>
+                        {s.rollNumber != null && <span className="text-xs tabular-nums text-muted">Roll {s.rollNumber}</span>}
+                      </div>
                     ) : (
                       <Badge tone="amber" dot>
                         Not assigned
                       </Badge>
                     )}
                   </td>
-                  <td className={`${tdClass} tabular-nums`}>
-                    {s.rollNumber ?? <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className={tdClass}>
-                    {s.house ? <HouseBadge house={s.house} /> : <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className={tdClass}>
+                  <td className={`${tdClass} hidden md:table-cell`}>{s.house ? <HouseBadge house={s.house} /> : <Dash />}</td>
+                  <td className={`${tdClass} hidden lg:table-cell`}>
                     <div className="space-y-0.5 text-xs">
                       <ParentLine label="Father" name={s.fatherName} />
                       <ParentLine label="Mother" name={s.motherName} />
                       {!s.fatherName && !s.motherName && (
-                        <span className="text-slate-400">Not added</span>
+                        <span className="text-subtle">Not added</span>
                       )}
                     </div>
                   </td>
-                  <td className={tdClass}>
-                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-slate-100 px-1.5 text-xs font-semibold text-slate-700 tabular-nums">
+                  <td className={`${tdClass} hidden xl:table-cell`}>
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-surface-3 px-1.5 text-xs font-semibold text-fg-2 tabular-nums">
                       {s._count.subjects}
                     </span>
                   </td>
-                  <td className={`${tdClass} text-right`}>
-                    <Link href={`/admin/students/${s.id}`} className={buttonVariants.ghost}>
-                      <Pencil className="h-4 w-4" />
-                      Edit
+                  <td className={`${tdClass} w-12 text-right`}>
+                    <Link
+                      href={`/admin/students/${s.id}`}
+                      aria-label={`Open ${fullName(s)}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-subtle transition group-hover:bg-surface-3 group-hover:text-accent-text"
+                    >
+                      <ChevronRight className="h-4 w-4" />
                     </Link>
                   </td>
                 </tr>
@@ -229,8 +247,8 @@ function ParentLine({ label, name }: { label: string; name: string | null }) {
   if (!name) return null;
   return (
     <div className="flex items-center gap-1.5 whitespace-nowrap">
-      <span className="w-12 text-slate-400">{label}</span>
-      <span className="font-medium text-slate-700">{name}</span>
+      <span className="w-12 text-subtle">{label}</span>
+      <span className="font-medium text-fg-2">{name}</span>
     </div>
   );
 }

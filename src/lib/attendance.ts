@@ -1,15 +1,20 @@
 import "server-only";
 import { db } from "@/lib/db";
 import {
+  addDays,
+  addMonths,
   attendancePercent,
+  datesBetween,
   emptyCounts,
   isSunday,
   isoDate,
   monthDates,
   parseISODate,
   todayISO,
+  weekStart,
   type AttendanceCounts,
   type AttendanceStatusKey,
+  type RegisterPeriod,
 } from "@/lib/attendance-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
@@ -39,6 +44,80 @@ export function pickMonth(param: string | string[] | undefined, win: Window) {
   const month = typeof param === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(param) ? param : win.max.slice(0, 7);
   return month < win.min.slice(0, 7) ? win.min.slice(0, 7) : month > win.max.slice(0, 7) ? win.max.slice(0, 7) : month;
 }
+
+const dayMonth = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+const dayMonthYear = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const monthYear = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+
+/** "22 Sept – 28 Sept 2026", dropping the first year when both ends share it. */
+function spanLabel(from: string, to: string) {
+  if (from === to) return dayMonthYear.format(parseISODate(from)!);
+  const first = from.slice(0, 4) === to.slice(0, 4) ? dayMonth : dayMonthYear;
+  return `${first.format(parseISODate(from)!)} – ${dayMonthYear.format(parseISODate(to)!)}`;
+}
+
+type Params = Record<string, string | string[] | undefined>;
+
+/** URL query for a register period, e.g. "period=week&week=2026-09-21". */
+export function rangeQuery(q: { period: RegisterPeriod; week?: string; month?: string; from?: string; to?: string }) {
+  const sp = new URLSearchParams({ period: q.period });
+  if (q.period === "week" && q.week) sp.set("week", q.week);
+  if (q.period === "month" && q.month) sp.set("month", q.month);
+  if (q.period === "custom" && q.from && q.to) {
+    sp.set("from", q.from);
+    sp.set("to", q.to);
+  }
+  return sp.toString();
+}
+
+/**
+ * The register's date range from the URL: ?period=week|month|year|custom with
+ * week=, month=, or from= & to=. A bare ?month= (older links) means a month.
+ * Everything is kept inside the current session up to today.
+ */
+export function pickRange(params: Params, win: Window) {
+  const get = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : undefined);
+  const raw = get("period");
+  const period: RegisterPeriod = raw === "week" || raw === "year" || raw === "custom" ? raw : "month";
+  const clamp = (iso: string) => (iso < win.min ? win.min : iso > win.max ? win.max : iso);
+
+  if (period === "week") {
+    const anchor = parseISODate(get("week")) ? clamp(get("week")!) : win.max;
+    const from = weekStart(anchor);
+    const to = addDays(from, 6);
+    return {
+      period,
+      from,
+      to,
+      label: spanLabel(from, to),
+      query: rangeQuery({ period, week: from }),
+      prev: from > weekStart(win.min) ? rangeQuery({ period, week: addDays(from, -7) }) : null,
+      next: from < weekStart(win.max) ? rangeQuery({ period, week: addDays(from, 7) }) : null,
+    };
+  }
+  if (period === "year") {
+    return { period, from: win.min, to: win.max, label: `Session ${win.session.name}`, query: rangeQuery({ period }), prev: null, next: null };
+  }
+  if (period === "custom") {
+    let from = parseISODate(get("from")) ? clamp(get("from")!) : clamp(addDays(win.max, -29));
+    let to = parseISODate(get("to")) ? clamp(get("to")!) : win.max;
+    if (from > to) [from, to] = [to, from];
+    return { period, from, to, label: spanLabel(from, to), query: rangeQuery({ period, from, to }), prev: null, next: null };
+  }
+  const month = pickMonth(get("month"), win);
+  const days = monthDates(month);
+  return {
+    period,
+    from: days[0],
+    to: days[days.length - 1],
+    label: monthYear.format(parseISODate(days[0])!),
+    query: rangeQuery({ period, month }),
+    prev: month > win.min.slice(0, 7) ? rangeQuery({ period, month: addMonths(month, -1) }) : null,
+    next: month < win.max.slice(0, 7) ? rangeQuery({ period, month: addMonths(month, 1) }) : null,
+  };
+}
+
+export type RegisterRange = ReturnType<typeof pickRange>;
 
 /** School holidays between two ISO dates (inclusive), keyed by date. */
 export async function schoolHolidays(schoolId: string, from: string, to: string) {
@@ -123,19 +202,20 @@ export async function studentAttendanceSummary(schoolId: string, studentId: stri
   return { counts, percent: attendancePercent(counts), session: win.session };
 }
 
-/** A section's month: every day's marks plus per-student month and session totals. */
-export async function loadRegister(schoolId: string, sectionId: string, month: string, win: Window) {
-  const dates = monthDates(month);
-  const first = dates[0];
-  const last = dates[dates.length - 1];
+/**
+ * A section's attendance over a date range: every day's marks, per-student
+ * totals for the range and for each month in it, and the session percentage.
+ */
+export async function loadRegister(schoolId: string, sectionId: string, from: string, to: string, win: Window) {
+  const dates = datesBetween(from, to);
   const [days, holidays] = await Promise.all([
     db.attendanceDay.findMany({
-      where: { sectionId, date: { gte: parseISODate(first)!, lte: parseISODate(last)! } },
+      where: { sectionId, date: { gte: parseISODate(from)!, lte: parseISODate(to)! } },
       include: { records: { select: { studentId: true, status: true } } },
     }),
-    schoolHolidays(schoolId, first, last),
+    schoolHolidays(schoolId, from, to),
   ]);
-  // Current students, plus anyone marked here this month who has since left or moved.
+  // Current students, plus anyone marked here in the range who has since left or moved.
   const markedIds = [...new Set(days.flatMap((d) => d.records.map((r) => r.studentId)))];
   const students = await db.student.findMany({
     where: { OR: [{ sectionId, status: "ACTIVE" }, { id: { in: markedIds } }] },
@@ -143,19 +223,24 @@ export async function loadRegister(schoolId: string, sectionId: string, month: s
     select: { ...rosterSelect, sectionId: true, status: true },
   });
 
+  const months = [...new Set(dates.map((d) => d.slice(0, 7)))];
   const byDate = new Map(days.map((d) => [isoDate(d.date), d]));
   const marks = new Map<string, Map<string, AttendanceStatusKey>>(); // studentId → date → status
-  const monthCounts = new Map(students.map((s) => [s.id, emptyCounts()]));
+  const periodCounts = new Map(students.map((s) => [s.id, emptyCounts()]));
+  const monthCounts = new Map(students.map((s) => [s.id, new Map(months.map((m) => [m, emptyCounts()]))]));
   let workingDays = 0;
-  const daily = new Map<string, number>(); // date → present count
+  const workingByMonth = new Map(months.map((m) => [m, 0]));
+  const daily = new Map<string, number>(); // date → attending count
   for (const [date, day] of byDate) {
     if (day.holiday || holidays.has(date) || !day.records.length) continue;
     workingDays++;
+    workingByMonth.set(date.slice(0, 7), (workingByMonth.get(date.slice(0, 7)) ?? 0) + 1);
     let present = 0;
     for (const r of day.records) {
       if (!marks.has(r.studentId)) marks.set(r.studentId, new Map());
       marks.get(r.studentId)!.set(date, r.status);
-      monthCounts.get(r.studentId)![r.status]++;
+      periodCounts.get(r.studentId)![r.status]++;
+      monthCounts.get(r.studentId)!.get(date.slice(0, 7))![r.status]++;
       if (r.status === "PRESENT" || r.status === "LATE" || r.status === "HALF_DAY") present++;
     }
     daily.set(date, present);
@@ -163,19 +248,24 @@ export async function loadRegister(schoolId: string, sectionId: string, month: s
   const sessionCounts = await attendanceTotals(schoolId, students.map((s) => s.id), win.min, win.max);
 
   return {
+    from,
+    to,
     dates,
+    months,
     students: students.map((s) => ({
       ...s,
       name: fullName(s),
       moved: s.status !== "ACTIVE" || s.sectionId !== sectionId,
       marks: marks.get(s.id) ?? new Map<string, AttendanceStatusKey>(),
-      month: monthCounts.get(s.id)!,
-      monthPercent: attendancePercent(monthCounts.get(s.id)!),
+      period: periodCounts.get(s.id)!,
+      periodPercent: attendancePercent(periodCounts.get(s.id)!),
+      monthPercent: new Map(months.map((m) => [m, attendancePercent(monthCounts.get(s.id)!.get(m)!)])),
       sessionPercent: attendancePercent(sessionCounts.get(s.id)!),
     })),
     classHolidays: new Map([...byDate].filter(([, d]) => d.holiday).map(([date, d]) => [date, d.holiday!])),
     schoolHolidays: holidays,
     workingDays,
+    workingByMonth,
     daily,
   };
 }

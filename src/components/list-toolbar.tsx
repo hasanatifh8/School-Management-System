@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { Loader2, RotateCcw, Search, X } from "lucide-react";
+import { Loader2, RotateCcw, Search, SlidersHorizontal, X } from "lucide-react";
 import { buttonVariants, inputClass, selectClass } from "@/components/ui";
 
 type Update = Record<string, string | null>;
@@ -40,7 +40,7 @@ export function ListToolbar({ children }: { children: ReactNode }) {
     <ToolbarContext.Provider value={{ update, pending }}>
       <div className="flex flex-wrap items-center gap-2" aria-busy={pending}>
         {children}
-        {pending && <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-label="Updating" />}
+        {pending && <Loader2 className="h-4 w-4 animate-spin text-subtle" aria-label="Updating" />}
       </div>
     </ToolbarContext.Provider>
   );
@@ -83,8 +83,8 @@ export function SearchBox({ placeholder }: { placeholder: string }) {
   }
 
   return (
-    <div className="relative w-full sm:w-64">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+    <div className="relative w-full sm:w-72">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" />
       <input
         type="search"
         value={value}
@@ -92,14 +92,14 @@ export function SearchBox({ placeholder }: { placeholder: string }) {
         onKeyDown={(e) => e.key === "Escape" && clear()}
         placeholder={placeholder}
         aria-label="Search"
-        className={`${inputClass} !w-full !py-2 pl-9 pr-9 [&::-webkit-search-cancel-button]:hidden`}
+        className={`${inputClass} !w-full pl-9 pr-9 [&::-webkit-search-cancel-button]:hidden`}
       />
       {value && (
         <button
           type="button"
           onClick={clear}
           aria-label="Clear search"
-          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-subtle transition hover:bg-surface-3 hover:text-fg-2"
         >
           <X className="h-4 w-4" />
         </button>
@@ -133,7 +133,7 @@ export function FilterSelect({
       disabled={disabled}
       aria-label={label}
       onChange={(e) => update({ [name]: e.target.value || null, ...Object.fromEntries(resets.map((r) => [r, null])) })}
-      className={`${selectClass} !w-auto min-w-36 !py-2 ${active ? "!border-indigo-300 !bg-indigo-50/60 font-medium text-indigo-900" : ""}`}
+      className={`${selectClass} !w-auto min-w-36 ${active ? "!border-accent-line !bg-accent-soft font-medium text-fg" : ""}`}
     >
       <option value="">{label}</option>
       {options.map((o) => (
@@ -154,10 +154,37 @@ export function ResetFilters({ keys }: { keys: string[] }) {
     <button
       type="button"
       onClick={() => update(Object.fromEntries(keys.map((k) => [k, null])))}
-      className={`${buttonVariants.ghost} !py-2`}
+      className={buttonVariants.ghost}
     >
       <RotateCcw className="h-4 w-4" />
       Reset
     </button>
+  );
+}
+
+/**
+ * Secondary filters behind a "Filters" button, so the toolbar stays calm.
+ * Opens by itself when one of its filters is already set.
+ */
+export function MoreFilters({ keys, children }: { keys: string[]; children: ReactNode }) {
+  const params = useSearchParams();
+  const active = keys.filter((k) => params.get(k)).length;
+  const [open, setOpen] = useState(active > 0);
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={`${buttonVariants.secondary} ${active ? "!border-accent-line !text-accent-text" : ""}`}
+      >
+        <SlidersHorizontal className="h-4 w-4" />
+        More filters
+        {active > 0 && (
+          <span className="rounded-full bg-accent px-1.5 text-xs font-semibold tabular-nums text-accent-fg">{active}</span>
+        )}
+      </button>
+      {open && <div className="flex w-full animate-rise flex-wrap items-center gap-2">{children}</div>}
+    </>
   );
 }

@@ -1,12 +1,31 @@
 import Link from "next/link";
-import { ArrowLeftRight, GraduationCap, KeyRound, LogOut, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeftRight,
+  BookOpen,
+  CalendarCheck,
+  CalendarRange,
+  ClipboardList,
+  GraduationCap,
+  IdCard,
+  KeyRound,
+  LayoutDashboard,
+  Megaphone,
+  PiggyBank,
+  Presentation,
+  School,
+  Settings,
+  Shield,
+  ShieldCheck,
+  UserCog,
+  Wallet,
+} from "lucide-react";
 import { SchoolLogo } from "@/components/school-logo";
-import { Avatar } from "@/components/ui";
+import { AccountCard, AppShell, type NavGroup, type NavItem } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getPortalSchool, getViewer, schoolLogoUrl } from "@/lib/school";
-import { adminLogout } from "../login/actions";
 import { getCurrentSession } from "@/lib/sessions";
-import { AdminNav } from "./admin-nav";
+import { getTheme } from "@/lib/theme-server";
+import { adminLogout } from "../login/actions";
 
 // Admin pages always show live data from the database.
 export const dynamic = "force-dynamic";
@@ -16,104 +35,116 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const school = await getPortalSchool();
   const viewer = (await getViewer())!; // getPortalSchool already redirected anonymous visitors
   const feesOnly = viewer.kind === "admin" && viewer.admin.role !== "ADMIN";
-  const [session, logo, activeSchools] = await Promise.all([
+  const [session, logo, activeSchools, theme] = await Promise.all([
     getCurrentSession(school.id),
     db.schoolLogo.findUnique({ where: { schoolId: school.id }, select: { updatedAt: true } }),
     db.school.count({ where: { status: "ACTIVE" } }),
+    getTheme(),
   ]);
   const logoUrl = schoolLogoUrl({ id: school.id, logo });
+
+  const fees: NavItem = { href: "/admin/fees", label: "Fees", icon: <Wallet /> };
+  const groups: NavGroup[] = feesOnly
+    ? [{ items: [fees] }]
+    : [
+        { items: [{ href: "/admin", label: "Dashboard", icon: <LayoutDashboard />, exact: true }] },
+        {
+          label: "Daily",
+          items: [
+            { href: "/admin/attendance", label: "Attendance", icon: <CalendarCheck /> },
+            fees,
+            { href: "/admin/notices", label: "Notices", icon: <Megaphone /> },
+          ],
+        },
+        {
+          label: "People",
+          items: [
+            { href: "/admin/students", label: "Students", icon: <GraduationCap /> },
+            { href: "/admin/teachers", label: "Teachers", icon: <Presentation /> },
+            { href: "/admin/staff", label: "Staff", icon: <UserCog /> },
+          ],
+        },
+        {
+          label: "Academics",
+          items: [
+            { href: "/admin/classes", label: "Classes", icon: <School /> },
+            { href: "/admin/subjects", label: "Subjects", icon: <BookOpen /> },
+            { href: "/admin/exams", label: "Exams & tests", icon: <ClipboardList /> },
+            { href: "/admin/houses", label: "Houses", icon: <Shield /> },
+          ],
+        },
+        {
+          label: "Office",
+          items: [
+            { href: "/admin/expenses", label: "Expenses", icon: <PiggyBank /> },
+            { href: "/admin/id-cards", label: "ID cards", icon: <IdCard /> },
+            { href: "/admin/sessions", label: "Sessions", icon: <CalendarRange /> },
+          ],
+        },
+      ];
+  const footerItems: NavItem[] = [
+    ...(viewer.kind === "power"
+      ? [
+          activeSchools > 1
+            ? { href: "/power", label: "Switch school", icon: <ArrowLeftRight />, exact: true }
+            : { href: "/power", label: "Power Admin", icon: <ShieldCheck />, exact: true },
+        ]
+      : []),
+    feesOnly
+      ? { href: "/admin/account", label: "Account", icon: <KeyRound /> }
+      : { href: "/admin/settings", label: "Settings", icon: <Settings />, alsoActive: ["/admin/account"] },
+  ];
+
   return (
-    <div className="min-h-screen lg:flex">
-      {/* Top bar on mobile; full-height sidebar on desktop with pinned contents. */}
-      <aside className="z-30 bg-slate-950 print:hidden lg:w-64 lg:shrink-0">
-        <div className="flex flex-col lg:sticky lg:top-0 lg:h-screen">
-          <div className="flex items-center gap-3 px-5 py-4 lg:py-6">
-            {logoUrl ? (
-              <SchoolLogo name={school.name} url={logoUrl} size="sm" />
+    <AppShell
+      brand={{
+        logo: logoUrl ? (
+          <SchoolLogo name={school.name} url={logoUrl} size="sm" />
+        ) : (
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-violet-400 text-white shadow-accent">
+            <GraduationCap className="h-5 w-5" />
+          </span>
+        ),
+        title: school.name,
+        subtitle: (
+          <span className="flex items-center gap-1.5">
+            {feesOnly ? "Fees" : "Admin"} ·
+            {feesOnly ? (
+              <span>{session.name}</span>
             ) : (
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/30">
-                <GraduationCap className="h-5 w-5" />
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white">{school.name}</p>
-              <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                {feesOnly ? "Fees" : "Admin Portal"} ·
-                <Link
-                  href="/admin/sessions"
-                  title="Current academic session"
-                  className="rounded bg-white/10 px-1.5 py-0.5 normal-case tracking-normal text-indigo-200 hover:bg-white/15"
-                >
-                  {session.name}
-                </Link>
-              </p>
-            </div>
-          </div>
-
-          <div className="px-3 pb-3 lg:flex-1 lg:pb-0">
-            <p className="mb-2 hidden px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-600 lg:block">
-              Manage
-            </p>
-            <AdminNav feesOnly={feesOnly} />
-          </div>
-
-          {/* Who is signed in */}
-          <div className="border-t border-white/5 p-4">
-            {viewer.kind === "power" && (
-              <div className="mb-3 hidden space-y-1 lg:block">
-                {activeSchools > 1 && (
-                  <Link href="/power" className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/5 hover:text-white">
-                    <ArrowLeftRight className="h-3.5 w-3.5" />
-                    Switch school
-                  </Link>
-                )}
-                <Link href="/power" className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/5 hover:text-white">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Power Admin
-                </Link>
-              </div>
-            )}
-            <div className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
-              <Avatar name={viewer.kind === "admin" ? viewer.admin.name : "Power Admin"} size="sm" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-200">
-                  {viewer.kind === "admin" ? viewer.admin.name : "Power Admin"}
-                </p>
-                <p className="truncate text-xs text-slate-500">
-                  {viewer.kind === "admin" ? viewer.admin.email : "Viewing this school"}
-                </p>
-              </div>
-              {viewer.kind === "admin" && (
-                <form action={adminLogout}>
-                  <button title="Sign out" aria-label="Sign out" className="rounded-md p-1.5 text-slate-400 hover:bg-white/10 hover:text-white">
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </form>
-              )}
-            </div>
-            {viewer.kind === "admin" && (
-              <Link href="/admin/account" className="mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/5 hover:text-white">
-                <KeyRound className="h-3.5 w-3.5" />
-                Account &amp; password
+              <Link href="/admin/sessions" title="Current academic session" className="rounded-md bg-accent-soft px-1.5 py-0.5 font-medium text-accent-text transition hover:bg-accent/20">
+                {session.name}
               </Link>
             )}
-          </div>
-        </div>
-      </aside>
-
-      <main className="min-w-0 flex-1">
-        {viewer.kind === "power" && (
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 print:hidden px-4 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200 sm:px-6 lg:px-10">
-            <span>
-              Viewing <strong>{school.name}</strong> as Power Admin.
+          </span>
+        ),
+      }}
+      groups={groups}
+      footerItems={footerItems}
+      mobileTabs={feesOnly ? ["/admin/fees", "/admin/account"] : ["/admin", "/admin/students", "/admin/attendance", "/admin/fees"]}
+      account={
+        <AccountCard
+          name={viewer.kind === "admin" ? viewer.admin.name : "Power Admin"}
+          detail={viewer.kind === "admin" ? viewer.admin.email : "Viewing this school"}
+          signOut={viewer.kind === "admin" ? adminLogout : undefined}
+          theme={theme}
+        />
+      }
+      banner={
+        viewer.kind === "power" && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-warning-line bg-warning-soft px-4 py-2 text-sm text-fg sm:px-6 lg:px-10 print:hidden">
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-warning" aria-hidden />
+              Viewing <strong className="font-semibold">{school.name}</strong> as Power Admin.
             </span>
-            <Link href="/power" className="font-medium underline">
+            <Link href="/power" className="font-medium text-warning underline-offset-4 hover:underline">
               Back to Power Admin
             </Link>
           </div>
-        )}
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10 print:max-w-none print:p-0">{children}</div>
-      </main>
-    </div>
+        )
+      }
+    >
+      {children}
+    </AppShell>
   );
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { startTransition, useActionState, useMemo, useState, useTransition } from "react";
-import { CalendarOff, CheckCheck, Loader2, PartyPopper, Save, Sun, Undo2 } from "lucide-react";
+import Link from "next/link";
+import { startTransition, useActionState, useMemo, useRef, useState, useTransition } from "react";
+import { ArrowRight, CalendarOff, CheckCheck, CircleCheck, Keyboard, Loader2, PartyPopper, Save, Sun, Undo2 } from "lucide-react";
 import { ActionForm, Field, FormMessage, SubmitButton } from "@/components/forms";
-import { Avatar, buttonVariants, inputClass } from "@/components/ui";
+import { Avatar, Button, buttonClass, buttonVariants, inputClass, useToast } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { ATTENDANCE_STATUSES, STATUS_META, emptyCounts, type AttendanceStatusKey } from "@/lib/attendance-shared";
 
@@ -26,6 +27,7 @@ export function AttendanceSheet({
   save,
   setHoliday,
   clearHoliday,
+  next,
 }: {
   students: SheetStudent[];
   /** Saved marks, or null when this day hasn't been marked yet. */
@@ -37,6 +39,8 @@ export function AttendanceSheet({
   save: Action;
   setHoliday: Action;
   clearHoliday: () => Promise<ActionState>;
+  /** The next class still to mark on this date (admin view), offered after saving. */
+  next?: { href: string; label: string } | null;
 }) {
   const start = useMemo(
     () => Object.fromEntries(students.map((s) => [s.id, initial?.[s.id] ?? { status: "PRESENT" as const, remark: "" }])),
@@ -44,9 +48,14 @@ export function AttendanceSheet({
   );
   const [marks, setMarks] = useState<Record<string, Mark>>(start);
   const [savedMarks, setSavedMarks] = useState(start);
+  const toast = useToast();
+  const rows = useRef<(HTMLLIElement | null)[]>([]);
   const [state, formAction, saving] = useActionState(async (prev: ActionState, fd: FormData) => {
     const result = await save(prev, fd);
-    if (result.ok) setSavedMarks(marksFromForm(fd, students));
+    if (result.ok) {
+      setSavedMarks(marksFromForm(fd, students));
+      toast({ title: result.message ?? "Attendance saved", description: next ? `Next up: ${next.label}` : undefined });
+    }
     return result;
   }, {});
   const [clearState, setClearState] = useState<ActionState>({});
@@ -77,7 +86,7 @@ export function AttendanceSheet({
             type="button"
             disabled={clearing}
             onClick={() => startClearing(async () => setClearState(await clearHoliday()))}
-            className={`${buttonVariants.secondary} mt-3 !py-2`}
+            className={`${buttonVariants.secondary} mt-3`}
           >
             {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
             Remove holiday and take attendance
@@ -90,6 +99,22 @@ export function AttendanceSheet({
 
   if (!students.length) {
     return <Banner icon={CalendarOff} tone="slate" title="No students in this class">Add students to the class to take attendance.</Banner>;
+  }
+
+  const total = students.length;
+  const attending = counts.PRESENT + counts.LATE + counts.HALF_DAY;
+  const saved = state.ok && !dirty;
+
+  // P / A / L / H / V marks the focused student and moves to the next one.
+  function onRowKey(e: React.KeyboardEvent, index: number, id: string) {
+    if ((e.target as HTMLElement).dataset.remark !== undefined || e.metaKey || e.ctrlKey || e.altKey) return;
+    const status = ATTENDANCE_STATUSES.find((st) => STATUS_META[st].key === e.key.toLowerCase());
+    if (!status) return;
+    e.preventDefault();
+    set(id, { status });
+    const next = rows.current[index + 1];
+    // Focus the next student's selected pill once React has re-rendered.
+    requestAnimationFrame(() => next?.querySelector<HTMLInputElement>("input[type=radio]:checked")?.focus());
   }
 
   return (
@@ -106,39 +131,60 @@ export function AttendanceSheet({
           const fd = new FormData(e.currentTarget);
           startTransition(() => formAction(fd));
         }}
-        className="rounded-2xl border border-slate-200/80 bg-white shadow-sm"
+        className="overflow-clip rounded-2xl border border-line bg-surface shadow-card"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6">
-          <div className="flex flex-wrap items-center gap-1.5" aria-live="polite">
-            {ATTENDANCE_STATUSES.map((s) => (
-              <span key={s} className={`rounded-full bg-slate-50 px-2.5 py-1 text-xs font-medium ring-1 ring-inset ring-slate-200 ${STATUS_META[s].text}`}>
-                {STATUS_META[s].label} <span className="tabular-nums">{counts[s]}</span>
+        <div className="border-b border-line px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div aria-live="polite">
+              <p className="text-display-sm font-semibold tabular-nums text-fg">
+                {attending}
+                <span className="text-h2 font-medium text-muted"> / {total}</span>
+              </p>
+              <p className="text-sm text-muted">attending{counts.ABSENT ? ` · ${counts.ABSENT} absent` : ""}</p>
+            </div>
+            <Button variant="ghost" size="sm" icon={CheckCheck} onClick={() => setMarks(Object.fromEntries(students.map((s) => [s.id, { ...marks[s.id], status: "PRESENT" }])))}>
+              Mark all present
+            </Button>
+          </div>
+          {/* Live distribution */}
+          <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-surface-3" aria-hidden>
+            {ATTENDANCE_STATUSES.map((st) =>
+              counts[st] ? (
+                <div key={st} className={`${STATUS_META[st].bar} transition-[width] duration-300 ease-out`} style={{ width: `${(counts[st] / total) * 100}%` }} />
+              ) : null,
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+            {ATTENDANCE_STATUSES.map((st) => (
+              <span key={st} className="inline-flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${STATUS_META[st].bar}`} />
+                {STATUS_META[st].label} <span className="font-semibold tabular-nums text-fg">{counts[st]}</span>
               </span>
             ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMarks(Object.fromEntries(students.map((s) => [s.id, { ...marks[s.id], status: "PRESENT" }])))}
-              className={`${buttonVariants.ghost} !py-1.5 text-xs`}
-            >
-              <CheckCheck className="h-4 w-4" />
-              Mark all present
-            </button>
+            <span className="ml-auto hidden items-center gap-1 lg:inline-flex">
+              <Keyboard className="h-3.5 w-3.5" /> Keys: {ATTENDANCE_STATUSES.map((st) => STATUS_META[st].key.toUpperCase()).join(" · ")}
+            </span>
           </div>
         </div>
 
-        <ul className="divide-y divide-slate-100">
-          {students.map((s) => {
+        <ul className="divide-y divide-line">
+          {students.map((s, i) => {
             const mark = marks[s.id];
             return (
-              <li key={s.id} className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6 ${mark.status === "ABSENT" ? "bg-rose-50/40" : ""}`}>
-                <span className="w-7 shrink-0 text-right font-mono text-xs text-slate-400">{s.roll ?? "—"}</span>
+              <li
+                key={s.id}
+                ref={(el) => {
+                  rows.current[i] = el;
+                }}
+                onKeyDown={(e) => onRowKey(e, i, s.id)}
+                className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors sm:px-6 ${mark.status === "ABSENT" ? "bg-danger-soft" : ""}`}
+              >
+                <span className="w-7 shrink-0 text-right font-mono text-xs text-subtle">{s.roll ?? "—"}</span>
                 <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
                   <Avatar name={s.name} src={s.photoUrl} size="sm" />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{s.name}</p>
-                    <p className="font-mono text-[11px] text-slate-400">{s.code}</p>
+                    <p className="truncate text-sm font-medium text-fg">{s.name}</p>
+                    <p className="font-mono text-[11px] text-subtle">{s.code}</p>
                   </div>
                 </div>
                 <div role="radiogroup" aria-label={`Attendance for ${s.name}`} className="flex gap-1">
@@ -147,9 +193,9 @@ export function AttendanceSheet({
                     return (
                       <label
                         key={st}
-                        title={STATUS_META[st].label}
-                        className={`flex h-8 min-w-9 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-semibold ring-1 ring-inset transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${
-                          on ? STATUS_META[st].on : "bg-white text-slate-500 ring-slate-200 hover:bg-slate-50"
+                        title={`${STATUS_META[st].label} (${STATUS_META[st].key.toUpperCase()})`}
+                        className={`flex h-9 min-w-10 cursor-pointer select-none items-center justify-center rounded-lg px-2 text-xs font-semibold ring-1 ring-inset transition duration-150 active:scale-95 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
+                          on ? `${STATUS_META[st].on} shadow-card` : "bg-surface text-muted ring-line hover:bg-surface-2 hover:text-fg"
                         }`}
                       >
                         <input
@@ -168,43 +214,56 @@ export function AttendanceSheet({
                 </div>
                 <input
                   name={`r:${s.id}`}
+                  data-remark
                   value={mark.remark}
                   onChange={(e) => set(s.id, { remark: e.target.value })}
                   maxLength={120}
                   placeholder="Remark"
                   aria-label={`Remark for ${s.name}`}
-                  className="h-8 w-full rounded-md border border-slate-200 px-2.5 text-xs text-slate-700 placeholder:text-slate-300 focus:border-indigo-500 focus:outline-none sm:w-40"
+                  className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-base text-fg-2 placeholder:text-subtle transition focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 sm:w-40 sm:text-xs"
                 />
               </li>
             );
           })}
         </ul>
 
-        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
+        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-glass px-4 py-3 backdrop-blur-xl sm:px-6 md:bottom-0">
           <div className="min-w-0 flex-1 text-sm">
-            {state.error || (state.ok && !dirty) ? (
+            {state.error ? (
               <FormMessage state={state} compact />
+            ) : saved ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
+                <CircleCheck className="h-4 w-4" /> Saved
+              </span>
             ) : dirty ? (
-              <span className="text-xs font-medium text-amber-700">Unsaved changes</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-warning">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning-solid" /> Unsaved changes
+              </span>
             ) : initial ? (
-              <span className="text-xs text-slate-500">Saved{markedBy ? ` by ${markedBy}` : ""}</span>
+              <span className="text-xs text-muted">Saved{markedBy ? ` by ${markedBy}` : ""}</span>
             ) : (
-              <span className="text-xs text-slate-500">Not marked yet. Everyone starts as present.</span>
+              <span className="text-xs text-muted">Not marked yet. Everyone starts as present.</span>
             )}
           </div>
-          <button type="submit" disabled={saving} className={buttonVariants.primary}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Saving…" : initial ? "Update attendance" : "Save attendance"}
-          </button>
+          {saved && next ? (
+            <Link href={next.href} className={buttonClass({ variant: "primary" })}>
+              Next: {next.label}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          ) : (
+            <Button type="submit" loading={saving} icon={Save} disabled={saved}>
+              {initial || saved ? "Update attendance" : "Save attendance"}
+            </Button>
+          )}
         </div>
       </form>
 
-      <details className="group rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-6 py-4 text-sm font-medium text-slate-700">
-          <CalendarOff className="h-4 w-4 text-slate-400" />
+      <details className="group rounded-2xl border border-line bg-surface shadow-card">
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-2xl px-6 py-4 text-sm font-medium text-fg-2 transition hover:text-fg">
+          <CalendarOff className="h-4 w-4 text-subtle" />
           Class off today? Mark it as a holiday
         </summary>
-        <ActionForm action={setHoliday} className="space-y-3 border-t border-slate-100 px-6 py-4">
+        <ActionForm action={setHoliday} className="space-y-3 border-t border-line px-6 py-4">
           {(st) => (
             <>
               <Field label="Reason" name="reason" errors={st.fieldErrors} required hint="For example: Class picnic, exam preparation leave, local holiday.">
@@ -233,9 +292,9 @@ function marksFromForm(fd: FormData, students: SheetStudent[]): Record<string, M
 }
 
 const bannerTones = {
-  violet: "border-violet-200 bg-violet-50/70 text-violet-900 [&_svg.lead]:text-violet-500",
-  amber: "border-amber-200 bg-amber-50/70 text-amber-900 [&_svg.lead]:text-amber-500",
-  slate: "border-slate-200 bg-white text-slate-700 [&_svg.lead]:text-slate-400",
+  violet: "border-accent-line bg-accent-soft text-fg [&_svg.lead]:text-accent-text",
+  amber: "border-warning-line bg-warning-soft text-fg [&_svg.lead]:text-warning",
+  slate: "border-line bg-surface text-fg-2 [&_svg.lead]:text-subtle",
 };
 
 function Banner({

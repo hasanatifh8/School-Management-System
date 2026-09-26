@@ -71,22 +71,22 @@ export function LogoInput({ currentUrl, error }: { currentUrl?: string | null; e
 
   return (
     <div className="flex items-center gap-5 sm:col-span-2">
-      <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-[conic-gradient(#f1f5f9_25%,white_0_50%,#f1f5f9_0_75%,white_0)] bg-[length:16px_16px]">
+      <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-line bg-[conic-gradient(#f1f5f9_25%,white_0_50%,#f1f5f9_0_75%,white_0)] bg-[length:16px_16px]">
         {shown ? (
           // eslint-disable-next-line @next/next/no-img-element -- local blob / API image
           <img src={shown} alt="School logo" className="h-full w-full object-contain p-2" />
         ) : (
-          <School className="h-10 w-10 text-slate-300" />
+          <School className="h-10 w-10 text-subtle" />
         )}
         {busy && (
-          <span className="absolute inset-0 flex items-center justify-center bg-white/70">
-            <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+          <span className="absolute inset-0 flex items-center justify-center bg-surface/70">
+            <Loader2 className="h-5 w-5 animate-spin text-accent-text" />
           </span>
         )}
       </div>
       <div>
-        <p className="text-sm font-medium text-slate-700">School logo</p>
-        <p className="mt-0.5 text-xs text-slate-500">PNG with a transparent background works best. Resized to 512 px.</p>
+        <p className="text-sm font-medium text-fg-2">School logo</p>
+        <p className="mt-0.5 text-xs text-muted">PNG with a transparent background works best. Resized to 512 px.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <label htmlFor={id} className={`${buttonVariants.secondary} cursor-pointer !px-3 !py-2`}>
             <ImagePlus className="h-4 w-4" />
@@ -107,9 +107,9 @@ export function LogoInput({ currentUrl, error }: { currentUrl?: string | null; e
             </button>
           )}
         </div>
-        {preview && <p className="mt-2 text-xs text-indigo-600">New logo selected. Save to apply.</p>}
-        {removed && !preview && <p className="mt-2 text-xs text-amber-600">Logo will be removed when you save.</p>}
-        {message && <p className="mt-2 text-xs font-medium text-rose-600">{message}</p>}
+        {preview && <p className="mt-2 text-xs text-accent-text">New logo selected. Save to apply.</p>}
+        {removed && !preview && <p className="mt-2 text-xs text-warning">Logo will be removed when you save.</p>}
+        {message && <p className="mt-2 text-xs font-medium text-danger">{message}</p>}
       </div>
       <input id={id} type="file" accept="image/png,image/jpeg,image/webp,image/*" onChange={onPick} className="sr-only" />
       <input ref={fieldRef} type="file" name="logo" className="hidden" tabIndex={-1} aria-hidden />

@@ -30,9 +30,9 @@ export function GeneratedCards({
   return (
     <div className="space-y-6">
       {(incomplete.length > 0 || schoolGaps.length > 0) && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-5 py-4 text-sm text-amber-900 print:hidden">
+        <div className="rounded-2xl border border-warning-line bg-warning-soft/70 px-5 py-4 text-sm text-fg print:hidden">
           <p className="flex items-center gap-2 font-semibold">
-            <TriangleAlert className="h-4 w-4 text-amber-500" />
+            <TriangleAlert className="h-4 w-4 text-warning" />
             Some details are missing. Those spaces are left blank on the card.
           </p>
           {schoolGaps.length > 0 && (
@@ -45,7 +45,7 @@ export function GeneratedCards({
                   <Link href={profileHref(c.id)} className="font-medium underline">
                     {c.name}
                   </Link>{" "}
-                  <span className="text-amber-800/80">no {c.missing.join(", ")}</span>
+                  <span className="text-warning/80">no {c.missing.join(", ")}</span>
                 </li>
               ))}
             </ul>

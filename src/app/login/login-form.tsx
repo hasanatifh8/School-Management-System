@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { LogIn } from "lucide-react";
-import { ActionForm, SubmitButton } from "@/components/forms";
-import { inputClass } from "@/components/ui";
+import { LogIn, Presentation, ShieldUser } from "lucide-react";
+import { ActionForm, Field, SubmitButton } from "@/components/forms";
+import { PasswordField } from "@/components/password-field";
+import { SegmentedControl, inputClass } from "@/components/ui";
 import { signIn } from "./actions";
 
 type Role = "admin" | "teacher";
@@ -11,24 +12,19 @@ type Role = "admin" | "teacher";
 export function LoginForm({ initialRole }: { initialRole: Role }) {
   const [role, setRole] = useState<Role>(initialRole);
   return (
-    <ActionForm action={signIn} className="space-y-4">
-      <div role="tablist" aria-label="Sign in as" className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm font-medium">
-        {(["admin", "teacher"] as const).map((r) => (
-          <button
-            key={r}
-            type="button"
-            role="tab"
-            aria-selected={role === r}
-            onClick={() => setRole(r)}
-            className={`rounded-lg py-2 transition ${role === r ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-          >
-            {r === "admin" ? "School admin" : "Teacher"}
-          </button>
-        ))}
-      </div>
-      <input type="hidden" name="role" value={role} />
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-slate-700">{role === "admin" ? "Email" : "Username"}</span>
+    <ActionForm action={signIn} className="space-y-6">
+      <SegmentedControl
+        name="role"
+        label="Sign in as"
+        value={role}
+        onChange={setRole}
+        className="w-full"
+        options={[
+          { value: "admin", label: "School admin", icon: ShieldUser },
+          { value: "teacher", label: "Teacher", icon: Presentation },
+        ]}
+      />
+      <Field label={role === "admin" ? "Email" : "Username"} name="identifier">
         <input
           key={role}
           type={role === "admin" ? "email" : "text"}
@@ -40,12 +36,16 @@ export function LoginForm({ initialRole }: { initialRole: Role }) {
           placeholder={role === "admin" ? "admin@school.edu.in" : "e.g. dps.tch0001"}
           className={inputClass}
         />
-      </label>
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-slate-700">Password</span>
-        <input type="password" name="password" required autoComplete="current-password" className={inputClass} />
-      </label>
-      <SubmitButton icon={<LogIn className="h-4 w-4" />}>Sign in</SubmitButton>
+      </Field>
+      <div>
+        <span className="mb-1.5 block text-sm font-medium text-fg-2" id="password-label">
+          Password
+        </span>
+        <PasswordField name="password" autoComplete="current-password" labelledBy="password-label" />
+      </div>
+      <SubmitButton size="lg" className="w-full" icon={<LogIn className="h-4 w-4" />}>
+        Sign in
+      </SubmitButton>
     </ActionForm>
   );
 }

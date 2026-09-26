@@ -7,7 +7,7 @@ import { Select } from "@/components/select";
 import { PhotoInput } from "@/components/photo-input";
 import { SameAs } from "@/components/same-as";
 import { CredentialsNotice } from "@/components/credentials-notice";
-import { FormSection, buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
+import { buttonVariants, checkboxClass, FormActions, FormSection, inputClass, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { MAX_TEACHER_AGE, MIN_TEACHER_AGE, ageBounds, normalizeIndianMobile, shiftYears } from "@/lib/student-options";
@@ -171,7 +171,7 @@ export function TeacherForm({
               </Field>
               <Field label="Monthly salary (₹)" name="monthlySalary" errors={e} hint="Whole rupees, e.g. 45000.">
                 <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">₹</span>
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-subtle">₹</span>
                   <input
                     name="monthlySalary"
                     inputMode="numeric"
@@ -191,7 +191,7 @@ export function TeacherForm({
                 <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={teacher?.phone ?? ""} className={inputClass} />
               </Field>
               <div>
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">WhatsApp number</span>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
                 <SameAs name="whatsappSameAsPhone" label="Same as phone" initial={whatsappSameAsPhone} note="Uses the phone number above.">
                   <input
                     type="tel"
@@ -203,7 +203,7 @@ export function TeacherForm({
                   />
                 </SameAs>
                 {e?.whatsappNumber?.[0] && (
-                  <span className="mt-1.5 block text-xs font-medium text-rose-600">{e.whatsappNumber[0]}</span>
+                  <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>
                 )}
               </div>
               <Field label="Address" name="address" errors={e} className="sm:col-span-2">
@@ -212,25 +212,25 @@ export function TeacherForm({
             </FormSection>
 
             {offerLogin && (
-              <label className="flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 text-sm text-indigo-900">
+              <label className="flex items-start gap-3 rounded-xl border border-accent-line bg-accent-soft/60 p-4 text-sm text-accent-text">
                 <input type="checkbox" name="createLogin" defaultChecked className={`${checkboxClass} mt-0.5`} />
                 <span>
                   <span className="font-medium">Create a login for this teacher</span>
-                  <span className="block text-indigo-800/80">
+                  <span className="block text-accent-text/80">
                     A username and password are generated so they can sign in to the teacher portal and see their class.
                   </span>
                 </span>
               </label>
             )}
 
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-6">
+            <FormActions>
               {cancelHref && (
                 <Link href={cancelHref} className={buttonVariants.secondary}>
                   Cancel
                 </Link>
               )}
               <SubmitButton icon={<Save className="h-4 w-4" />}>{submitLabel}</SubmitButton>
-            </div>
+            </FormActions>
           </>
         );
       }}

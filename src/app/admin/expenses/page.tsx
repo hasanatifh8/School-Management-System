@@ -3,17 +3,17 @@ import { CircleCheck, Info, Lightbulb, OctagonAlert, TriangleAlert, Users, Walle
 import { MonthPicker } from "@/components/expenses/month-picker";
 import { StatusPill, budgetStatus, statusBar } from "@/components/expenses/status";
 import { TrendChart } from "@/components/expenses/trend-chart";
-import { Card, IconTile, Table, tbodyClass, tdClass, thClass, theadClass, type IconTone } from "@/components/ui";
+import { Card, StatCard, StatGrid, Table, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
 import { addMonths } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { isMonth, monthSummary, recommendations, requireExpensesAccess, spendingTrend, type Tone } from "@/lib/expenses";
 import { rupees } from "@/lib/fees-shared";
 
 const TONES: Record<Tone, { icon: LucideIcon; cls: string }> = {
-  critical: { icon: OctagonAlert, cls: "text-rose-600" },
-  warning: { icon: TriangleAlert, cls: "text-amber-600" },
-  info: { icon: Info, cls: "text-sky-600" },
-  good: { icon: CircleCheck, cls: "text-emerald-600" },
+  critical: { icon: OctagonAlert, cls: "text-danger" },
+  warning: { icon: TriangleAlert, cls: "text-warning" },
+  info: { icon: Info, cls: "text-info" },
+  good: { icon: CircleCheck, cls: "text-success" },
 };
 
 /** The month at a glance: spent vs budget, forecast, trend, categories and advice. */
@@ -51,26 +51,26 @@ export default async function ExpensesOverviewPage({ searchParams }: PageProps<"
       <MonthPicker basePath="/admin/expenses" month={month} max={addMonths(current, 1)} current={current} />
 
       {/* Budget meter */}
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+      <section className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium text-slate-500">{phase === "future" ? "Planned for the month" : phase === "past" ? "Spent" : "Spent so far"}</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums text-slate-900">
+            <p className="text-sm font-medium text-muted">{phase === "future" ? "Planned for the month" : phase === "past" ? "Spent" : "Spent so far"}</p>
+            <p className="mt-1 text-display-sm font-semibold tabular-nums text-fg">
               {rupees(totals.spent)}
-              {totals.budget != null && <span className="ml-2 text-base font-normal text-slate-500">of {rupees(totals.budget)} budget</span>}
+              {totals.budget != null && <span className="ml-2 text-base font-normal text-muted">of {rupees(totals.budget)} budget</span>}
             </p>
           </div>
           <StatusPill status={overall} />
         </div>
         {totals.budget != null ? (
           <>
-            <div className="relative mt-4 h-3 rounded-full bg-slate-100">
-              <div className={`h-full rounded-full ${statusBar(overall)}`} style={{ width: `${used}%` }} />
+            <div className="relative mt-4 h-3 rounded-full bg-surface-3">
+              <div className={`h-full rounded-full transition-[width] duration-700 ease-out ${statusBar(overall)}`} style={{ width: `${used}%` }} />
               {expectedMark != null && expectedMark > used && (
-                <div className="absolute top-1/2 h-5 w-0.5 -translate-y-1/2 bg-slate-500" style={{ left: `calc(${expectedMark}% - 1px)` }} title={`Expected by month end: ${rupees(totals.forecast)}`} />
+                <div className="absolute top-1/2 h-5 w-0.5 -translate-y-1/2 bg-fg-2" style={{ left: `calc(${expectedMark}% - 1px)` }} title={`Expected by month end: ${rupees(totals.forecast)}`} />
               )}
             </div>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-fg-2">
               {totals.spent > totals.budget
                 ? `${rupees(totals.spent - totals.budget)} over budget.`
                 : `${rupees(totals.budget - totals.spent)} left this month.`}
@@ -78,9 +78,9 @@ export default async function ExpensesOverviewPage({ searchParams }: PageProps<"
             </p>
           </>
         ) : (
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-fg-2">
             No budget set yet.{" "}
-            <Link href="/admin/expenses/budget" className="font-medium text-indigo-600 hover:underline">
+            <Link href="/admin/expenses/budget" className="font-medium text-accent-text hover:underline">
               Set monthly budgets
             </Link>{" "}
             to see if you are over or under.
@@ -88,12 +88,12 @@ export default async function ExpensesOverviewPage({ searchParams }: PageProps<"
         )}
       </section>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <Stat icon={Users} tone="indigo" label="Salaries paid" value={rupees(totals.teaching + totals.nonTeaching)} detail={`Teaching ${rupees(totals.teaching)} · Non-teaching ${rupees(totals.nonTeaching)}`} href={`/admin/expenses/salaries?month=${month}`} />
-        <Stat icon={Zap} tone="amber" label="Other expenses" value={rupees(totals.spent - totals.teaching - totals.nonTeaching)} detail="Electricity, events, upkeep…" href={`/admin/expenses/list?month=${month}`} />
-        <Stat icon={TrendingUp} tone="violet" label={live ? "Expected this month" : "Usual month"} value={rupees(live ? totals.forecast : totals.average)} detail={live ? `Next month about ${rupees(totals.next)}` : "Average of the 3 months before"} />
-        <Stat icon={Wallet} tone="emerald" label="Fees collected" value={rupees(summary.feesCollected)} detail={`Net ${summary.feesCollected - totals.spent >= 0 ? "+" : "−"}${rupees(Math.abs(summary.feesCollected - totals.spent))} after spending`} />
-      </div>
+      <StatGrid>
+        <StatCard icon={Users} tone="indigo" label="Salaries paid" value={totals.teaching + totals.nonTeaching} prefix="₹" detail={`Teaching ${rupees(totals.teaching)} · Non-teaching ${rupees(totals.nonTeaching)}`} href={`/admin/expenses/salaries?month=${month}`} />
+        <StatCard icon={Zap} tone="amber" label="Other expenses" value={totals.spent - totals.teaching - totals.nonTeaching} prefix="₹" detail="Electricity, events, upkeep…" href={`/admin/expenses/list?month=${month}`} />
+        <StatCard icon={TrendingUp} tone="violet" label={live ? "Expected this month" : "Usual month"} value={live ? totals.forecast : totals.average} prefix="₹" detail={live ? `Next month about ${rupees(totals.next)}` : "Average of the 3 months before"} />
+        <StatCard icon={Wallet} tone="emerald" label="Fees collected" value={summary.feesCollected} prefix="₹" detail={`Net ${summary.feesCollected - totals.spent >= 0 ? "+" : "−"}${rupees(Math.abs(summary.feesCollected - totals.spent))} after spending`} />
+      </StatGrid>
 
       <div className="grid gap-6 xl:grid-cols-5">
         <Card title="Last 6 months" description="Total spending each month. Hover a bar for details." className="xl:col-span-3">
@@ -101,13 +101,13 @@ export default async function ExpensesOverviewPage({ searchParams }: PageProps<"
         </Card>
         <Card title="Recommendations" icon={Lightbulb} className="xl:col-span-2" padded={false}>
           {advice.length === 0 ? (
-            <p className="p-6 text-sm text-slate-500">Record some expenses and salaries to get advice here.</p>
+            <p className="p-6 text-sm text-muted">Record some expenses and salaries to get advice here.</p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line">
               {advice.map((a, i) => {
                 const { icon: Icon, cls } = TONES[a.tone];
                 return (
-                  <li key={i} className="flex gap-3 px-6 py-3 text-sm text-slate-700">
+                  <li key={i} className="flex gap-3 px-6 py-3 text-sm text-fg-2">
                     <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${cls}`} />
                     {a.text}
                   </li>
@@ -137,26 +137,26 @@ export default async function ExpensesOverviewPage({ searchParams }: PageProps<"
               const pct = c.budget ? Math.round((c.spent / c.budget) * 100) : null;
               return (
                 <tr key={c.id}>
-                  <td className={`${tdClass} font-medium text-slate-900`}>
-                    <Link href={c.isSalaries ? `/admin/expenses/salaries?month=${month}` : `/admin/expenses/list?month=${month}&category=${c.id}`} className="hover:text-indigo-600">
+                  <td className={`${tdClass} font-medium text-fg`}>
+                    <Link href={c.isSalaries ? `/admin/expenses/salaries?month=${month}` : `/admin/expenses/list?month=${month}&category=${c.id}`} className="hover:text-accent-text">
                       {c.name}
                     </Link>
                   </td>
                   <td className={`${tdClass} text-right tabular-nums`}>{c.budget != null ? rupees(c.budget) : "—"}</td>
-                  <td className={`${tdClass} text-right font-semibold tabular-nums text-slate-900`}>{rupees(c.spent)}</td>
+                  <td className={`${tdClass} text-right font-semibold tabular-nums text-fg`}>{rupees(c.spent)}</td>
                   <td className={`${tdClass} w-40`}>
                     {pct != null ? (
                       <div className="flex items-center gap-2">
-                        <div className="h-2 flex-1 rounded-full bg-slate-100">
+                        <div className="h-2 flex-1 rounded-full bg-surface-3">
                           <div className={`h-full rounded-full ${statusBar(status)}`} style={{ width: `${Math.min(100, pct)}%` }} />
                         </div>
-                        <span className="w-10 text-right text-xs tabular-nums text-slate-500">{pct}%</span>
+                        <span className="w-10 text-right text-xs tabular-nums text-muted">{pct}%</span>
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-subtle">—</span>
                     )}
                   </td>
-                  <td className={`${tdClass} text-right tabular-nums text-slate-500`}>{c.average ? rupees(c.average) : "—"}</td>
+                  <td className={`${tdClass} text-right tabular-nums text-muted`}>{c.average ? rupees(c.average) : "—"}</td>
                   {live && <td className={`${tdClass} text-right tabular-nums`}>{rupees(c.forecast)}</td>}
                   <td className={tdClass}>
                     <StatusPill status={status} />
@@ -168,24 +168,5 @@ export default async function ExpensesOverviewPage({ searchParams }: PageProps<"
         </Table>
       </Card>
     </div>
-  );
-}
-
-function Stat({ icon, tone, label, value, detail, href }: { icon: LucideIcon; tone: IconTone; label: string; value: string; detail: string; href?: string }) {
-  const body = (
-    <>
-      <IconTile icon={icon} tone={tone} />
-      <p className="mt-3 text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{detail}</p>
-    </>
-  );
-  const cls = "block rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5";
-  return href ? (
-    <Link href={href} className={`${cls} transition hover:border-indigo-200 hover:shadow-md`}>
-      {body}
-    </Link>
-  ) : (
-    <div className={cls}>{body}</div>
   );
 }

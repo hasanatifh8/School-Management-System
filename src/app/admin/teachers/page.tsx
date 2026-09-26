@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Crown, FileSpreadsheet, Pencil, Phone, Presentation, UserPlus } from "lucide-react";
+import { ChevronRight, Crown, Download, FileSpreadsheet, Phone, Presentation, SearchX, UserPlus } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
@@ -7,19 +7,22 @@ import { fullName, sectionLabel } from "@/lib/queries";
 import { ExportDialog } from "@/components/export-dialog";
 import { Pagination } from "@/components/pagination";
 import { paginate } from "@/lib/pagination";
-import { FilterSelect, ListToolbar, ResetFilters, SearchBox } from "@/components/list-toolbar";
+import { FilterSelect, ListToolbar, MoreFilters, ResetFilters, SearchBox } from "@/components/list-toolbar";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { parseTeacherFilters, teacherWhere } from "@/lib/list-filters";
 import {
   Badge,
   ButtonLink,
   Card,
+  Dash,
   EmptyState,
+  MenuLink,
+  MoreMenu,
   PageHeader,
   PersonCell,
   StatusTab,
   Table,
-  buttonVariants,
+  tabBarClass,
   tbodyClass,
   tdClass,
   thClass,
@@ -70,9 +73,14 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
         action={
           <>
             <ExportDialog kind="teachers" count={paging.total} noun="teachers" />
-            <ButtonLink href="/admin/teachers/import" icon={FileSpreadsheet} variant="secondary">
-              Bulk upload
-            </ButtonLink>
+            <MoreMenu>
+              <MenuLink href="/admin/teachers/import" icon={<FileSpreadsheet />}>
+                Bulk upload from Excel
+              </MenuLink>
+              <MenuLink href="/api/templates/teachers" icon={<Download />} download>
+                Download Excel template
+              </MenuLink>
+            </MoreMenu>
             <ButtonLink href="/admin/teachers/new" icon={UserPlus}>
               Add teacher
             </ButtonLink>
@@ -81,8 +89,8 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
       />
 
       <Card padded={false}>
-        <div className="flex flex-col gap-4 border-b border-slate-100 px-6 pt-4">
-          <div className="-mb-px flex gap-6 text-sm font-medium">
+        <div className="flex flex-col gap-4 border-b border-line px-4 pt-4 sm:px-6">
+          <div className={tabBarClass}>
             <StatusTab href={tabHref(false)} active={!showRemoved} label="Active" count={activeCount} />
             <StatusTab href={tabHref(true)} active={showRemoved} label="Removed" count={removedCount} />
           </div>
@@ -103,6 +111,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
                 label="Any subject"
                 options={subjects.map((sub) => ({ value: sub.id, label: `Teaches ${sub.name}` }))}
               />
+              <MoreFilters keys={["gender", "bloodGroup"]}>
               <FilterSelect
                 name="gender"
                 label="Any gender"
@@ -117,6 +126,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
                 label="Any blood group"
                 options={BLOOD_GROUPS.map((b) => ({ value: b, label: BLOOD_GROUP_LABELS[b] }))}
               />
+              </MoreFilters>
               <ResetFilters keys={["q", "role", "subjectId", "gender", "bloodGroup"]} />
             </ListToolbar>
           </div>
@@ -124,7 +134,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
 
         {teachers.length === 0 ? (
           <EmptyState
-            icon={Presentation}
+            icon={filtered ? SearchX : Presentation}
             title={filtered ? "No teachers match your filters" : showRemoved ? "No removed teachers" : "No teachers yet"}
             description={
               filtered
@@ -135,9 +145,14 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
             }
             action={
               !filtered && !showRemoved ? (
-                <ButtonLink href="/admin/teachers/new" icon={UserPlus}>
-                  Add teacher
-                </ButtonLink>
+                <>
+                  <ButtonLink href="/admin/teachers/new" icon={UserPlus}>
+                    Add teacher
+                  </ButtonLink>
+                  <ButtonLink href="/admin/teachers/import" icon={FileSpreadsheet} variant="secondary">
+                    Bulk upload
+                  </ButtonLink>
+                </>
               ) : undefined
             }
           />
@@ -147,10 +162,10 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
               <tr>
                 <th className={thClass}>Teacher</th>
                 <th className={thClass}>Class teacher</th>
-                <th className={thClass}>Subjects taught</th>
-                <th className={thClass}>Contact</th>
+                <th className={`${thClass} hidden lg:table-cell`}>Subjects taught</th>
+                <th className={`${thClass} hidden md:table-cell`}>Contact</th>
                 <th className={thClass}>
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">Open</span>
                 </th>
               </tr>
             </thead>
@@ -158,7 +173,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
               {teachers.map((t) => {
                 const subjects = [...new Set(t.subjectAssignments.map((a) => a.subject.name))];
                 return (
-                  <tr key={t.id} className={trClass}>
+                  <tr key={t.id} className={`${trClass} group`}>
                     <td className={tdClass}>
                       <PersonCell
                         name={fullName(t)}
@@ -179,10 +194,10 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
                           {sectionLabel(t.classTeacherOf)}
                         </Badge>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <Dash />
                       )}
                     </td>
-                    <td className={tdClass}>
+                    <td className={`${tdClass} hidden lg:table-cell`}>
                       {subjects.length ? (
                         <div className="flex max-w-xs flex-wrap gap-1">
                           {subjects.map((s) => (
@@ -190,23 +205,26 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
                           ))}
                         </div>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <Dash />
                       )}
                     </td>
-                    <td className={tdClass}>
+                    <td className={`${tdClass} hidden md:table-cell`}>
                       {t.phone ? (
-                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-slate-600">
-                          <Phone className="h-3.5 w-3.5 text-slate-400" />
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-fg-2">
+                          <Phone className="h-3.5 w-3.5 text-subtle" />
                           {t.phone}
                         </span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <Dash />
                       )}
                     </td>
-                    <td className={`${tdClass} text-right`}>
-                      <Link href={`/admin/teachers/${t.id}`} className={buttonVariants.ghost}>
-                        <Pencil className="h-4 w-4" />
-                        Edit
+                    <td className={`${tdClass} w-12 text-right`}>
+                      <Link
+                        href={`/admin/teachers/${t.id}`}
+                        aria-label={`Open ${fullName(t)}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-subtle transition group-hover:bg-surface-3 group-hover:text-accent-text"
+                      >
+                        <ChevronRight className="h-4 w-4" />
                       </Link>
                     </td>
                   </tr>

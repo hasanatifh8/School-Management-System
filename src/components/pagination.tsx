@@ -52,20 +52,20 @@ export function Pagination({ paging, noun = "rows" }: { paging: Paging; noun?: s
   const last = Math.min(page * perPage, total);
 
   const arrow =
-    "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 aria-disabled:pointer-events-none aria-disabled:opacity-40";
+    "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line-strong bg-surface text-fg-2 shadow-card transition hover:bg-surface-2 active:scale-95 aria-disabled:pointer-events-none aria-disabled:opacity-40";
 
   return (
     <nav
       aria-label="Pagination"
       aria-busy={pending}
-      className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col gap-3 border-t border-line px-4 py-4 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6"
     >
       <div className="flex items-center gap-3">
         <span className="tabular-nums">
-          Showing <span className="font-medium text-slate-900">{first.toLocaleString("en-IN")}–{last.toLocaleString("en-IN")}</span> of{" "}
-          <span className="font-medium text-slate-900">{total.toLocaleString("en-IN")}</span> {noun}
+          Showing <span className="font-medium text-fg">{first.toLocaleString("en-IN")}–{last.toLocaleString("en-IN")}</span> of{" "}
+          <span className="font-medium text-fg">{total.toLocaleString("en-IN")}</span> {noun}
         </span>
-        <label className="flex items-center gap-2 text-slate-500">
+        <label className="flex items-center gap-2 text-muted">
           <span className="sr-only sm:not-sr-only">Per page</span>
           <select
             value={perPage}
@@ -82,7 +82,7 @@ export function Pagination({ paging, noun = "rows" }: { paging: Paging; noun?: s
             ))}
           </select>
         </label>
-        {pending && <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-label="Loading" />}
+        {pending && <Loader2 className="h-4 w-4 animate-spin text-subtle" aria-label="Loading" />}
       </div>
 
       {pages > 1 && (
@@ -92,7 +92,7 @@ export function Pagination({ paging, noun = "rows" }: { paging: Paging; noun?: s
           </Link>
           {pageList(page, pages).map((n, i) =>
             n === "gap" ? (
-              <span key={`gap-${i}`} className="px-1 text-slate-400">
+              <span key={`gap-${i}`} className="px-1 text-subtle">
                 …
               </span>
             ) : (
@@ -100,10 +100,8 @@ export function Pagination({ paging, noun = "rows" }: { paging: Paging; noun?: s
                 key={n}
                 href={pageHref(n)}
                 aria-current={n === page ? "page" : undefined}
-                className={`inline-flex h-9 min-w-9 items-center justify-center rounded-lg px-2 tabular-nums transition ${
-                  n === page
-                    ? "bg-indigo-600 font-semibold text-white shadow-sm shadow-indigo-600/20"
-                    : "text-slate-600 hover:bg-slate-100"
+                className={`inline-flex h-9 min-w-9 items-center justify-center rounded-xl px-2 tabular-nums transition active:scale-95 ${
+                  n === page ? "bg-accent font-semibold text-accent-fg shadow-accent" : "text-fg-2 hover:bg-surface-3"
                 }`}
               >
                 {n}

@@ -6,14 +6,14 @@ import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { HouseBadge, HouseColorPicker } from "@/components/house";
 import {
   Badge,
+  buttonVariants,
   Card,
+  checkboxClass,
   EmptyState,
+  inputClass,
+  PagedTable,
   PageHeader,
   PersonCell,
-  Table,
-  buttonVariants,
-  checkboxClass,
-  inputClass,
   selectClass,
   tbodyClass,
   tdClass,
@@ -73,7 +73,7 @@ export default async function HousePage({ params, searchParams }: PageProps<"/ad
         subtitle={house.description ?? "Manage members and house details."}
       />
 
-      <section className={`mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-gradient-to-r p-6 text-white shadow-sm ${c.banner}`}>
+      <section className={`mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-gradient-to-r p-6 text-white shadow-card ${c.banner}`}>
         <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur">
           <Shield className="h-7 w-7" />
         </span>
@@ -92,8 +92,12 @@ export default async function HousePage({ params, searchParams }: PageProps<"/ad
           {house.students.length === 0 ? (
             <EmptyState icon={Users} title="No members yet" description="Use “Add students” to assign students to this house." />
           ) : (
-            <Table>
-              <thead className={theadClass}>
+            <PagedTable
+              noun="members"
+              pageSize={15}
+              theadClassName={theadClass}
+              tbodyClassName={tbodyClass}
+              head={
                 <tr>
                   <th className={thClass}>Student</th>
                   <th className={thClass}>Class</th>
@@ -101,8 +105,8 @@ export default async function HousePage({ params, searchParams }: PageProps<"/ad
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
-              </thead>
-              <tbody className={tbodyClass}>
+              }
+            >
                 {house.students.map((s) => (
                   <tr key={s.id} className={trClass}>
                     <td className={tdClass}>
@@ -134,15 +138,14 @@ export default async function HousePage({ params, searchParams }: PageProps<"/ad
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </Table>
+              </PagedTable>
           )}
         </Card>
 
         <div className="space-y-6 self-start">
           <Card title="Add students" icon={UserPlus} description="Tick students to put them in this house.">
             <form className="mb-4 grid gap-2">
-              <select name="classId" defaultValue={classId} className={`${selectClass} !py-2`}>
+              <select name="classId" defaultValue={classId} className={selectClass}>
                 <option value="">All classes</option>
                 {classes.map((cl) => (
                   <option key={cl.id} value={cl.id}>
@@ -150,17 +153,17 @@ export default async function HousePage({ params, searchParams }: PageProps<"/ad
                   </option>
                 ))}
               </select>
-              <select name="scope" defaultValue={includeOtherHouses ? "all" : ""} className={`${selectClass} !py-2`}>
+              <select name="scope" defaultValue={includeOtherHouses ? "all" : ""} className={selectClass}>
                 <option value="">Students without a house</option>
                 <option value="all">Also students in other houses</option>
               </select>
-              <button className={`${buttonVariants.secondary} !py-2`}>Show</button>
+              <button className={buttonVariants.secondary}>Show</button>
             </form>
 
             {/* Always rendered so the result message stays visible after the list empties. */}
             <ActionForm action={assignStudentsToHouse.bind(null, house.id)} className="space-y-3">
               {candidates.length === 0 ? (
-                <p className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">
+                <p className="rounded-lg bg-surface-2 p-4 text-center text-sm text-muted">
                   No matching students. {includeOtherHouses ? "" : "Try including students in other houses."}
                 </p>
               ) : (
@@ -169,11 +172,11 @@ export default async function HousePage({ params, searchParams }: PageProps<"/ad
                   <ul className="max-h-96 space-y-1.5 overflow-y-auto pr-1">
                     {candidates.map((s) => (
                       <li key={s.id}>
-                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm transition hover:bg-slate-50 has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/60">
+                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-line px-3 py-2 text-sm transition hover:bg-surface-2 has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
                           <input type="checkbox" name="studentIds" value={s.id} className={checkboxClass} />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate font-medium text-slate-800">{fullName(s)}</span>
-                            <span className="block truncate text-xs text-slate-500">
+                            <span className="block truncate font-medium text-fg">{fullName(s)}</span>
+                            <span className="block truncate text-xs text-muted">
                               {s.studentCode} · {s.section ? sectionLabel(s.section) : "No class"}
                             </span>
                           </span>
@@ -183,7 +186,7 @@ export default async function HousePage({ params, searchParams }: PageProps<"/ad
                     ))}
                   </ul>
                   {candidates.length === 300 && (
-                    <p className="text-xs text-slate-500">Showing the first 300. Filter by class to see more.</p>
+                    <p className="text-xs text-muted">Showing the first 300. Filter by class to see more.</p>
                   )}
                   <SubmitButton icon={<UserPlus className="h-4 w-4" />}>Add to {house.name}</SubmitButton>
                 </>
@@ -218,9 +221,9 @@ export default async function HousePage({ params, searchParams }: PageProps<"/ad
         </div>
       </div>
 
-      <p className="mt-6 text-sm text-slate-500">
+      <p className="mt-6 text-sm text-muted">
         Tip: you can also set a student&apos;s house from their{" "}
-        <Link href="/admin/students" className="font-medium text-indigo-600 hover:underline">
+        <Link href="/admin/students" className="font-medium text-accent-text hover:underline">
           profile
         </Link>
         .

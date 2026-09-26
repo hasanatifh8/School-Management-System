@@ -6,7 +6,7 @@ import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { LogoInput } from "@/components/logo-input";
 import { PasswordField } from "@/components/password-field";
 import { Select } from "@/components/select";
-import { FormSection, buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
+import { buttonVariants, checkboxClass, FormActions, FormSection, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 
 export const BOARDS = ["CBSE", "ICSE / ISC", "State Board", "IB", "Cambridge (IGCSE)", "NIOS", "Other"];
@@ -122,25 +122,25 @@ export function SchoolForm({
             )}
 
             {offerDemo && (
-              <label className="flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 text-sm text-indigo-900">
+              <label className="flex items-start gap-3 rounded-xl border border-accent-line bg-accent-soft/60 p-4 text-sm text-accent-text">
                 <input type="checkbox" name="loadDemo" className={`${checkboxClass} mt-0.5`} />
                 <span>
                   <span className="font-medium">Load demo data</span>
-                  <span className="block text-indigo-800/80">
+                  <span className="block text-accent-text/80">
                     Classes 1–5, subjects, houses, 4 teachers and 20 students — handy for trying things out. You can reset it later.
                   </span>
                 </span>
               </label>
             )}
 
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-6">
+            <FormActions>
               {cancelHref && (
                 <Link href={cancelHref} className={buttonVariants.secondary}>
                   Cancel
                 </Link>
               )}
               <SubmitButton icon={<Save className="h-4 w-4" />}>{submitLabel}</SubmitButton>
-            </div>
+            </FormActions>
           </>
         );
       }}

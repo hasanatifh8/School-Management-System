@@ -3,7 +3,7 @@ import { ButtonLink, EmptyState } from "@/components/ui";
 
 export default function NotFound() {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+    <div className="rounded-2xl border border-line bg-surface shadow-card">
       <EmptyState
         icon={SearchX}
         title="Record not found"

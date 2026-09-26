@@ -56,22 +56,22 @@ export function ExamDetailsForm({
 
             <fieldset>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <legend className="text-sm font-medium text-slate-700">
-                  Classes & sections<span className="ml-0.5 text-rose-500">*</span>
+                <legend className="text-sm font-medium text-fg-2">
+                  Classes & sections<span className="ml-0.5 text-danger">*</span>
                 </legend>
                 {allIds.length > 1 && (
                   <div className="flex gap-3 text-xs font-medium">
-                    <button type="button" onClick={() => toggle(allIds, true)} className="text-indigo-600 hover:text-indigo-500">
+                    <button type="button" onClick={() => toggle(allIds, true)} className="text-accent-text underline-offset-4 hover:underline">
                       Select all
                     </button>
-                    <button type="button" onClick={() => toggle(allIds, false)} className="text-slate-500 hover:text-slate-800">
+                    <button type="button" onClick={() => toggle(allIds, false)} className="text-muted hover:text-fg">
                       Clear
                     </button>
                   </div>
                 )}
               </div>
               {classes.length === 0 ? (
-                <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                <p className="rounded-lg bg-surface-2 px-3 py-2 text-sm text-muted">
                   {kind === "exam" ? "Add classes first (Classes page)." : "You aren't assigned to any class or section yet."}
                 </p>
               ) : (
@@ -82,9 +82,9 @@ export function ExamDetailsForm({
                     return (
                       <div
                         key={c.id}
-                        className={`rounded-xl border p-3 transition ${count ? "border-indigo-200 bg-indigo-50/40" : "border-slate-200"}`}
+                        className={`rounded-xl border p-3 transition ${count ? "border-accent-line bg-accent-soft/40" : "border-line"}`}
                       >
-                        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-fg">
                           <input
                             type="checkbox"
                             checked={count === ids.length}
@@ -99,7 +99,7 @@ export function ExamDetailsForm({
                         {c.sections.length > 1 && (
                           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 pl-6">
                             {c.sections.map((s) => (
-                              <label key={s.id} className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
+                              <label key={s.id} className="flex cursor-pointer items-center gap-1.5 text-sm text-fg-2">
                                 <input
                                   type="checkbox"
                                   checked={selected.has(s.id)}
@@ -120,7 +120,7 @@ export function ExamDetailsForm({
                 <input key={id} type="hidden" name="sectionIds" value={id} />
               ))}
               {e?.sectionIds?.[0] && (
-                <span className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-600">
+                <span className="mt-1.5 flex items-center gap-1 text-xs font-medium text-danger">
                   <CircleAlert className="h-3.5 w-3.5" />
                   {e.sectionIds[0]}
                 </span>

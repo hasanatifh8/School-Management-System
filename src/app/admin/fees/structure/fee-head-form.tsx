@@ -39,12 +39,12 @@ export function FeeHeadForm({
             </div>
 
             <fieldset>
-              <legend className="mb-2 text-sm font-medium text-slate-700">How often is it charged?</legend>
+              <legend className="mb-2 text-sm font-medium text-fg-2">How often is it charged?</legend>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {FREQUENCIES.map((f) => (
                   <label
                     key={f}
-                    className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-3 text-sm transition hover:border-indigo-200 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50/60"
+                    className="flex cursor-pointer gap-3 rounded-xl border border-line p-3 text-sm transition hover:border-accent-line has-[:checked]:border-accent has-[:checked]:bg-accent-soft/60"
                   >
                     <input
                       type="radio"
@@ -52,11 +52,11 @@ export function FeeHeadForm({
                       value={f}
                       checked={frequency === f}
                       onChange={() => setFrequency(f)}
-                      className="mt-0.5 accent-indigo-600"
+                      className="mt-0.5 accent-accent"
                     />
                     <span>
-                      <span className="block font-medium text-slate-900">{FREQUENCY_META[f].label}</span>
-                      <span className="block text-xs text-slate-500">{FREQUENCY_META[f].hint}</span>
+                      <span className="block font-medium text-fg">{FREQUENCY_META[f].label}</span>
+                      <span className="block text-xs text-muted">{FREQUENCY_META[f].hint}</span>
                     </span>
                   </label>
                 ))}
@@ -83,11 +83,11 @@ export function FeeHeadForm({
               {frequency === "ONE_TIME" && <input type="hidden" name="dueDay" value={head?.dueDay ?? 10} />}
             </div>
 
-            <label className="flex max-w-xl items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm">
+            <label className="flex max-w-xl items-start gap-3 rounded-xl border border-line p-3 text-sm">
               <input type="checkbox" name="optional" defaultChecked={head?.optional} className={`${checkboxClass} mt-0.5`} />
               <span>
-                <span className="block font-medium text-slate-900">Only for students who opt in</span>
-                <span className="block text-xs text-slate-500">
+                <span className="block font-medium text-fg">Only for students who opt in</span>
+                <span className="block text-xs text-muted">
                   For fees like transport or hostel. You add students to it from their fee page. Leave unticked to charge every student of the class.
                 </span>
               </span>
@@ -96,8 +96,8 @@ export function FeeHeadForm({
             <div>
               <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900">Amount per class (₹)</h3>
-                  <p className="text-xs text-slate-500">
+                  <h3 className="text-sm font-semibold text-fg">Amount per class (₹)</h3>
+                  <p className="text-xs text-muted">
                     {frequency === "MONTHLY" ? "Per month." : frequency === "QUARTERLY" ? "Per quarter." : frequency === "HALF_YEARLY" ? "Per half-year." : "The full amount."}{" "}
                     Leave a class blank if this fee doesn&apos;t apply to it.
                   </p>
@@ -117,13 +117,13 @@ export function FeeHeadForm({
                 </div>
               </div>
               {classes.length === 0 ? (
-                <p className="text-sm text-amber-700">Create classes first.</p>
+                <p className="text-sm text-warning">Create classes first.</p>
               ) : (
                 <div ref={amountsRef} className="grid gap-3 sm:grid-cols-3 xl:grid-cols-4">
                   {classes.map((c) => (
                     <Field key={c.id} label={c.name} name={`amount:${c.id}`} errors={e}>
                       <div className="relative">
-                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">₹</span>
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle">₹</span>
                         <input
                           name={`amount:${c.id}`}
                           inputMode="numeric"
@@ -137,7 +137,7 @@ export function FeeHeadForm({
               )}
             </div>
 
-            <div className="flex justify-end border-t border-slate-100 pt-6">
+            <div className="flex justify-end border-t border-line pt-6">
               <SubmitButton icon={<Save className="h-4 w-4" />}>{head ? "Save changes" : "Add fee"}</SubmitButton>
             </div>
           </>

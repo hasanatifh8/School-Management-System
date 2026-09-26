@@ -4,7 +4,7 @@ export function SchoolLogo({ name, url, size = "md" }: { name: string; url: stri
   if (url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- served from our own API route
-      <img src={url} alt={`${name} logo`} className={`${box} shrink-0 rounded-xl border border-slate-200 bg-white object-contain p-1`} />
+      <img src={url} alt={`${name} logo`} className={`${box} shrink-0 rounded-xl border border-line bg-white object-contain p-1`} />
     );
   }
   const initials = name

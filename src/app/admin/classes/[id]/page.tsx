@@ -7,11 +7,11 @@ import {
   Badge,
   ButtonLink,
   Card,
-  IconTile,
-  PageHeader,
   checkboxClass,
   inputClass,
+  PageHeader,
   selectClass,
+  StatCard,
   tbodyClass,
   tdClass,
   thClass,
@@ -69,33 +69,27 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
         subtitle="Manage sections, curriculum and teacher assignments."
         action={
           <>
-          <ButtonLink href={`/admin/classes/${schoolClass.id}/promote`} icon={Rocket}>
-            Promote class
-          </ButtonLink>
-          <ActionForm action={deleteClass.bind(null, schoolClass.id)} compact className="flex flex-row-reverse items-center gap-3">
-            <SubmitButton
-              variant="dangerGhost"
-              confirm={`Delete ${schoolClass.name} and all its sections? This only works when the class has no students.`}
-              icon={<Trash2 className="h-4 w-4" />}
-            >
-              Delete class
-            </SubmitButton>
-          </ActionForm>
+            <ButtonLink href={`/admin/students?classId=${schoolClass.id}`} variant="secondary" icon={Users}>
+              Students
+            </ButtonLink>
+            <ButtonLink href={`/admin/classes/${schoolClass.id}/promote`} icon={Rocket}>
+              Promote class
+            </ButtonLink>
           </>
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <MiniStat icon={Layers} tone="sky" label="Sections" value={schoolClass.sections.length} />
-        <MiniStat icon={Users} tone="indigo" label="Active students" value={studentCount} />
-        <MiniStat icon={BookOpen} tone="violet" label="Subjects" value={curriculum.length} />
+      <div className="mb-6 grid grid-cols-3 gap-3 sm:gap-4">
+        <StatCard icon={Layers} tone="sky" label="Sections" value={schoolClass.sections.length} />
+        <StatCard icon={Users} tone="indigo" label="Students" value={studentCount} href={`/admin/students?classId=${schoolClass.id}`} />
+        <StatCard icon={BookOpen} tone="violet" label="Subjects" value={curriculum.length} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
           {schoolClass.sections.length === 0 && (
             <Card>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted">
                 This class has no sections yet. Add one to assign teachers and students.
               </p>
             </Card>
@@ -108,18 +102,18 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
             return (
               <section
                 key={section.id}
-                className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_4px_16px_-8px_rgba(15,23,42,0.08)]"
+                className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card"
               >
-                <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4">
+                <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-base font-semibold text-white shadow-sm shadow-indigo-500/30">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-base font-semibold text-white shadow-accent">
                       {section.name}
                     </span>
                     <div>
-                      <h2 className="font-semibold text-slate-900">Section {section.name}</h2>
+                      <h2 className="font-semibold text-fg">Section {section.name}</h2>
                       <Link
                         href={`/admin/students?classId=${schoolClass.id}&sectionId=${section.id}`}
-                        className="text-xs text-slate-500 hover:text-indigo-600"
+                        className="text-xs text-muted hover:text-accent-text"
                       >
                         {section._count.students} active students
                       </Link>
@@ -143,9 +137,9 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                 )}
 
                 {/* Class teacher */}
-                <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50/60 to-transparent px-6 py-4">
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                    <Crown className="h-4 w-4 text-indigo-500" />
+                <div className="border-b border-line bg-gradient-to-r from-accent-soft to-transparent px-6 py-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-fg-2">
+                    <Crown className="h-4 w-4 text-accent-text" />
                     Class teacher
                   </div>
                   <ActionForm
@@ -178,7 +172,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
 
                 {/* Subject teachers */}
                 <div className="flex items-center justify-between px-6 pb-2 pt-4">
-                  <h3 className="text-sm font-medium text-slate-700">Subject teachers</h3>
+                  <h3 className="text-sm font-medium text-fg-2">Subject teachers</h3>
                   {curriculum.length > 0 &&
                     (unassigned ? (
                       <Badge tone="amber" dot>
@@ -191,7 +185,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                     ))}
                 </div>
                 {curriculum.length === 0 ? (
-                  <p className="px-6 pb-5 text-sm text-slate-500">Add subjects to this class&apos;s curriculum first.</p>
+                  <p className="px-6 pb-5 text-sm text-muted">Add subjects to this class&apos;s curriculum first.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
@@ -207,8 +201,8 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                           return (
                             <tr key={subject.id}>
                               <td className={`${tdClass} w-1/3`}>
-                                <div className="font-medium text-slate-800">{subject.name}</div>
-                                <div className="font-mono text-[11px] text-slate-400">{subject.code}</div>
+                                <div className="font-medium text-fg">{subject.name}</div>
+                                <div className="font-mono text-[11px] text-subtle">{subject.code}</div>
                               </td>
                               <td className={tdClass}>
                                 <ActionForm
@@ -220,7 +214,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                                   <Select
                                     name="teacherId"
                                     defaultValue={current}
-                                    className={`${selectClass} max-w-xs !py-2 ${current ? "" : "!border-amber-300 !bg-amber-50/40"}`}
+                                    className={`${selectClass} max-w-xs !py-2 ${current ? "" : "!border-warning-line !bg-warning-soft/40"}`}
                                   >
                                     <option value="">— Not assigned —</option>
                                     {teachers.map((t) => (
@@ -253,9 +247,9 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
             description="Subjects taught in this class. New students get these automatically."
           >
             {allSubjects.length === 0 ? (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted">
                 No subjects yet.{" "}
-                <Link href="/admin/subjects" className="font-medium text-indigo-600 hover:underline">
+                <Link href="/admin/subjects" className="font-medium text-accent-text hover:underline">
                   Add subjects
                 </Link>
               </p>
@@ -269,7 +263,7 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                   {allSubjects.map((s) => (
                     <label
                       key={s.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 text-sm transition hover:border-indigo-200 hover:bg-indigo-50/30 has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/60"
+                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-line px-3 py-2.5 text-sm transition hover:border-accent-line hover:bg-accent-soft/30 has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft/60"
                     >
                       <input
                         type="checkbox"
@@ -278,12 +272,12 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
                         defaultChecked={curriculumIds.has(s.id)}
                         className={checkboxClass}
                       />
-                      <span className="flex-1 font-medium text-slate-700">{s.name}</span>
-                      <span className="font-mono text-[11px] text-slate-400">{s.code}</span>
+                      <span className="flex-1 font-medium text-fg-2">{s.name}</span>
+                      <span className="font-mono text-[11px] text-subtle">{s.code}</span>
                     </label>
                   ))}
                 </div>
-                <label className="flex items-start gap-2.5 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                <label className="flex items-start gap-2.5 rounded-lg bg-surface-2 p-3 text-sm text-fg-2">
                   <input type="checkbox" name="applyToStudents" defaultChecked className={`${checkboxClass} mt-0.5`} />
                   Also update subjects of students already in this class
                 </label>
@@ -302,29 +296,18 @@ export default async function ClassPage({ params }: PageProps<"/admin/classes/[i
           </Card>
         </div>
       </div>
+      <Card
+        title="Delete class"
+        description="Removes the class and all its sections. This only works when the class has no students."
+        className="mt-6 border-danger-line"
+      >
+        <ActionForm action={deleteClass.bind(null, schoolClass.id)} compact className="flex flex-row-reverse items-center justify-end gap-3">
+          <SubmitButton variant="danger" confirm={`Delete ${schoolClass.name} and all its sections?`} icon={<Trash2 className="h-4 w-4" />}>
+            Delete class
+          </SubmitButton>
+        </ActionForm>
+      </Card>
     </>
-  );
-}
-
-function MiniStat({
-  icon,
-  tone,
-  label,
-  value,
-}: {
-  icon: typeof Users;
-  tone: "sky" | "indigo" | "violet";
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-      <IconTile icon={icon} tone={tone} />
-      <div>
-        <p className="text-xs font-medium text-slate-500">{label}</p>
-        <p className="text-xl font-semibold tabular-nums text-slate-900">{value}</p>
-      </div>
-    </div>
   );
 }
 
@@ -340,9 +323,9 @@ function RollNumberBar({
   missing: number;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-3">
-      <span className="flex items-center gap-2 text-sm text-slate-600">
-        <Hash className="h-4 w-4 text-slate-400" />
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-3">
+      <span className="flex items-center gap-2 text-sm text-fg-2">
+        <Hash className="h-4 w-4 text-subtle" />
         Roll numbers:{" "}
         {missing ? (
           <Badge tone="amber" dot>
