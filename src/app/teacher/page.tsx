@@ -70,6 +70,9 @@ export default async function TeacherDashboard() {
   ]);
   const countBySection = new Map(counts.map((c) => [c.sectionId, c._count]));
   const subjectOnly = ctx.subjectSections.filter((s) => s.section.id !== ctx.classSection?.id);
+  // Every subject assignment, the teacher's own class first.
+  const teaching = [...ctx.subjectSections].sort((a, b) => Number(b.section.id === ctx.classSection?.id) - Number(a.section.id === ctx.classSection?.id));
+  const subjectCount = new Set(ctx.subjectSections.flatMap((s) => s.subjects)).size;
   const boys = classStudents.filter((s) => s.gender === "MALE").length;
   const girls = classStudents.filter((s) => s.gender === "FEMALE").length;
   const missingRolls = classStudents.filter((s) => s.rollNumber == null).length;
@@ -114,9 +117,9 @@ export default async function TeacherDashboard() {
             />
             <Stat
               icon={BookOpen}
-              label="Subject classes"
-              value={String(subjectOnly.length)}
-              detail={subjectOnly.length ? "where you teach a subject" : "none"}
+              label="Subjects I teach"
+              value={String(subjectCount)}
+              detail={teaching.length ? `in ${teaching.length} section${teaching.length === 1 ? "" : "s"}` : "none assigned"}
             />
             <Stat icon={School} label="Students I teach" value={String(totalStudents)} detail="across all my classes" />
           </div>
@@ -156,18 +159,21 @@ export default async function TeacherDashboard() {
                 </Card>
               )}
 
-              {subjectOnly.length > 0 && (
-                <Card title="Subject classes" icon={BookOpen} padded={false}>
+              {teaching.length > 0 && (
+                <Card title="Subjects I teach" icon={BookOpen} description="Where you are the subject teacher." padded={false}>
                   <ul className="divide-y divide-slate-100">
-                    {subjectOnly.map((s) => (
+                    {teaching.map((s) => (
                       <li key={s.section.id}>
                         <Link
-                          href={`/teacher/sections/${s.section.id}`}
+                          href={s.section.id === ctx.classSection?.id ? "/teacher/class" : `/teacher/sections/${s.section.id}`}
                           className="flex items-center gap-4 px-6 py-3.5 transition hover:bg-slate-50"
                         >
                           <IconTile icon={BookOpen} tone="emerald" size="sm" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium text-slate-900">{sectionLabel(s.section)}</p>
+                            <p className="flex items-center gap-2 font-medium text-slate-900">
+                              {sectionLabel(s.section)}
+                              {s.section.id === ctx.classSection?.id && <Badge tone="indigo">My class</Badge>}
+                            </p>
                             <p className="truncate text-xs text-slate-500">{s.subjects.join(", ")}</p>
                           </div>
                           <Badge>{countBySection.get(s.section.id) ?? 0} students</Badge>

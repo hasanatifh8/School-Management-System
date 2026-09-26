@@ -5,6 +5,8 @@ import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { ExportDialog } from "@/components/export-dialog";
+import { Pagination } from "@/components/pagination";
+import { paginate } from "@/lib/pagination";
 import { FilterSelect, ListToolbar, ResetFilters, SearchBox } from "@/components/list-toolbar";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { parseTeacherFilters, teacherWhere } from "@/lib/list-filters";
@@ -32,24 +34,27 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
   const filters = teacherWhere(school.id, f);
   const showRemoved = f.removed;
 
-  const [teachers, activeCount, removedCount, subjects] = await Promise.all([
-    db.teacher.findMany({
-      where: { ...filters, status: showRemoved ? "INACTIVE" : "ACTIVE" },
-      orderBy: { employeeCode: "asc" },
-      include: {
-        classTeacherOf: { include: { class: true } },
-        subjectAssignments: { include: { subject: true } },
-      },
-    }),
+  const [activeCount, removedCount, subjects] = await Promise.all([
     db.teacher.count({ where: { ...filters, status: "ACTIVE" } }),
     db.teacher.count({ where: { ...filters, status: "INACTIVE" } }),
     db.subject.findMany({ where: { schoolId: school.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
+  const paging = paginate(params, showRemoved ? removedCount : activeCount);
+  const teachers = await db.teacher.findMany({
+    where: { ...filters, status: showRemoved ? "INACTIVE" : "ACTIVE" },
+    orderBy: { employeeCode: "asc" },
+    skip: paging.skip,
+    take: paging.take,
+    include: {
+      classTeacherOf: { include: { class: true } },
+      subjectAssignments: { include: { subject: true } },
+    },
+  });
 
   // Tabs keep the current search and filters.
   const tabHref = (removed: boolean) => {
     const sp = new URLSearchParams(
-      Object.entries(params).flatMap(([k, v]) => (typeof v === "string" && v && k !== "status" ? [[k, v]] : [])),
+      Object.entries(params).flatMap(([k, v]) => (typeof v === "string" && v && k !== "status" && k !== "page" ? [[k, v]] : [])),
     );
     if (removed) sp.set("status", "removed");
     const qs = sp.toString();
@@ -64,7 +69,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
         subtitle="Teaching staff, class teachers and subject assignments"
         action={
           <>
-            <ExportDialog kind="teachers" count={teachers.length} noun="teachers" />
+            <ExportDialog kind="teachers" count={paging.total} noun="teachers" />
             <ButtonLink href="/admin/teachers/import" icon={FileSpreadsheet} variant="secondary">
               Bulk upload
             </ButtonLink>
@@ -210,6 +215,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
             </tbody>
           </Table>
         )}
+        <Pagination paging={paging} noun="teachers" />
       </Card>
     </>
   );

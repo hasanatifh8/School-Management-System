@@ -46,7 +46,13 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
 
           <div className="px-3 pb-3 lg:flex-1 lg:overflow-y-auto lg:pb-0">
             <TeacherNav
-              myClass={ctx.classSection ? sectionLabel(ctx.classSection) : null}
+              myClass={
+                ctx.classSection
+                  ? [sectionLabel(ctx.classSection), ctx.subjectSections.find((s) => s.section.id === ctx.classSection!.id)?.subjects.join(", ")]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : null
+              }
               subjectSections={ctx.subjectSections
                 .filter((s) => s.section.id !== ctx.classSection?.id)
                 .map((s) => ({ id: s.section.id, label: sectionLabel(s.section), subjects: s.subjects.join(", ") }))}

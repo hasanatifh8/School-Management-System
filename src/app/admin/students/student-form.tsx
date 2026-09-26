@@ -18,7 +18,9 @@ import {
   RELIGIONS,
   dateOfBirthBounds,
   normalizeIndianMobile,
+  shiftYears,
 } from "@/lib/student-options";
+import { todayISO } from "@/lib/attendance-shared";
 
 type ClassOption = { id: string; name: string; sections: { id: string; name: string }[] };
 
@@ -71,6 +73,7 @@ export function StudentForm({
   photoUrl?: string | null;
 }) {
   const dob = dateOfBirthBounds();
+  const today = todayISO();
   const whatsappSameAsPhone =
     !!student?.whatsappNumber && normalizeIndianMobile(student.phone ?? "") === student.whatsappNumber;
   // New students usually have one address; existing ones keep what was saved.
@@ -99,20 +102,20 @@ export function StudentForm({
             <FormSection title="Personal information" description="Basic details as per school records.">
               <div className="grid gap-4 sm:col-span-2 sm:grid-cols-3">
                 <Field label="First name" name="firstName" errors={e} required>
-                  <input name="firstName" required defaultValue={student?.firstName} className={inputClass} />
+                  <input name="firstName" maxLength={100} required defaultValue={student?.firstName} className={inputClass} />
                 </Field>
                 <Field label="Middle name" name="middleName" errors={e}>
-                  <input name="middleName" placeholder="Optional" defaultValue={student?.middleName ?? ""} className={inputClass} />
+                  <input name="middleName" maxLength={100} placeholder="Optional" defaultValue={student?.middleName ?? ""} className={inputClass} />
                 </Field>
                 <Field label="Last name" name="lastName" errors={e} required>
-                  <input name="lastName" required defaultValue={student?.lastName} className={inputClass} />
+                  <input name="lastName" maxLength={100} required defaultValue={student?.lastName} className={inputClass} />
                 </Field>
               </div>
               <Field label="Father's name" name="fatherName" errors={e}>
-                <input name="fatherName" defaultValue={student?.fatherName ?? ""} className={inputClass} />
+                <input name="fatherName" maxLength={100} defaultValue={student?.fatherName ?? ""} className={inputClass} />
               </Field>
               <Field label="Mother's name" name="motherName" errors={e}>
-                <input name="motherName" defaultValue={student?.motherName ?? ""} className={inputClass} />
+                <input name="motherName" maxLength={100} defaultValue={student?.motherName ?? ""} className={inputClass} />
               </Field>
               <Field label="Father's occupation" name="fatherOccupation" errors={e}>
                 <input
@@ -133,6 +136,7 @@ export function StudentForm({
                 >
                   <input
                     name="guardianName"
+                    maxLength={100}
                     aria-label="Guardian name"
                     placeholder="e.g. uncle, grandparent"
                     defaultValue={student?.guardianName ?? ""}
@@ -229,10 +233,17 @@ export function StudentForm({
                   ))}
                 </Select>
               </Field>
-              <Field label="Admission date" name="admissionDate" errors={e}>
+              <Field
+                label="Admission date"
+                name="admissionDate"
+                errors={e}
+                hint={`Not in the future; the student must be at least ${MIN_STUDENT_AGE} on this date.`}
+              >
                 <input
                   type="date"
                   name="admissionDate"
+                  min={shiftYears(today, -MAX_STUDENT_AGE)}
+                  max={today}
                   defaultValue={toDateInput(student?.admissionDate ?? new Date())}
                   className={inputClass}
                 />
@@ -279,7 +290,7 @@ export function StudentForm({
                 <input type="email" name="email" placeholder="student@example.com" defaultValue={student?.email ?? ""} className={inputClass} />
               </Field>
               <Field label="Phone" name="phone" errors={e}>
-                <input type="tel" name="phone" placeholder="10-digit mobile" defaultValue={student?.phone ?? ""} className={inputClass} />
+                <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={student?.phone ?? ""} className={inputClass} />
               </Field>
               <div>
                 <span className="mb-1.5 block text-sm font-medium text-slate-700">WhatsApp number</span>
@@ -292,6 +303,8 @@ export function StudentForm({
                   <input
                     type="tel"
                     name="whatsappNumber"
+                    inputMode="tel"
+                    maxLength={16}
                     aria-label="WhatsApp number"
                     placeholder="10-digit mobile"
                     defaultValue={student?.whatsappNumber ?? ""}

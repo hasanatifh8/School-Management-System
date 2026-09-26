@@ -3,7 +3,9 @@ import { CircleCheck, CircleSlash, CircleX, Clock, RotateCcw } from "lucide-reac
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, Table, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
 import { processNotice, retryFailed } from "@/app/admin/notices/actions";
+import { Pagination } from "@/components/pagination";
 import { db } from "@/lib/db";
+import { paginate } from "@/lib/pagination";
 import { CHANNEL_LABELS, noticeCounts } from "@/lib/messaging/server";
 import { DeliveryProgress } from "./delivery-progress";
 
@@ -78,38 +80,52 @@ export async function NoticeDetail({ noticeId }: { noticeId: string }) {
 }
 
 /** Recent notices with their delivery totals. */
-export async function NoticeList({ where, href }: { where: { schoolId: string; teacherId?: string }; href: (id: string) => string }) {
+export async function NoticeList({
+  where,
+  href,
+  params,
+}: {
+  where: { schoolId: string; teacherId?: string };
+  href: (id: string) => string;
+  /** The page's search params, for pagination. */
+  params: Record<string, string | string[] | undefined>;
+}) {
+  const paging = paginate(params, await db.notice.count({ where }));
   const notices = await db.notice.findMany({
     where,
-    orderBy: { createdAt: "desc" },
-    take: 100,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip: paging.skip,
+    take: paging.take,
     include: { recipients: { select: { status: true } } },
   });
   if (!notices.length) return <p className="p-6 text-sm text-slate-500">No notices sent yet.</p>;
   return (
-    <ul className="divide-y divide-slate-100">
-      {notices.map((n) => {
-        const sent = n.recipients.filter((r) => r.status === "SENT").length;
-        const failed = n.recipients.filter((r) => r.status === "FAILED").length;
-        const waiting = n.recipients.filter((r) => r.status === "PENDING").length;
-        return (
-          <li key={n.id}>
-            <Link href={href(n.id)} className="flex flex-wrap items-center gap-3 px-6 py-3 hover:bg-slate-50">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-slate-900">{n.title}</p>
-                <p className="truncate text-xs text-slate-500">
-                  {n.audience} · {n.channels.map((c) => CHANNEL_LABELS[c]).join(" + ")} · {n.sentBy} · {when.format(n.createdAt)}
-                </p>
-              </div>
-              <span className="flex gap-1.5">
-                <Badge tone="green">{sent} sent</Badge>
-                {failed > 0 && <Badge tone="red">{failed} failed</Badge>}
-                {waiting > 0 && <Badge>{waiting} waiting</Badge>}
-              </span>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <ul className="divide-y divide-slate-100">
+        {notices.map((n) => {
+          const sent = n.recipients.filter((r) => r.status === "SENT").length;
+          const failed = n.recipients.filter((r) => r.status === "FAILED").length;
+          const waiting = n.recipients.filter((r) => r.status === "PENDING").length;
+          return (
+            <li key={n.id}>
+              <Link href={href(n.id)} className="flex flex-wrap items-center gap-3 px-6 py-3 hover:bg-slate-50">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-900">{n.title}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    {n.audience} · {n.channels.map((c) => CHANNEL_LABELS[c]).join(" + ")} · {n.sentBy} · {when.format(n.createdAt)}
+                  </p>
+                </div>
+                <span className="flex gap-1.5">
+                  <Badge tone="green">{sent} sent</Badge>
+                  {failed > 0 && <Badge tone="red">{failed} failed</Badge>}
+                  {waiting > 0 && <Badge>{waiting} waiting</Badge>}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      <Pagination paging={paging} noun="notices" />
+    </>
   );
 }

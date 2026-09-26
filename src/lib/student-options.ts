@@ -1,5 +1,6 @@
 // Student admission options and rules shared by the form and the server.
 import type { StudentCategory } from "@/generated/prisma/enums";
+import { todayISO } from "@/lib/attendance-shared";
 
 export const CATEGORY_LABELS: Record<StudentCategory, string> = {
   GENERAL: "General",
@@ -16,19 +17,20 @@ export const DEFAULT_NATIONALITY = "Indian";
 export const MIN_STUDENT_AGE = 2;
 export const MAX_STUDENT_AGE = 25;
 
-function yearsAgo(years: number, from = new Date()) {
-  const d = new Date(from);
-  d.setFullYear(d.getFullYear() - years);
+/** "2026-09-26" shifted by whole years (negative = earlier); 29 Feb falls on 1 Mar. */
+export function shiftYears(iso: string, years: number) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + years);
   return d.toISOString().slice(0, 10);
 }
 
-/** Earliest and latest date of birth (YYYY-MM-DD) for someone aged minAge–maxAge today. */
-export function ageBounds(minAge: number, maxAge: number, today = new Date()) {
-  return { min: yearsAgo(maxAge, today), max: yearsAgo(minAge, today) };
+/** Earliest and latest date of birth (YYYY-MM-DD) for someone aged minAge–maxAge today (India). */
+export function ageBounds(minAge: number, maxAge: number, today = todayISO()) {
+  return { min: shiftYears(today, -maxAge), max: shiftYears(today, -minAge) };
 }
 
 /** Earliest and latest allowed student date of birth (for `min`/`max` and validation). */
-export function dateOfBirthBounds(today = new Date()) {
+export function dateOfBirthBounds(today = todayISO()) {
   return ageBounds(MIN_STUDENT_AGE, MAX_STUDENT_AGE, today);
 }
 

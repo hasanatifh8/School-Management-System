@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { type ActionState, optionalText, validationError } from "@/lib/action-state";
+import { type ActionState, optionalMobile, optionalPastDate, requiredName, validationError } from "@/lib/action-state";
 import { addMonths, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { ensureCategories, isMonth, loadPayroll, requireExpensesAccess } from "@/lib/expenses";
@@ -36,11 +36,11 @@ const revalidate = () => revalidatePath("/admin", "layout");
 /* ───────────────────────── Non-teaching staff ───────────────────────── */
 
 const staffSchema = z.object({
-  name: z.string().trim().min(2, "Enter the name").max(100),
+  name: requiredName("Name").refine((v) => v.length >= 2, "Enter the full name"),
   designation: z.string().trim().min(2, "Enter the job, e.g. Security guard").max(60),
-  phone: optionalText,
+  phone: optionalMobile,
   monthlySalary: optionalRupees,
-  joiningDate: z.string().optional().transform((v) => (v && parseISODate(v)) || null),
+  joiningDate: optionalPastDate,
 });
 
 export async function saveStaffMember(id: string | null, _: ActionState, formData: FormData): Promise<ActionState> {

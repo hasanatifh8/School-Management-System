@@ -162,6 +162,7 @@ model School {
   expenses       Expense[]
   messaging      MessagingSettings?
   notices        Notice[]
+  exams          Exam[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -282,6 +283,7 @@ model Student {
   feeHeads         StudentFeeHead[]
   feeReceipts      FeeReceipt[]
   noticeRecipients NoticeRecipient[]
+  examMarks        ExamMark[]
 
   @@unique([schoolId, studentCode])
   @@index([sectionId])
@@ -325,6 +327,7 @@ model Teacher {
 
   salaryPayments SalaryPayment[]
   notices        Notice[]
+  exams          Exam[]
 
   @@unique([schoolId, employeeCode])
 }
@@ -342,6 +345,7 @@ model SchoolClass {
   subjects ClassSubject[]
 
   feeAmounts FeeAmount[]
+  examPapers ExamPaper[]
 
   @@unique([schoolId, name])
 }
@@ -358,6 +362,8 @@ model Section {
   enrollments        Enrollment[]
   subjectAssignments SubjectTeacherAssignment[]
   attendanceDays     AttendanceDay[]
+  examSections       ExamSection[]
+  examResults        ExamResult[]
 
   @@unique([classId, name])
 }
@@ -373,6 +379,7 @@ model Subject {
   classes            ClassSubject[]
   students           StudentSubject[]
   teacherAssignments SubjectTeacherAssignment[]
+  examPapers         ExamPaper[]
 
   @@unique([schoolId, code])
 }
@@ -429,6 +436,7 @@ model AcademicSession {
   enrollments Enrollment[]
   feeHeads    FeeHead[]
   feeReceipts FeeReceipt[]
+  exams       Exam[]
 
   @@unique([schoolId, name])
 }
@@ -801,4 +809,105 @@ model NoticeRecipient {
 
   @@index([noticeId, status])
   @@index([studentId])
+}
+
+/**
+ * ───────────────────────── Exams & tests ─────────────────────────
+ */
+
+enum ExamKind {
+  EXAM // scheduled by the school admin
+  TEST // created by a teacher for their sections
+}
+
+/// An exam (admin) or class test (teacher) with its date sheet.
+model Exam {
+  id            String   @id @default(cuid())
+  schoolId      String
+  sessionId     String
+  kind          ExamKind @default(EXAM)
+  name          String // e.g. "Half-yearly examination"
+  instructions  String? // printed under the timetable, one per line
+  published     Boolean  @default(false) // admin exams: shown to teachers once published
+  teacherId     String? // the teacher who created a test
+  createdBy     String
+  printSettings Json? // saved print layout and options
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  school   School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session  AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  teacher  Teacher?        @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  sections ExamSection[]
+  papers   ExamPaper[]
+  results  ExamResult[]
+
+  @@index([schoolId, sessionId, kind])
+  @@index([teacherId])
+}
+
+/// The class sections an exam is for.
+model ExamSection {
+  examId    String
+  sectionId String
+
+  exam    Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@id([examId, sectionId])
+  @@index([sectionId])
+}
+
+/// One paper in the date sheet. classId null = every class in the exam.
+model ExamPaper {
+  id        String   @id @default(cuid())
+  examId    String
+  date      DateTime @db.Date
+  startTime String // "09:00" (24-hour)
+  endTime   String
+  classId   String?
+  subjectId String?
+  title     String? // custom paper name, e.g. "Practical" or "Drawing"
+  maxMarks  Int?
+  room      String?
+  notes     String?
+
+  exam    Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  class   SchoolClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject Subject?     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  marks   ExamMark[]
+
+  @@index([examId, date])
+  @@index([subjectId])
+}
+
+/// A student's marks in one paper. `marks` is null when absent.
+model ExamMark {
+  id        String   @id @default(cuid())
+  paperId   String
+  studentId String
+  marks     Float?
+  absent    Boolean  @default(false)
+  enteredBy String
+  updatedAt DateTime @updatedAt
+
+  paper   ExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  student Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([paperId, studentId])
+  @@index([studentId])
+}
+
+/// Results of an exam published for one section. While published, marks are locked.
+model ExamResult {
+  examId      String
+  sectionId   String
+  publishedAt DateTime @default(now())
+  publishedBy String
+
+  exam    Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@id([examId, sectionId])
+  @@index([sectionId])
 }

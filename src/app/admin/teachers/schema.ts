@@ -1,7 +1,17 @@
 // Validation for teacher data, shared by the teacher form and the bulk importer.
 import { z } from "zod";
-import { optionalBloodGroup, optionalDate, optionalGender, optionalText, requiredText } from "@/lib/action-state";
-import { MAX_TEACHER_AGE, MIN_TEACHER_AGE, ageBounds, normalizeIndianMobile } from "@/lib/student-options";
+import {
+  optionalBloodGroup,
+  optionalDate,
+  optionalEmail,
+  optionalGender,
+  optionalMobile,
+  optionalName,
+  optionalText,
+  requiredName,
+} from "@/lib/action-state";
+import { isoDate, todayISO } from "@/lib/attendance-shared";
+import { MAX_TEACHER_AGE, MIN_TEACHER_AGE, ageBounds, shiftYears } from "@/lib/student-options";
 
 /** Optional whole number within a range; accepts "45,000" and "₹45000". */
 const optionalWholeNumber = (label: string, min: number, max: number) =>
@@ -21,49 +31,64 @@ const optionalWholeNumber = (label: string, min: number, max: number) =>
 
 export const teacherSchema = z
   .object({
-    firstName: requiredText("First name"),
-    middleName: optionalText,
-    lastName: requiredText("Last name"),
+    firstName: requiredName("First name"),
+    middleName: optionalName("Middle name"),
+    lastName: requiredName("Last name"),
     gender: optionalGender,
     bloodGroup: optionalBloodGroup,
     dateOfBirth: optionalDate.superRefine((d, ctx) => {
       if (!d) return;
       const { min, max } = ageBounds(MIN_TEACHER_AGE, MAX_TEACHER_AGE);
-      const day = d.toISOString().slice(0, 10);
-      if (day > new Date().toISOString().slice(0, 10)) {
+      const day = isoDate(d);
+      if (day > todayISO()) {
         ctx.addIssue({ code: "custom", message: "Date of birth cannot be in the future" });
       } else if (day > max || day < min) {
         ctx.addIssue({ code: "custom", message: `Teacher must be between ${MIN_TEACHER_AGE} and ${MAX_TEACHER_AGE} years old` });
       }
     }),
-    email: z.union([z.literal(""), z.email("Invalid email")]).optional().transform((v) => v || null),
-    phone: optionalText,
-    whatsappNumber: z
-      .string()
-      .optional()
-      .transform((v, ctx) => {
-        if (!v?.trim()) return null;
-        const mobile = normalizeIndianMobile(v);
-        if (!mobile) ctx.addIssue({ code: "custom", message: "Enter a valid 10-digit mobile number" });
-        return mobile ?? z.NEVER;
-      }),
+    email: optionalEmail,
+    phone: optionalMobile,
+    whatsappNumber: optionalMobile,
     whatsappSameAsPhone: z.literal("on").optional(),
     address: optionalText,
     qualification: optionalText,
     specialization: z.string().trim().max(100).optional().transform((v) => v || null),
     experienceYears: optionalWholeNumber("Experience", 0, 60),
     monthlySalary: optionalWholeNumber("Monthly salary", 0, 10_000_000),
-    joiningDate: optionalDate,
+    joiningDate: optionalDate.superRefine((d, ctx) => {
+      if (!d) return;
+      const day = isoDate(d);
+      if (day > todayISO()) ctx.addIssue({ code: "custom", message: "Joining date can't be in the future" });
+      else if (day < shiftYears(todayISO(), MIN_TEACHER_AGE - MAX_TEACHER_AGE)) {
+        ctx.addIssue({ code: "custom", message: `Joining date can't be more than ${MAX_TEACHER_AGE - MIN_TEACHER_AGE} years ago` });
+      }
+    }),
   })
   .transform(({ whatsappSameAsPhone, ...data }, ctx) => {
-    // "Same as phone" copies the phone number.
-    if (!whatsappSameAsPhone) return data;
-    const whatsappNumber = data.phone ? normalizeIndianMobile(data.phone) : null;
-    if (data.phone && !whatsappNumber) {
-      ctx.addIssue({ code: "custom", path: ["phone"], message: "Enter a valid 10-digit mobile number to use it for WhatsApp" });
-      return z.NEVER;
+    if (data.dateOfBirth) {
+      const dob = isoDate(data.dateOfBirth);
+      if (data.joiningDate && isoDate(data.joiningDate) < shiftYears(dob, MIN_TEACHER_AGE)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["joiningDate"],
+          message: `Teacher must be at least ${MIN_TEACHER_AGE} years old on the joining date`,
+        });
+        return z.NEVER;
+      }
+      // Experience can only have started from MIN_TEACHER_AGE.
+      const age = Number(todayISO().slice(0, 4)) - Number(dob.slice(0, 4)) - (todayISO().slice(5) < dob.slice(5) ? 1 : 0);
+      const maxExperience = Math.max(0, age - MIN_TEACHER_AGE);
+      if (data.experienceYears != null && data.experienceYears > maxExperience) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["experienceYears"],
+          message: `Experience can't be more than ${maxExperience} year${maxExperience === 1 ? "" : "s"} for this date of birth`,
+        });
+        return z.NEVER;
+      }
     }
-    return { ...data, whatsappNumber };
+    // "Same as phone" copies the phone number.
+    return whatsappSameAsPhone ? { ...data, whatsappNumber: data.phone } : data;
   });
 
 export type TeacherInput = z.infer<typeof teacherSchema>;

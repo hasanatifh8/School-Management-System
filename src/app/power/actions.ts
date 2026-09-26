@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { type ActionState, optionalText, validationError } from "@/lib/action-state";
+import { type ActionState, optionalEmail, optionalName, optionalPhone, optionalText, requiredName, validationError } from "@/lib/action-state";
 import { db } from "@/lib/db";
 import { loadDemoData } from "@/lib/demo-data";
 import { readPhotoUpload } from "@/lib/photos";
@@ -52,7 +52,7 @@ const schoolSchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z0-9]{2,12}$/, "2–12 letters or digits, e.g. DPS or SVM01"),
   board: optionalText,
-  principalName: optionalText,
+  principalName: optionalName("Principal"),
   establishedYear: z
     .string()
     .trim()
@@ -68,8 +68,8 @@ const schoolSchema = z.object({
     }),
   motto: optionalText,
   address: optionalText,
-  phone: optionalText,
-  email: z.union([z.literal(""), z.email("Invalid email")]).optional().transform((v) => v || null),
+  phone: optionalPhone,
+  email: optionalEmail,
   website: z
     .union([z.literal(""), z.url({ message: "Enter a full address, e.g. https://school.edu.in" })])
     .optional()
@@ -77,7 +77,7 @@ const schoolSchema = z.object({
 });
 
 const adminSchema = z.object({
-  adminName: z.string().trim().min(2, "Name is required").max(100),
+  adminName: requiredName("Name").refine((v) => v.length >= 2, "Enter the full name"),
   adminEmail: z.email("Enter a valid email").trim().toLowerCase(),
   adminPassword: z.string().superRefine((v, ctx) => {
     const problem = passwordProblem(v);

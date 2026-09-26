@@ -40,6 +40,10 @@ export async function deleteSubject(id: string): Promise<ActionState> {
       error: `${students} student(s) have ${subject.name} allotted. Remove it from their classes (with “update students” ticked) first.`,
     };
   }
+  const papers = await db.examPaper.count({ where: { subjectId: id } });
+  if (papers) {
+    return { error: `${subject.name} is used in ${papers} exam or test timetable paper(s). Remove it from those timetables first.` };
+  }
   // Also removes it from class curricula and subject-teacher assignments.
   await db.subject.delete({ where: { id } });
   revalidatePath("/admin", "layout");

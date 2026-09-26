@@ -13,7 +13,7 @@ export function audit(action: string, school?: { id: string; name: string } | nu
 
 /**
  * Deletes everything a school owns (students, teachers, classes, subjects,
- * houses, sessions, attendance, holidays, fees, staff, salaries, expenses,
+ * houses, sessions, attendance, holidays, fees, staff, salaries, expenses, exams,
  * photos, documents, ID counters) but keeps the school,
  * its profile and logo. Order matters: document files and enrollments go
  * first because of their foreign keys.
@@ -30,6 +30,7 @@ export async function wipeSchoolData(tx: Tx, schoolId: string) {
   await tx.attendanceDay.deleteMany({ where: { schoolId } }); // cascades to attendance records
   await tx.holiday.deleteMany({ where: { schoolId } });
   await tx.notice.deleteMany({ where: { schoolId } }); // cascades to recipients
+  await tx.exam.deleteMany({ where: { schoolId } }); // cascades to sections and papers
   await tx.expense.deleteMany({ where: { schoolId } });
   await tx.expenseCategory.deleteMany({ where: { schoolId } });
   await tx.salaryPayment.deleteMany({ where: { schoolId } });

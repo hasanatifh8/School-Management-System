@@ -1,29 +1,31 @@
 // Validation for student data, shared by the student form and the bulk importer.
 import { z } from "zod";
-import { optionalBloodGroup, optionalDate, optionalGender, optionalText, requiredText } from "@/lib/action-state";
-import { normalizeDocumentNumber } from "@/lib/document-types";
 import {
-  MAX_STUDENT_AGE,
-  MIN_STUDENT_AGE,
-  RELIGIONS,
-  dateOfBirthBounds,
-  normalizeIndianMobile,
-} from "@/lib/student-options";
-
-const dobBounds = () => dateOfBirthBounds();
+  optionalBloodGroup,
+  optionalDate,
+  optionalEmail,
+  optionalGender,
+  optionalMobile,
+  optionalName,
+  optionalText,
+  requiredName,
+} from "@/lib/action-state";
+import { isoDate, todayISO } from "@/lib/attendance-shared";
+import { normalizeDocumentNumber } from "@/lib/document-types";
+import { MAX_STUDENT_AGE, MIN_STUDENT_AGE, RELIGIONS, dateOfBirthBounds, shiftYears } from "@/lib/student-options";
 
 export const studentSchema = z
   .object({
-    firstName: requiredText("First name"),
-    middleName: optionalText,
-    lastName: requiredText("Last name"),
+    firstName: requiredName("First name"),
+    middleName: optionalName("Middle name"),
+    lastName: requiredName("Last name"),
     gender: optionalGender,
     bloodGroup: optionalBloodGroup,
     dateOfBirth: optionalDate.superRefine((d, ctx) => {
       if (!d) return;
-      const { min, max } = dobBounds();
-      const day = d.toISOString().slice(0, 10);
-      if (day > new Date().toISOString().slice(0, 10)) {
+      const { min, max } = dateOfBirthBounds();
+      const day = isoDate(d);
+      if (day > todayISO()) {
         ctx.addIssue({ code: "custom", message: "Date of birth cannot be in the future" });
       } else if (day > max || day < min) {
         ctx.addIssue({
@@ -47,34 +49,33 @@ export const studentSchema = z
       .enum(["GENERAL", "OBC", "SC_ST", "MINORITY", ""])
       .optional()
       .transform((v) => v || null),
-    caste: optionalText,
+    caste: optionalName("Caste"),
     religion: z
       .enum([...RELIGIONS, ""])
       .optional()
       .transform((v) => v || null),
-    nationality: optionalText,
-    email: z.union([z.literal(""), z.email("Invalid email")]).optional().transform((v) => v || null),
-    phone: optionalText,
-    whatsappNumber: z
-      .string()
-      .optional()
-      .transform((v, ctx) => {
-        if (!v?.trim()) return null;
-        const mobile = normalizeIndianMobile(v);
-        if (!mobile) ctx.addIssue({ code: "custom", message: "Enter a valid 10-digit mobile number" });
-        return mobile ?? z.NEVER;
-      }),
+    nationality: optionalName("Nationality"),
+    email: optionalEmail,
+    phone: optionalMobile,
+    whatsappNumber: optionalMobile,
     whatsappSameAsPhone: z.literal("on").optional(),
     primaryAddress: optionalText,
     correspondenceAddress: optionalText,
     correspondenceSameAsPrimary: z.literal("on").optional(),
     lastSchoolName: optionalText,
-    fatherName: optionalText,
+    fatherName: optionalName("Father's name"),
     fatherOccupation: z.string().trim().max(100).optional().transform((v) => v || null),
-    guardianName: optionalText,
+    guardianName: optionalName("Guardian name"),
     guardianIsFather: z.literal("on").optional(),
-    motherName: optionalText,
-    admissionDate: optionalDate,
+    motherName: optionalName("Mother's name"),
+    admissionDate: optionalDate.superRefine((d, ctx) => {
+      if (!d) return;
+      const day = isoDate(d);
+      if (day > todayISO()) ctx.addIssue({ code: "custom", message: "Admission date can't be in the future" });
+      else if (day < shiftYears(todayISO(), -MAX_STUDENT_AGE)) {
+        ctx.addIssue({ code: "custom", message: `Admission date can't be more than ${MAX_STUDENT_AGE} years ago` });
+      }
+    }),
     sectionId: optionalText,
     rollNumber: z
       .string()
@@ -96,22 +97,25 @@ export const studentSchema = z
       ctx.addIssue({ code: "custom", path: ["fatherName"], message: "Enter the father's name, or untick “Father is the guardian”" });
       return z.NEVER;
     }
-    // "Same as" checkboxes copy the other field.
-    let whatsappNumber = data.whatsappNumber;
-    if (whatsappSameAsPhone) {
-      whatsappNumber = data.phone ? normalizeIndianMobile(data.phone) : null;
-      if (data.phone && !whatsappNumber) {
+    // A child is admitted at MIN_STUDENT_AGE at the earliest.
+    if (data.dateOfBirth && data.admissionDate) {
+      const earliest = shiftYears(isoDate(data.dateOfBirth), MIN_STUDENT_AGE);
+      if (isoDate(data.admissionDate) < earliest) {
         ctx.addIssue({
           code: "custom",
-          path: ["phone"],
-          message: "Enter a valid 10-digit mobile number to use it for WhatsApp",
+          path: ["admissionDate"],
+          message:
+            data.admissionDate < data.dateOfBirth
+              ? "Admission date can't be before the date of birth"
+              : `Student must be at least ${MIN_STUDENT_AGE} years old on the admission date`,
         });
         return z.NEVER;
       }
     }
+    // "Same as" checkboxes copy the other field.
     return {
       ...data,
-      whatsappNumber,
+      whatsappNumber: whatsappSameAsPhone ? data.phone : data.whatsappNumber,
       correspondenceAddress: correspondenceSameAsPrimary ? data.primaryAddress : data.correspondenceAddress,
       guardianName: guardianIsFather ? data.fatherName : data.guardianName,
     };

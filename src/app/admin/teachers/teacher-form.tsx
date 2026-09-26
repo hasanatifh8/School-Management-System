@@ -10,7 +10,8 @@ import { CredentialsNotice } from "@/components/credentials-notice";
 import { FormSection, buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { MAX_TEACHER_AGE, MIN_TEACHER_AGE, ageBounds, normalizeIndianMobile } from "@/lib/student-options";
+import { MAX_TEACHER_AGE, MIN_TEACHER_AGE, ageBounds, normalizeIndianMobile, shiftYears } from "@/lib/student-options";
+import { todayISO } from "@/lib/attendance-shared";
 
 type TeacherValues = {
   firstName: string;
@@ -48,6 +49,7 @@ export function TeacherForm({
   offerLogin?: boolean;
 }) {
   const dob = ageBounds(MIN_TEACHER_AGE, MAX_TEACHER_AGE);
+  const today = todayISO();
   const whatsappSameAsPhone =
     !!teacher?.whatsappNumber && normalizeIndianMobile(teacher.phone ?? "") === teacher.whatsappNumber;
 
@@ -77,13 +79,13 @@ export function TeacherForm({
             <FormSection title="Personal information" description="Name and basic details.">
               <div className="grid gap-4 sm:col-span-2 sm:grid-cols-3">
                 <Field label="First name" name="firstName" errors={e} required>
-                  <input name="firstName" required defaultValue={teacher?.firstName} className={inputClass} />
+                  <input name="firstName" maxLength={100} required defaultValue={teacher?.firstName} className={inputClass} />
                 </Field>
                 <Field label="Middle name" name="middleName" errors={e}>
-                  <input name="middleName" placeholder="Optional" defaultValue={teacher?.middleName ?? ""} className={inputClass} />
+                  <input name="middleName" maxLength={100} placeholder="Optional" defaultValue={teacher?.middleName ?? ""} className={inputClass} />
                 </Field>
                 <Field label="Last name" name="lastName" errors={e} required>
-                  <input name="lastName" required defaultValue={teacher?.lastName} className={inputClass} />
+                  <input name="lastName" maxLength={100} required defaultValue={teacher?.lastName} className={inputClass} />
                 </Field>
               </div>
               <Field label="Gender" name="gender" errors={e}>
@@ -152,10 +154,17 @@ export function TeacherForm({
                   className={inputClass}
                 />
               </Field>
-              <Field label="Joining date" name="joiningDate" errors={e}>
+              <Field
+                label="Joining date"
+                name="joiningDate"
+                errors={e}
+                hint={`Not in the future; the teacher must be at least ${MIN_TEACHER_AGE} on this date.`}
+              >
                 <input
                   type="date"
                   name="joiningDate"
+                  min={shiftYears(today, MIN_TEACHER_AGE - MAX_TEACHER_AGE)}
+                  max={today}
                   defaultValue={toDateInput(teacher?.joiningDate ?? new Date())}
                   className={inputClass}
                 />
@@ -179,7 +188,7 @@ export function TeacherForm({
                 <input type="email" name="email" placeholder="teacher@example.com" defaultValue={teacher?.email ?? ""} className={inputClass} />
               </Field>
               <Field label="Phone" name="phone" errors={e}>
-                <input type="tel" name="phone" placeholder="10-digit mobile" defaultValue={teacher?.phone ?? ""} className={inputClass} />
+                <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={teacher?.phone ?? ""} className={inputClass} />
               </Field>
               <div>
                 <span className="mb-1.5 block text-sm font-medium text-slate-700">WhatsApp number</span>

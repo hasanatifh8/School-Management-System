@@ -11,7 +11,8 @@ import { requireTeacher } from "@/lib/teacher-auth";
 
 /** A class teacher messages their class's parents. */
 export default async function TeacherNoticesPage({ searchParams }: PageProps<"/teacher/notices">) {
-  const absent = (await searchParams).absent;
+  const params = await searchParams;
+  const absent = params.absent;
   const ctx = await requireTeacher();
   const messaging = await loadMessaging(ctx.school.id);
   const blocked = !ctx.classSection ? "Only class teachers can send notices." : !messaging.teachersCanSend ? "The school admin has turned off notices from teachers." : !messaging.WHATSAPP.ready && !messaging.SMS.ready ? "WhatsApp and SMS aren't set up yet. Ask the school admin." : null;
@@ -42,7 +43,7 @@ export default async function TeacherNoticesPage({ searchParams }: PageProps<"/t
       )}
       <h2 className="mb-4 mt-10 text-lg font-semibold text-slate-900">My sent notices</h2>
       <Card padded={false}>
-        <NoticeList where={{ schoolId: ctx.school.id, teacherId: ctx.teacher.id }} href={(id) => `/teacher/notices/${id}`} />
+        <NoticeList where={{ schoolId: ctx.school.id, teacherId: ctx.teacher.id }} href={(id) => `/teacher/notices/${id}`} params={params} />
       </Card>
     </>
   );

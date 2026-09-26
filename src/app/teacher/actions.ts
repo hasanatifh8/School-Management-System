@@ -2,29 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { type ActionState, optionalText, validationError } from "@/lib/action-state";
+import { type ActionState, optionalEmail, optionalMobile, optionalText, validationError } from "@/lib/action-state";
 import { db } from "@/lib/db";
 import { autoAssignRollNumbers, findRollNumberClash, syncCurrentEnrollment } from "@/lib/enrollments";
 import { readPhotoUpload, resolvePhotoChange } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
 import { getCurrentSession } from "@/lib/sessions";
-import { normalizeIndianMobile } from "@/lib/student-options";
 import { findClassStudent, requireTeacher } from "@/lib/teacher-auth";
 
 /** What a class teacher may change on a student: contact details, photo and roll number. */
 const classStudentSchema = z
   .object({
-    phone: optionalText,
-    email: z.union([z.literal(""), z.email("Invalid email")]).optional().transform((v) => v || null),
-    whatsappNumber: z
-      .string()
-      .optional()
-      .transform((v, ctx) => {
-        if (!v?.trim()) return null;
-        const mobile = normalizeIndianMobile(v);
-        if (!mobile) ctx.addIssue({ code: "custom", message: "Enter a valid 10-digit mobile number" });
-        return mobile ?? z.NEVER;
-      }),
+    phone: optionalMobile,
+    email: optionalEmail,
+    whatsappNumber: optionalMobile,
     whatsappSameAsPhone: z.literal("on").optional(),
     primaryAddress: optionalText,
     correspondenceAddress: optionalText,
@@ -43,18 +34,10 @@ const classStudentSchema = z
         return n;
       }),
   })
-  .transform(({ whatsappSameAsPhone, correspondenceSameAsPrimary, ...data }, ctx) => {
-    let whatsappNumber = data.whatsappNumber;
-    if (whatsappSameAsPhone) {
-      whatsappNumber = data.phone ? normalizeIndianMobile(data.phone) : null;
-      if (data.phone && !whatsappNumber) {
-        ctx.addIssue({ code: "custom", path: ["phone"], message: "Enter a valid 10-digit mobile number to use it for WhatsApp" });
-        return z.NEVER;
-      }
-    }
+  .transform(({ whatsappSameAsPhone, correspondenceSameAsPrimary, ...data }) => {
     return {
       ...data,
-      whatsappNumber,
+      whatsappNumber: whatsappSameAsPhone ? data.phone : data.whatsappNumber,
       correspondenceAddress: correspondenceSameAsPrimary ? data.primaryAddress : data.correspondenceAddress,
     };
   });

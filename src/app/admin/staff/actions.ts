@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { type ActionState, validationError } from "@/lib/action-state";
+import { type ActionState, requiredName, validationError } from "@/lib/action-state";
 import { revokeAdminSessions } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { hashPassword, passwordProblem } from "@/lib/passwords";
@@ -14,7 +14,7 @@ const password = z.string().superRefine((v, ctx) => {
 });
 
 const staffSchema = z.object({
-  name: z.string().trim().min(2, "Name is required").max(100),
+  name: requiredName("Name").refine((v) => v.length >= 2, "Enter the full name"),
   email: z.email("Enter a valid email").trim().toLowerCase(),
   password,
 });

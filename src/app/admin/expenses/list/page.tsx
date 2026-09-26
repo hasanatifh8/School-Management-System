@@ -2,10 +2,12 @@ import Link from "next/link";
 import { Plus, Receipt, Trash2 } from "lucide-react";
 import { MonthPicker } from "@/components/expenses/month-picker";
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { Pagination } from "@/components/pagination";
 import { Card, EmptyState, Table, tbodyClass, tdClass, thClass, theadClass, trClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { ensureCategories, isMonth, monthBounds, requireExpensesAccess } from "@/lib/expenses";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
+import { paginate } from "@/lib/pagination";
 import { deleteExpense } from "../actions";
 import { ExpenseForm } from "./expense-form";
 
@@ -19,19 +21,24 @@ export default async function ExpenseListPage({ searchParams }: PageProps<"/admi
   const categories = (await ensureCategories(school.id)).filter((c) => !c.isSalaries);
   const category = categories.find((c) => c.id === sp.category);
   const { from, to } = monthBounds(month);
+  const where = { schoolId: school.id, date: { gte: from, lte: to }, ...(category && { categoryId: category.id }) };
+  const summary = await db.expense.aggregate({ where, _sum: { amount: true }, _count: true });
+  const paging = paginate(sp, summary._count);
   const expenses = await db.expense.findMany({
-    where: { schoolId: school.id, date: { gte: from, lte: to }, ...(category && { categoryId: category.id }) },
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    where,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    skip: paging.skip,
+    take: paging.take,
     include: { category: { select: { name: true } } },
   });
-  const total = expenses.reduce((n, e) => n + e.amount, 0);
+  const total = summary._sum.amount ?? 0;
   const base = `/admin/expenses/list?month=${month}`;
 
   return (
     <div className="space-y-6">
       <MonthPicker basePath="/admin/expenses/list" month={month} max={current} current={current} />
       <div className="grid gap-6 xl:grid-cols-3">
-        <Card padded={false} className="xl:col-span-2" title={`${category ? category.name : "All expenses"} · ${rupees(total)}`} description={`${expenses.length} entr${expenses.length === 1 ? "y" : "ies"}. Salaries are on the Salaries tab.`}>
+        <Card padded={false} className="xl:col-span-2" title={`${category ? category.name : "All expenses"} · ${rupees(total)}`} description={`${paging.total} entr${paging.total === 1 ? "y" : "ies"}. Salaries are on the Salaries tab.`}>
           <div className="flex flex-wrap gap-1.5 border-b border-slate-100 px-6 py-3">
             <Link href={base} className={`rounded-full px-3 py-1 text-xs font-medium ${!category ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
               All
@@ -82,6 +89,7 @@ export default async function ExpenseListPage({ searchParams }: PageProps<"/admi
               </tbody>
             </Table>
           )}
+          <Pagination paging={paging} noun="expenses" />
         </Card>
         <Card title="Add expense" icon={Plus} className="self-start">
           <ExpenseForm categories={categories} today={today} defaultCategory={category?.id} />

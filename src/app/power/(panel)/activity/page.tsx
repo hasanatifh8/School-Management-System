@@ -1,14 +1,17 @@
 import { History } from "lucide-react";
 import { Card, EmptyState, PageHeader, Table, tbodyClass, tdClass, thClass, theadClass, trClass } from "@/components/ui";
+import { Pagination } from "@/components/pagination";
 import { db } from "@/lib/db";
+import { paginate } from "@/lib/pagination";
 
 const when = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "medium", timeZone: "Asia/Kolkata" });
 
-export default async function ActivityPage() {
-  const entries = await db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+export default async function ActivityPage({ searchParams }: PageProps<"/power/activity">) {
+  const paging = paginate(await searchParams, await db.auditLog.count(), 50);
+  const entries = await db.auditLog.findMany({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: paging.skip, take: paging.take });
   return (
     <>
-      <PageHeader title="Activity log" subtitle="The last 200 Power Admin actions, newest first." />
+      <PageHeader title="Activity log" subtitle="Every Power Admin action, newest first." />
       <Card padded={false}>
         {entries.length === 0 ? (
           <EmptyState icon={History} title="No activity yet" />
@@ -34,6 +37,7 @@ export default async function ActivityPage() {
             </tbody>
           </Table>
         )}
+        <Pagination paging={paging} noun="entries" />
       </Card>
     </>
   );

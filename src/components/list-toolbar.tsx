@@ -27,6 +27,7 @@ export function ListToolbar({ children }: { children: ReactNode }) {
 
   function update(changes: Update) {
     const next = new URLSearchParams(params);
+    next.delete("page"); // a new search or filter starts from the first page
     for (const [key, value] of Object.entries(changes)) {
       if (value) next.set(key, value);
       else next.delete(key);

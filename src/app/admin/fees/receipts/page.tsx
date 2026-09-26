@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { Receipt } from "lucide-react";
+import { Pagination } from "@/components/pagination";
 import { Badge, Card, EmptyState, Table, buttonVariants, inputClass, selectClass, tbodyClass, tdClass, thClass, theadClass, trClass } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess } from "@/lib/fees";
 import { MODE_LABELS, PAYMENT_MODES, rupees, type PaymentModeKey } from "@/lib/fees-shared";
+import { paginate } from "@/lib/pagination";
+import type { Prisma } from "@/generated/prisma/client";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
@@ -17,26 +20,34 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const mode = PAYMENT_MODES.find((m) => m === sp.mode) as PaymentModeKey | undefined;
 
+  const where: Prisma.FeeReceiptWhereInput = {
+    schoolId: school.id,
+    date: { gte: parseISODate(from)!, lte: parseISODate(to)! },
+    ...(mode && { mode }),
+    ...(q && {
+      OR: [
+        { number: { contains: q, mode: "insensitive" } },
+        { studentName: { contains: q, mode: "insensitive" } },
+        { studentCode: { contains: q, mode: "insensitive" } },
+        { reference: { contains: q, mode: "insensitive" } },
+      ],
+    }),
+  };
+  // Totals cover every matching receipt, not just the page shown.
+  const [count, modeTotals] = await Promise.all([
+    db.feeReceipt.count({ where }),
+    db.feeReceipt.groupBy({ by: ["mode"], where: { ...where, cancelledAt: null }, _sum: { total: true }, _count: true }),
+  ]);
+  const paging = paginate(sp, count, 50);
   const receipts = await db.feeReceipt.findMany({
-    where: {
-      schoolId: school.id,
-      date: { gte: parseISODate(from)!, lte: parseISODate(to)! },
-      ...(mode && { mode }),
-      ...(q && {
-        OR: [
-          { number: { contains: q, mode: "insensitive" } },
-          { studentName: { contains: q, mode: "insensitive" } },
-          { studentCode: { contains: q, mode: "insensitive" } },
-          { reference: { contains: q, mode: "insensitive" } },
-        ],
-      }),
-    },
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    take: 500,
+    where,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    skip: paging.skip,
+    take: paging.take,
   });
-  const valid = receipts.filter((r) => !r.cancelledAt);
-  const total = valid.reduce((n, r) => n + r.total, 0);
-  const byMode = PAYMENT_MODES.map((m) => ({ m, sum: valid.filter((r) => r.mode === m).reduce((n, r) => n + r.total, 0) })).filter((x) => x.sum);
+  const validCount = modeTotals.reduce((n, x) => n + x._count, 0);
+  const total = modeTotals.reduce((n, x) => n + (x._sum.total ?? 0), 0);
+  const byMode = PAYMENT_MODES.map((m) => ({ m, sum: modeTotals.find((x) => x.mode === m)?._sum.total ?? 0 })).filter((x) => x.sum);
 
   return (
     <div className="space-y-6">
@@ -73,7 +84,7 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
 
       <Card
         padded={false}
-        title={`${valid.length} receipt${valid.length === 1 ? "" : "s"} · ${rupees(total)}`}
+        title={`${validCount} receipt${validCount === 1 ? "" : "s"} · ${rupees(total)}`}
         description={byMode.map((x) => `${MODE_LABELS[x.m]} ${rupees(x.sum)}`).join(" · ") || undefined}
       >
         {receipts.length === 0 ? (
@@ -119,6 +130,7 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
             </tbody>
           </Table>
         )}
+        <Pagination paging={paging} noun="receipts" />
       </Card>
     </div>
   );

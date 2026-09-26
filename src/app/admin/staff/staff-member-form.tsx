@@ -4,6 +4,7 @@ import { Save, UserPlus } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { inputClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
+import { todayISO } from "@/lib/attendance-shared";
 
 const JOBS = ["Accountant", "Office assistant", "Receptionist", "Librarian", "Lab assistant", "Security guard", "Peon", "Helper", "Cleaner", "Driver", "Conductor", "Gardener", "Cook", "Nurse", "Electrician"];
 
@@ -18,19 +19,19 @@ export function StaffMemberForm({ action, member }: { action: (s: ActionState, f
           <>
             <div className={member ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-5" : "space-y-3"}>
               <Field label="Name" name="name" errors={e} required>
-                <input name="name" defaultValue={member?.name} required className={inputClass} />
+                <input name="name" maxLength={100} defaultValue={member?.name} required className={inputClass} />
               </Field>
               <Field label="Job" name="designation" errors={e} required>
                 <input name="designation" list="staff-jobs" defaultValue={member?.designation} required placeholder="e.g. Security guard" className={inputClass} />
               </Field>
               <Field label="Phone" name="phone" errors={e}>
-                <input name="phone" type="tel" defaultValue={member?.phone ?? ""} className={inputClass} />
+                <input name="phone" type="tel" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={member?.phone ?? ""} className={inputClass} />
               </Field>
               <Field label="Monthly salary (₹)" name="monthlySalary" errors={e}>
                 <input name="monthlySalary" inputMode="numeric" defaultValue={member?.monthlySalary ?? ""} className={inputClass} />
               </Field>
               <Field label="Joined on" name="joiningDate" errors={e}>
-                <input name="joiningDate" type="date" defaultValue={member?.joiningDate?.toISOString().slice(0, 10) ?? ""} className={inputClass} />
+                <input name="joiningDate" type="date" max={todayISO()} defaultValue={member?.joiningDate?.toISOString().slice(0, 10) ?? ""} className={inputClass} />
               </Field>
             </div>
             <datalist id="staff-jobs">
