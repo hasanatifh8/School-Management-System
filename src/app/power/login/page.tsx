@@ -2,11 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthLayout } from "@/components/auth-layout";
-import { ShieldCheck, ShieldOff } from "lucide-react";
 import { MIN_PASSWORD_LENGTH, hasPowerSession, powerAdminEnabled } from "@/lib/power-auth";
 import { LoginForm } from "./login-form";
 
-export const metadata: Metadata = { title: "Power Admin · Sign in" };
+export const metadata: Metadata = { title: "Power Admin · Scholdesk" };
 export const dynamic = "force-dynamic";
 
 export default async function PowerLoginPage() {
@@ -15,7 +14,6 @@ export default async function PowerLoginPage() {
 
   return (
     <AuthLayout
-      icon={enabled ? ShieldCheck : ShieldOff}
       title="Power Admin"
       subtitle={enabled ? "Manage schools, logos and data. Sign in to continue." : "Power Admin is turned off because no password is set."}
       footer={

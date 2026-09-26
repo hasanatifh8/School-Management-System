@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "School Management System",
-  description: "Manage students, teachers, classes and subjects.",
+  title: "Scholdesk",
+  description: "Scholdesk — Modern School Management Platform. Powered by Cliccx Technologies.",
 };
 
 export const viewport: Viewport = {

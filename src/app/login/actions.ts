@@ -7,6 +7,7 @@ import { endAdminSession, getSignedInAdmin, revokeAdminSessions, startAdminSessi
 import { endTeacherSession, getSignedInTeacher, revokeTeacherSessions, startTeacherSession } from "@/lib/teacher-auth";
 import { hashPassword, passwordProblem, verifyPassword } from "@/lib/passwords";
 import { audit } from "@/lib/power-tools";
+import { rememberLoginSchool } from "@/lib/login-school";
 
 // Verifying against this keeps the timing the same when the email doesn't exist.
 const DUMMY_HASH = "scrypt$32768$8$1$c2FsdHNhbHRzYWx0c2FsdA$" + "A".repeat(86);
@@ -32,6 +33,7 @@ export async function signIn(_: ActionState, formData: FormData): Promise<Action
     }
     if (teacher.school.status !== "ACTIVE") return { error: `${teacher.school.name} is suspended. Contact your school.` };
     await startTeacherSession(teacher.id);
+    await rememberLoginSchool(teacher.schoolId);
     await db.teacher.update({ where: { id: teacher.id }, data: { lastLoginAt: new Date() } });
     redirect("/teacher");
   }
@@ -49,6 +51,7 @@ export async function signIn(_: ActionState, formData: FormData): Promise<Action
   if (admin.school.status !== "ACTIVE") return { error: `${admin.school.name} is suspended. Contact your Power Admin.` };
 
   await startAdminSession(admin.id);
+  await rememberLoginSchool(admin.schoolId);
   await db.schoolAdmin.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
   redirect(admin.role === "ADMIN" ? "/admin" : "/admin/fees");
 }
