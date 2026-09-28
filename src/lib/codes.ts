@@ -20,6 +20,12 @@ export async function nextStudentCode(
   return `STU-${year}-${String(n).padStart(4, "0")}`;
 }
 
+/** Non-teaching staff ID such as STF-0001. */
+export async function nextStaffCode(tx: Prisma.TransactionClient, schoolId: string) {
+  const n = await nextValue(tx, schoolId, "staff");
+  return `STF-${String(n).padStart(4, "0")}`;
+}
+
 /** Teacher ID such as TCH-0001. */
 export async function nextTeacherCode(tx: Prisma.TransactionClient, schoolId: string) {
   const n = await nextValue(tx, schoolId, "teacher");

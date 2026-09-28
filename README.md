@@ -130,7 +130,7 @@ Teachers sign in at **`/login`** under the **Teacher** tab (or `/login?role=teac
 
 **Who can use it**
 - **School admins** and Power Admin have full access.
-- **Fees staff** (non-teaching staff such as the accountant) have their own logins, created by a school admin under **Admin → Staff → Fees logins**. They sign in at `/login` like admins, but see only the **Fees** section: collecting fees, receipts and the fee chart. Opening any other admin page takes them back to Fees.
+- **Cashiers** are non-teaching staff members an admin has made cashier, from the staff member's profile (*Staff → [name] → Cashier access*) or when adding them. They sign in at `/login` with their email and a generated password, but see only the **Fees** section: collecting fees, receipts and the fee chart. Opening any other admin page takes them back to Fees. Other staff have no login.
 
 **Fee structure** (*Fees → Fee structure*, admins only)
 - Fees are set up for each academic session. Add each fee the school charges and choose **how often** it is charged:
@@ -168,11 +168,13 @@ Teachers sign in at **`/login`** under the **Teacher** tab (or `/login?role=teac
 
 ## Expenses & budget
 
-This section is for school admins and Power Admin. Fees staff can't see it.
+This section is for school admins and Power Admin. Cashiers can't see it.
 
 **Staff** (*Admin → Staff*)
-- The **Non-teaching staff** register holds office staff, guards, helpers, drivers and so on, each with a job, phone number and monthly salary. You can edit someone or remove them from the payroll; their past salaries are kept.
-- The **Fees logins** tab holds sign-in accounts for fees staff.
+- Office staff, guards, helpers, drivers and so on, with profiles like teachers': a staff ID (STF-0001), photo, personal and contact details, job, qualification/degree, experience, joining date and monthly salary.
+- Each profile has a **Documents** tab for their resume, degree certificates, experience letters, Aadhaar, PAN and so on.
+- **Cashier access:** an admin can make a staff member a cashier, who can then sign in and collect fees, and nothing else. It can be turned off, the password reset, or the access removed. Changing a cashier's email changes their sign-in. Removing a staff member turns their sign-in off.
+- Removing someone takes them off the payroll; their past salaries are kept, and they can be restored.
 - Teachers' salaries come from the *Monthly salary* on their profile.
 
 **Salaries** (*Expenses → Salaries*)

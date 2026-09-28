@@ -405,7 +405,7 @@ const TOOLS: Tool[] = [
 
   tool(
     "list_staff",
-    "Non-teaching staff (office, guards, drivers…) with designation, phone and salary.",
+    "Non-teaching staff (office, guards, drivers…) with job, staff ID, qualification, phone, salary and whether they are a cashier (can collect fees).",
     { name: str("Part of the name or designation (optional)") },
     z.object({ name: text }),
     async ({ schoolId }, a) => {
@@ -416,8 +416,23 @@ const TOOLS: Tool[] = [
           ...(a.name ? { OR: [{ name: { contains: a.name, mode: "insensitive" } }, { designation: { contains: a.name, mode: "insensitive" } }] } : {}),
         },
         orderBy: { name: "asc" },
+        include: { cashierAccount: { select: { active: true } } },
       });
-      return rows(staff.map((s) => ({ name: s.name, designation: s.designation, phone: s.phone, monthlySalary: s.monthlySalary, joined: d(s.joiningDate) })), 60);
+      return rows(
+        staff.map((s) => ({
+          name: s.name,
+          staffId: s.employeeCode,
+          job: s.designation,
+          qualification: s.qualification,
+          experienceYears: s.experienceYears,
+          phone: s.phone ?? s.whatsappNumber,
+          email: s.email,
+          monthlySalary: s.monthlySalary,
+          joined: d(s.joiningDate),
+          cashier: s.cashierAccount ? (s.cashierAccount.active ? "yes" : "yes, sign-in turned off") : "no",
+        })),
+        60,
+      );
     },
   ),
 

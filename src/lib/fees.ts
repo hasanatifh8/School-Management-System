@@ -24,7 +24,7 @@ export const getFeesAccess = cache(async () => {
     school,
     session,
     canManage: !staff || staff.role === "ADMIN",
-    who: staff ? `${staff.name}${staff.role === "ADMIN" ? "" : " (accounts)"}` : "Power Admin",
+    who: staff ? `${staff.name}${staff.role === "ADMIN" ? "" : " (cashier)"}` : "Power Admin",
     today: todayISO(),
   };
 });

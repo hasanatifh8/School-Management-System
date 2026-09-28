@@ -1,7 +1,7 @@
 // Sample data for trying the app: used by `npm run db:seed` and by Power
 // Admin's "Load demo data". No server-only imports, so the seed script can use it.
 import type { BloodGroup, Gender, Prisma } from "@/generated/prisma/client";
-import { nextStudentCode, nextTeacherCode } from "@/lib/codes";
+import { nextStaffCode, nextStudentCode, nextTeacherCode } from "@/lib/codes";
 import { academicStartYear, sessionDates, sessionName } from "@/lib/session-dates";
 
 const SUBJECTS = [
@@ -210,7 +210,7 @@ const MONTHLY_COSTS: [string, number, string][] = [
 async function loadDemoExpenses(tx: Prisma.TransactionClient, schoolId: string, teachers: { id: string; firstName: string; lastName: string; monthlySalary: number | null }[]) {
   const staff = [];
   for (const [name, designation, monthlySalary] of STAFF) {
-    staff.push(await tx.staffMember.create({ data: { schoolId, name, designation, monthlySalary } }));
+    staff.push(await tx.staffMember.create({ data: { schoolId, employeeCode: await nextStaffCode(tx, schoolId), name, designation, monthlySalary } }));
   }
   const names = ["Electricity", "Water", "Events & functions", "Maintenance & repairs", "Stationery & supplies", "Transport & fuel", "Internet & phone", "Cleaning & housekeeping", "Other"];
   const budgets: Record<string, number> = { Electricity: 20000, Water: 2500, "Events & functions": 10000, "Maintenance & repairs": 8000, "Stationery & supplies": 5000, "Transport & fuel": 10000, "Internet & phone": 3000, "Cleaning & housekeeping": 3500 };

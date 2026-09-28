@@ -192,19 +192,21 @@ model Photo {
   data      Bytes
   createdAt DateTime @default(now())
 
-  school  School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  student Student?
-  teacher Teacher?
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student     Student?
+  teacher     Teacher?
+  staffMember StaffMember?
 }
 
 // A document (Aadhaar, PAN, resume, certificates…) belonging to exactly one
-// student or teacher. File bytes live in DocumentFile so listing documents
+// student, teacher or non-teaching staff member. File bytes live in DocumentFile so listing documents
 // never loads file contents.
 model Document {
   id             String       @id @default(cuid())
   schoolId       String
   studentId      String?
   teacherId      String?
+  staffMemberId  String?
   type           DocumentType
   title          String
   documentNumber String? // e.g. Aadhaar or PAN number
@@ -214,13 +216,15 @@ model Document {
   fileId         String       @unique
   createdAt      DateTime     @default(now())
 
-  school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  student Student?     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  file    DocumentFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student     Student?     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher     Teacher?     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staffMember StaffMember? @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+  file        DocumentFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
   @@index([teacherId])
+  @@index([staffMemberId])
 }
 
 model DocumentFile {
@@ -494,20 +498,24 @@ model AuditLog {
 }
 
 // A school's admin account for the Admin Portal (signs in at /login).
+// A cashier (role ACCOUNTANT) is always a non-teaching staff member made
+// cashier from their profile; they see only Fees.
 model SchoolAdmin {
-  id           String    @id @default(cuid())
-  schoolId     String
-  name         String
-  email        String    @unique // stored lower-case; used to sign in
-  passwordHash String
-  role         StaffRole @default(ADMIN)
-  active       Boolean   @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  schoolId      String
+  name          String
+  email         String    @unique // stored lower-case; used to sign in
+  passwordHash  String
+  role          StaffRole @default(ADMIN)
+  active        Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  staffMemberId String?   @unique // cashiers: the staff member this account belongs to
 
-  school   School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  sessions AdminSession[]
+  school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  sessions    AdminSession[]
+  staffMember StaffMember?   @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
 
   @@index([schoolId])
 }
@@ -684,22 +692,37 @@ model FeeReceiptItem {
 }
 
 // Non-teaching staff on the payroll: office staff, guards, helpers, drivers…
-// (Separate from sign-in accounts; a staff member may or may not have one.)
+// Only a staff member made cashier can sign in (a SchoolAdmin with role
+// ACCOUNTANT, which sees only Fees); everyone else has no login.
 model StaffMember {
-  id            String    @id @default(cuid())
-  schoolId      String
-  name          String
-  designation   String // e.g. "Security guard"
-  phone         String?
-  monthlySalary Int?
-  joiningDate   DateTime?
-  status        Status    @default(ACTIVE)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String      @id @default(cuid())
+  schoolId        String
+  employeeCode    String // unique, human-readable staff ID, e.g. STF-0001
+  name            String
+  designation     String // e.g. "Security guard"
+  gender          Gender?
+  bloodGroup      BloodGroup?
+  dateOfBirth     DateTime?
+  email           String?
+  phone           String?
+  whatsappNumber  String?
+  address         String?
+  qualification   String? // e.g. "B.Com", "12th pass"
+  experienceYears Int? // total work experience
+  monthlySalary   Int?
+  joiningDate     DateTime?
+  status          Status      @default(ACTIVE)
+  photoId         String?     @unique
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  photo          Photo?          @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  documents      Document[]
   salaryPayments SalaryPayment[]
+  cashierAccount SchoolAdmin?
 
+  @@unique([schoolId, employeeCode])
   @@index([schoolId])
 }
 

@@ -41,8 +41,10 @@ export async function uploadDocument(
           },
           select: { id: true },
         })
-      : await db.teacher.findFirst({ where: { id: ownerId, schoolId: school.id }, select: { id: true } });
-  if (!owner) return { error: `${ownerKind === "student" ? "Student" : "Teacher"} not found.` };
+      : ownerKind === "teacher"
+        ? await db.teacher.findFirst({ where: { id: ownerId, schoolId: school.id }, select: { id: true } })
+        : await db.staffMember.findFirst({ where: { id: ownerId, schoolId: school.id }, select: { id: true } });
+  if (!owner) return { error: `${{ student: "Student", teacher: "Teacher", staff: "Staff member" }[ownerKind]} not found.` };
 
   const parsed = uploadSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "Invalid form data." };
@@ -65,7 +67,9 @@ export async function uploadDocument(
       school: { connect: { id: school.id } },
       ...(ownerKind === "student"
         ? { student: { connect: { id: owner.id } } }
-        : { teacher: { connect: { id: owner.id } } }),
+        : ownerKind === "teacher"
+          ? { teacher: { connect: { id: owner.id } } }
+          : { staffMember: { connect: { id: owner.id } } }),
       type,
       title,
       documentNumber: number.value,

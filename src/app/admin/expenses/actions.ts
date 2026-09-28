@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { type ActionState, optionalMobile, optionalPastDate, requiredName, validationError } from "@/lib/action-state";
+import { type ActionState, validationError } from "@/lib/action-state";
 import { addMonths, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { ensureCategories, isMonth, loadPayroll, requireExpensesAccess } from "@/lib/expenses";
@@ -32,38 +32,6 @@ const dateField = (label: string, today: string) =>
   z.string().refine((v) => parseISODate(v) && v <= today, `${label} must be a real date, not in the future`);
 
 const revalidate = () => revalidatePath("/admin", "layout");
-
-/* ───────────────────────── Non-teaching staff ───────────────────────── */
-
-const staffSchema = z.object({
-  name: requiredName("Name").refine((v) => v.length >= 2, "Enter the full name"),
-  designation: z.string().trim().min(2, "Enter the job, e.g. Security guard").max(60),
-  phone: optionalMobile,
-  monthlySalary: optionalRupees,
-  joiningDate: optionalPastDate,
-});
-
-export async function saveStaffMember(id: string | null, _: ActionState, formData: FormData): Promise<ActionState> {
-  const { school } = await requireExpensesAccess();
-  const parsed = staffSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return validationError(parsed.error);
-  if (id) {
-    const { count } = await db.staffMember.updateMany({ where: { id, schoolId: school.id }, data: parsed.data });
-    if (!count) return { error: "Staff member not found." };
-  } else {
-    await db.staffMember.create({ data: { ...parsed.data, schoolId: school.id } });
-  }
-  revalidate();
-  return { ok: true, message: id ? "Saved." : `${parsed.data.name} added.` };
-}
-
-export async function setStaffMemberStatus(id: string, status: "ACTIVE" | "INACTIVE"): Promise<ActionState> {
-  const { school } = await requireExpensesAccess();
-  const { count } = await db.staffMember.updateMany({ where: { id, schoolId: school.id }, data: { status } });
-  if (!count) return { error: "Staff member not found." };
-  revalidate();
-  return { ok: true, message: status === "ACTIVE" ? "Back on the payroll." : "Removed from the payroll. Past salary records are kept." };
-}
 
 /* ───────────────────────── Payroll ───────────────────────── */
 

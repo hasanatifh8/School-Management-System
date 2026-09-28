@@ -1,7 +1,7 @@
 // Document types and rules shared by the server and the upload form.
 import type { DocumentType } from "@/generated/prisma/enums";
 
-export type DocumentOwnerKind = "student" | "teacher";
+export type DocumentOwnerKind = "student" | "teacher" | "staff";
 
 // Vercel rejects request bodies over 4.5 MB, so files stay under that with room for form overhead.
 export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
@@ -48,12 +48,23 @@ export const DOCUMENT_TYPES_FOR: Record<DocumentOwnerKind, DocumentType[]> = {
     "MEDICAL_CERTIFICATE",
     "OTHER",
   ],
+  staff: [
+    "AADHAAR",
+    "PAN",
+    "RESUME",
+    "EDUCATION_CERTIFICATE",
+    "EXPERIENCE_LETTER",
+    "ADDRESS_PROOF",
+    "MEDICAL_CERTIFICATE",
+    "OTHER",
+  ],
 };
 
 /** Key documents shown as a checklist on the profile. */
 export const EXPECTED_DOCUMENTS: Record<DocumentOwnerKind, DocumentType[]> = {
   student: ["AADHAAR", "BIRTH_CERTIFICATE", "TRANSFER_CERTIFICATE", "MARKSHEET"],
   teacher: ["AADHAAR", "PAN", "RESUME", "EDUCATION_CERTIFICATE"],
+  staff: ["AADHAAR", "PAN", "RESUME", "EDUCATION_CERTIFICATE"],
 };
 
 /** Types that carry an ID number. */

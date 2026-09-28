@@ -44,7 +44,7 @@ const groups: { title: string; items: Item[] }[] = [
     title: "People & access",
     items: [
       { href: "/admin/account", icon: KeyRound, tone: "slate", title: "Account & password", text: "Your sign-in details" },
-      { href: "/admin/staff/logins", icon: UserCog, tone: "teal", title: "Fees logins", text: "Sign-in accounts for fees staff" },
+      { href: "/admin/staff?access=cashier", icon: UserCog, tone: "teal", title: "Cashiers", text: "Staff who can sign in and collect fees" },
       { href: "/admin/notices/settings", icon: MessageCircle, tone: "emerald", title: "WhatsApp & SMS", text: "Message provider and sender details" },
     ],
   },
