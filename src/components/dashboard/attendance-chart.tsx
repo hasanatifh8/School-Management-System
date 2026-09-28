@@ -5,8 +5,8 @@ import { useState } from "react";
 
 export type ClassAttendance = { id: string; name: string; present: number; absent: number; leave: number };
 
-/** Present and absent students per class today, as paired bars with a hover tooltip. */
-export function AttendanceChart({ data }: { data: ClassAttendance[] }) {
+/** Present and absent students per group (a class, or a day), as paired bars with a hover tooltip. */
+export function AttendanceChart({ data, href = "/admin/attendance" }: { data: ClassAttendance[]; href?: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = niceMax(Math.max(1, ...data.flatMap((d) => [d.present, d.absent])));
   const ticks = [1, 0.75, 0.5, 0.25, 0].map((f) => Math.round(max * f));
@@ -37,7 +37,7 @@ export function AttendanceChart({ data }: { data: ClassAttendance[] }) {
                 return (
                   <li key={d.id} className="relative flex min-w-0 flex-1 flex-col" onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
                     <Link
-                      href={`/admin/attendance`}
+                      href={href}
                       onFocus={() => setHover(i)}
                       onBlur={() => setHover(null)}
                       aria-label={`${d.name}: ${d.present} present, ${d.absent} absent`}

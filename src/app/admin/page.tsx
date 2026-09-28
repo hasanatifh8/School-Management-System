@@ -1,16 +1,11 @@
-import Link from "next/link";
-import type { ReactNode } from "react";
 import {
   ArrowRight,
   BadgeCheck,
   BarChart3,
-  Cake,
   CalendarCheck,
-  CalendarDays,
   CalendarOff,
   ClipboardList,
   GraduationCap,
-  History,
   IdCard,
   IndianRupee,
   Megaphone,
@@ -18,33 +13,39 @@ import {
   Receipt,
   Rocket,
   Sun,
-  TriangleAlert,
   UserPlus,
   UserRoundCheck,
   UserRoundX,
   Users,
   Wallet,
   Zap,
-  type LucideIcon,
 } from "lucide-react";
 import { AttendanceChart, type ClassAttendance } from "@/components/dashboard/attendance-chart";
 import { FeeTrendChart } from "@/components/dashboard/fee-trend-chart";
-import { AnimatedNumber, Avatar, ButtonLink, Callout, Card, EmptyState, IconTile, PageHeader, TextLink, type IconTone } from "@/components/ui";
-import { cx } from "@/components/ui/cx";
+import {
+  ActivityCard,
+  AttentionChip,
+  BirthdaysCard,
+  DateChip,
+  KpiCard,
+  KpiGrid,
+  QuickAction,
+  UpcomingEventsCard,
+  longToday,
+  upcomingBirthdays,
+  type Activity,
+} from "@/components/dashboard/widgets";
+import { ButtonLink, Callout, Card, EmptyState, PageHeader, TextLink } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool, getViewer } from "@/lib/school";
-import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { getCurrentSession, getUpcomingSession, pendingPromotions } from "@/lib/sessions";
 import { attendanceWindow } from "@/lib/attendance";
 import { attendancePercent, emptyCounts, isSunday, parseISODate } from "@/lib/attendance-shared";
 import { loadCalendar } from "@/lib/calendar";
-import { EVENT_META } from "@/lib/calendar-shared";
 import { monthlyFeeTrend } from "@/lib/fees";
 import { rupees } from "@/lib/fees-shared";
 
-const DAY = 86_400_000;
-const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export default async function DashboardPage() {
   const school = await getCurrentSchool();
@@ -145,19 +146,13 @@ export default async function DashboardPage() {
   const absentPct = marked ? Math.round((counts.ABSENT / marked) * 1000) / 10 : null;
 
   /* ── Birthdays in the next 30 days ── */
-  const todayMs = todayDate.getTime();
-  const daysToBirthday = (dob: Date) => {
-    const y = todayDate.getUTCFullYear();
-    let next = Date.UTC(y, dob.getUTCMonth(), dob.getUTCDate());
-    if (next < todayMs) next = Date.UTC(y + 1, dob.getUTCMonth(), dob.getUTCDate());
-    return { days: Math.round((next - todayMs) / DAY), date: new Date(next) };
-  };
-  const birthdays = [
-    ...birthdayStudents.map((s) => ({ id: s.id, href: `/admin/students/${s.id}`, name: fullName(s), photoId: s.photoId, sub: s.section ? sectionLabel(s.section) : "Student", ...daysToBirthday(s.dateOfBirth!) })),
-    ...birthdayTeachers.map((t) => ({ id: t.id, href: `/admin/teachers/${t.id}`, name: fullName(t), photoId: t.photoId, sub: "Teacher", ...daysToBirthday(t.dateOfBirth!) })),
-  ]
-    .filter((b) => b.days <= 30)
-    .sort((a, b) => a.days - b.days || a.name.localeCompare(b.name));
+  const birthdays = upcomingBirthdays(
+    [
+      ...birthdayStudents.map((st) => ({ id: st.id, href: `/admin/students/${st.id}`, name: fullName(st), photoId: st.photoId, sub: st.section ? sectionLabel(st.section) : "Student", dateOfBirth: st.dateOfBirth })),
+      ...birthdayTeachers.map((t) => ({ id: t.id, href: `/admin/teachers/${t.id}`, name: fullName(t), photoId: t.photoId, sub: "Teacher", dateOfBirth: t.dateOfBirth })),
+    ],
+    todayDate,
+  );
 
   /* ── Coming up on the school calendar ── */
   const events = calendar.items.filter((i) => i.end >= win.today).slice(0, 5);
@@ -214,7 +209,6 @@ export default async function DashboardPage() {
     .slice(0, 6);
 
   const now = new Date();
-  const today = new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(now);
   const firstName = viewer?.kind === "admin" ? viewer.admin.name.split(/\s+/)[0] : "Admin";
 
   return (
@@ -224,12 +218,11 @@ export default async function DashboardPage() {
         subtitle={`Welcome back, ${firstName}! Here's what's happening at ${school.name} today.`}
         action={
           <>
-            <span className="hidden h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-fg-2 shadow-card sm:inline-flex">
-              <CalendarDays className="h-4 w-4 text-muted" aria-hidden />
-              {today}
+            <DateChip>
+              {longToday(now)}
               <span className="text-subtle">·</span>
               <span className="text-muted">Session {session.name}</span>
-            </span>
+            </DateChip>
             <ButtonLink href="/admin/students/new" icon={UserPlus}>
               New admission
             </ButtonLink>
@@ -266,7 +259,7 @@ export default async function DashboardPage() {
       )}
 
       {/* Key numbers */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <KpiGrid>
         <KpiCard href="/admin/students" icon={GraduationCap} tone="indigo" label="Total students" value={studentCount} link="View students" />
         <KpiCard href="/admin/teachers" icon={Users} tone="emerald" label="Total teachers" value={teacherCount} link="View teachers" />
         <KpiCard href="/admin/staff" icon={Presentation} tone="amber" label="Total staff" value={staffCount} link="View staff" />
@@ -300,7 +293,7 @@ export default async function DashboardPage() {
           badge={feesToday._count ? `${feesToday._count} receipt(s)` : undefined}
           link="View receipts"
         />
-      </div>
+      </KpiGrid>
 
       {/* Charts */}
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
@@ -363,37 +356,11 @@ export default async function DashboardPage() {
 
       {/* Lists */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-        <Card title="Upcoming birthdays" icon={Cake} description="Next 30 days" padded={false}>
-          {birthdays.length === 0 ? (
-            <EmptyState compact icon={Cake} title="No birthdays soon" description="Birthdays of students and teachers show here." />
-          ) : (
-            <ul className="divide-y divide-line">
-              {birthdays.slice(0, 5).map((b) => (
-                <li key={b.id}>
-                  <Link href={b.href} className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2 sm:px-6">
-                    <Avatar name={b.name} src={photoUrl(b.photoId)} size="sm" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-fg">{b.name}</span>
-                      <span className="block truncate text-xs text-muted">{b.sub}</span>
-                    </span>
-                    <span className="text-right text-xs">
-                      <span className="block text-fg-2">{shortDate.format(b.date)}</span>
-                      {b.days === 0 ? (
-                        <span className="font-semibold text-danger">Today 🎂</span>
-                      ) : (
-                        <span className="text-muted">{b.days === 1 ? "Tomorrow" : `In ${b.days} days`}</span>
-                      )}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-              {birthdays.length > 5 && <li className="px-4 py-2.5 text-xs text-muted sm:px-6">+{birthdays.length - 5} more this month</li>}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Upcoming exams & events" icon={CalendarDays} padded={false} action={<TextLink href="/admin/calendar">View calendar</TextLink>}>
-          {events.length === 0 ? (
+        <BirthdaysCard birthdays={birthdays} emptyText="Birthdays of students and teachers show here." />
+        <UpcomingEventsCard
+          events={events}
+          calendarHref="/admin/calendar"
+          empty={
             <EmptyState
               compact
               icon={ClipboardList}
@@ -405,56 +372,9 @@ export default async function DashboardPage() {
                 </ButtonLink>
               }
             />
-          ) : (
-            <ul className="divide-y divide-line">
-              {events.map((e) => {
-                const meta = EVENT_META[e.type];
-                const date = parseISODate(e.start)!;
-                return (
-                  <li key={e.key}>
-                    <Link href={e.href ?? "/admin/calendar"} className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2 sm:px-6">
-                      <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-accent-soft text-accent-text">
-                        <span className="text-base leading-none font-semibold tabular-nums">{date.getUTCDate()}</span>
-                        <span className="mt-0.5 text-[10px] font-medium uppercase">{shortDate.format(date).split(" ")[1]}</span>
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-fg">{e.title}</span>
-                        <span className="block truncate text-xs text-muted">
-                          {e.start === e.end ? e.classes : `Till ${shortDate.format(parseISODate(e.end)!)} · ${e.classes}`}
-                        </span>
-                      </span>
-                      <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-fg-2">
-                        <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
-                        {e.draft ? "Draft" : meta.label}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Recent activity" icon={History} padded={false} className="lg:col-span-2 xl:col-span-1">
-          {activities.length === 0 ? (
-            <EmptyState compact icon={History} title="No activity yet" description="Admissions, payments, notices and results show here." />
-          ) : (
-            <ul className="divide-y divide-line">
-              {activities.map((a) => (
-                <li key={a.key}>
-                  <Link href={a.href} className="flex items-start gap-3 px-4 py-3 transition hover:bg-surface-2 sm:px-6">
-                    <IconTile icon={a.icon} tone={a.tone} size="sm" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-fg">{a.title}</span>
-                      <span className="block truncate text-xs text-fg-2">{a.text}</span>
-                      <span className="block text-[11px] text-subtle">{timeAgo(a.at, now)}</span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+          }
+        />
+        <ActivityCard activities={activities} emptyText="Admissions, payments, notices and results show here." className="lg:col-span-2 xl:col-span-1" />
       </div>
 
       {/* Quick actions */}
@@ -472,99 +392,4 @@ export default async function DashboardPage() {
       </Card>
     </>
   );
-}
-
-type Activity = { key: string; at: Date; icon: LucideIcon; tone: IconTone; title: string; text: string; href: string };
-
-const kpiTones: Record<string, string> = {
-  indigo: "from-indigo-500/[0.07] border-indigo-500/15",
-  emerald: "from-emerald-500/[0.07] border-emerald-500/15",
-  amber: "from-amber-500/[0.08] border-amber-500/20",
-  violet: "from-violet-500/[0.07] border-violet-500/15",
-  rose: "from-rose-500/[0.07] border-rose-500/15",
-  teal: "from-teal-500/[0.07] border-teal-500/15",
-};
-
-function KpiCard({
-  href,
-  icon,
-  tone,
-  label,
-  value,
-  prefix,
-  badge,
-  empty,
-  link,
-}: {
-  href: string;
-  icon: LucideIcon;
-  tone: keyof typeof kpiTones & IconTone;
-  label: string;
-  /** null shows `empty` instead, e.g. "Not marked". */
-  value: number | null;
-  prefix?: string;
-  badge?: string;
-  empty?: string;
-  link: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cx(
-        "group flex flex-col rounded-2xl border bg-surface bg-gradient-to-b to-transparent p-4 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift",
-        kpiTones[tone],
-      )}
-    >
-      <IconTile icon={icon} tone={tone} size="md" />
-      <p className="mt-4 text-sm font-medium text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-fg sm:text-display-sm">
-        {value == null ? <span className="text-base font-medium text-subtle">{empty}</span> : <AnimatedNumber value={value} prefix={prefix} />}
-      </p>
-      <p className="mt-1 h-5 text-xs">{badge && <span className="rounded-full bg-surface-3 px-2 py-0.5 font-medium tabular-nums text-fg-2">{badge}</span>}</p>
-      <span className="mt-auto flex items-center gap-1 pt-3 text-xs font-medium text-accent-text">
-        {link}
-        <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" aria-hidden />
-      </span>
-    </Link>
-  );
-}
-
-function QuickAction({ href, icon, tone, title, text }: { href: string; icon: LucideIcon; tone: IconTone; title: string; text: string }) {
-  return (
-    <Link
-      href={href}
-      className="group flex items-center gap-3 rounded-xl border border-line bg-surface-2/60 p-3 transition hover:-translate-y-px hover:border-line-strong hover:bg-surface hover:shadow-lift sm:p-4"
-    >
-      <IconTile icon={icon} tone={tone} size="lg" />
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-fg">{title}</span>
-        <span className="block truncate text-xs text-muted">{text}</span>
-      </span>
-      <ArrowRight className="h-4 w-4 text-subtle transition group-hover:translate-x-0.5 group-hover:text-accent-text" aria-hidden />
-    </Link>
-  );
-}
-
-function AttentionChip({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-2 rounded-full border border-warning-line bg-warning-soft px-3 py-1.5 text-xs font-medium text-fg transition hover:shadow-lift"
-    >
-      <TriangleAlert className="h-3.5 w-3.5 text-warning" aria-hidden />
-      {children}
-      <ArrowRight className="h-3.5 w-3.5 text-warning" aria-hidden />
-    </Link>
-  );
-}
-
-function timeAgo(at: Date, now: Date) {
-  const mins = Math.round((now.getTime() - at.getTime()) / 60_000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return days === 1 ? "Yesterday" : `${days} days ago`;
-  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(at);
 }
