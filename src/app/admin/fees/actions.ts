@@ -142,6 +142,62 @@ export async function setOptionalFee(studentId: string, headId: string, add: boo
   return { ok: true, message: add ? `${head.name} added.` : `${head.name} removed.` };
 }
 
+/** Charges an opt-in fee (e.g. sports) to the ticked students. */
+export async function addOptionalFeeStudents(headId: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const { school, session } = await getFeesAccess();
+  const head = await db.feeHead.findFirst({
+    where: { id: headId, sessionId: session.id, optional: true },
+    include: { amounts: { where: { amount: { gt: 0 } }, select: { classId: true } } },
+  });
+  if (!head) return { error: "Fee not found." };
+  const ids = formData.getAll("studentIds").map(String);
+  if (!ids.length) return { error: "Select at least one student." };
+
+  // Only students in a class this fee has an amount for; anyone else wouldn't be charged.
+  const students = await db.student.findMany({
+    where: {
+      id: { in: ids },
+      schoolId: school.id,
+      status: "ACTIVE",
+      section: { classId: { in: head.amounts.map((a) => a.classId) } },
+    },
+    select: { id: true },
+  });
+  const { count } = await db.studentFeeHead.createMany({
+    data: students.map((s) => ({ studentId: s.id, headId })),
+    skipDuplicates: true,
+  });
+  revalidatePath("/admin/fees", "layout");
+  const skipped = ids.length - students.length;
+  return {
+    ok: true,
+    message: `${head.name} added for ${count} student(s).${skipped ? ` ${skipped} skipped: no amount is set for their class.` : ""}`,
+  };
+}
+
+/** Stops charging an opt-in fee to the ticked students, keeping anyone who has already paid towards it. */
+export async function removeOptionalFeeStudents(headId: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const { school, session } = await getFeesAccess();
+  const head = await db.feeHead.findFirst({ where: { id: headId, sessionId: session.id, optional: true } });
+  if (!head) return { error: "Fee not found." };
+  const ids = formData.getAll("studentIds").map(String);
+  if (!ids.length) return { error: "Select at least one student." };
+
+  const paid = await db.feeReceiptItem.findMany({
+    where: { headId, receipt: { studentId: { in: ids }, cancelledAt: null } },
+    select: { receipt: { select: { studentId: true } } },
+  });
+  const keep = new Set(paid.map((p) => p.receipt.studentId));
+  const { count } = await db.studentFeeHead.deleteMany({
+    where: { headId, studentId: { in: ids.filter((id) => !keep.has(id)) }, student: { schoolId: school.id } },
+  });
+  revalidatePath("/admin/fees", "layout");
+  return {
+    ok: true,
+    message: `${head.name} removed for ${count} student(s).${keep.size ? ` ${keep.size} kept: payments were already taken (cancel those receipts first).` : ""}`,
+  };
+}
+
 const paymentSchema = z.object({
   date: z.string().refine((v) => parseISODate(v), "Choose the payment date"),
   mode: z.enum(PAYMENT_MODES, "Choose how it was paid"),

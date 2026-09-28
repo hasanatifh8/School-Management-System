@@ -7,7 +7,7 @@ import { describeErrors, toBloodGroup, toGender, toIsoDate, type ImportRowResult
 import { fullName } from "@/lib/queries";
 import { getCurrentSchool } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
-import { DEFAULT_NATIONALITY } from "@/lib/student-options";
+import { DEFAULT_NATIONALITY, GUARDIAN_RELATIONS } from "@/lib/student-options";
 import { createStudentRecord } from "@/lib/students";
 import { studentSchema, type StudentInput } from "../schema";
 
@@ -94,6 +94,7 @@ export async function importStudents(_: ImportState, formData: FormData): Promis
       fatherOccupation: v.fatherOccupation ?? "",
       motherName: v.motherName ?? "",
       guardianName: v.guardianName ?? "",
+      guardianRelation: GUARDIAN_RELATIONS.find((r) => r.toLowerCase() === (v.guardianRelation ?? "").trim().toLowerCase()) ?? (v.guardianRelation ?? "").trim(),
       // Like the form: a blank guardian means the father is the guardian.
       ...(!(v.guardianName ?? "").trim() && (v.fatherName ?? "").trim() && { guardianIsFather: "on" }),
       rollNumber: v.rollNumber ?? "",

@@ -74,7 +74,8 @@ export async function createStudent(_: ActionState, formData: FormData): Promise
   );
 
   revalidatePath("/admin", "layout");
-  redirect(`/admin/students/${student.id}`);
+  // The profile then offers to collect the new student's fees.
+  redirect(`/admin/students/${student.id}?admitted=1`);
 }
 
 export async function updateStudent(

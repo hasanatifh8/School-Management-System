@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Card } from "@/components/ui";
+import { Breadcrumbs, Card } from "@/components/ui";
 import { db } from "@/lib/db";
 import { loadFeeHeads, requireFeesManager } from "@/lib/fees";
 import { saveFeeHead } from "../../actions";
@@ -15,8 +15,11 @@ export default async function EditFeeHeadPage({ params }: PageProps<"/admin/fees
   const head = heads.find((h) => h.id === id);
   if (!head) notFound();
   return (
-    <Card title={`Edit “${head.name}”`} description="New amounts apply to everything not yet paid.">
-      <FeeHeadForm action={saveFeeHead.bind(null, head.id)} classes={classes} head={head} />
-    </Card>
+    <>
+      <Breadcrumbs items={[{ label: "Fee structure", href: "/admin/fees/structure" }, { label: head.name }]} />
+      <Card title={`Edit “${head.name}”`} description="New amounts apply to everything not yet paid.">
+        <FeeHeadForm action={saveFeeHead.bind(null, head.id)} classes={classes} head={head} />
+      </Card>
+    </>
   );
 }

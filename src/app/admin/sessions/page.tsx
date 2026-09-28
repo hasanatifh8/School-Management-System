@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { CalendarRange, CircleCheck, CircleDashed, History, PartyPopper, Rocket } from "lucide-react";
+import { CalendarCog, CalendarRange, CircleCheck, CircleDashed, History, PartyPopper, Rocket, Save } from "lucide-react";
 import type { EnrollmentResult } from "@/generated/prisma/enums";
-import { ActionForm, SubmitButton } from "@/components/forms";
+import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import {
   Badge,
   Card,
   PageHeader,
   Table,
   buttonVariants,
+  inputClass,
   tbodyClass,
   tdClass,
   thClass,
@@ -17,8 +18,9 @@ import {
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { getCurrentSession, getUpcomingSession, sessionName } from "@/lib/sessions";
-import { beginPromotion, startNextSession } from "./actions";
+import { beginPromotion, startNextSession, updateSessionDates } from "./actions";
 
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 type ClassRow = {
@@ -72,7 +74,7 @@ export default async function SessionsPage({ searchParams }: PageProps<"/admin/s
 
   return (
     <>
-      <PageHeader title="Sessions" subtitle="Academic years run April–March. Promote classes at the end of each year." />
+      <PageHeader title="Sessions" subtitle="Academic years run April–March unless you change the dates. Promote classes at the end of each year." />
 
       {started && (
         <div className="mb-6 flex items-start gap-3 rounded-2xl border border-success-line bg-success-soft p-4 text-sm text-success">
@@ -94,6 +96,9 @@ export default async function SessionsPage({ searchParams }: PageProps<"/admin/s
           <p className="text-display-sm font-semibold">{current.name}</p>
           <p className="text-sm text-white/80">
             {dateFormat.format(current.startDate)} – {dateFormat.format(current.endDate)}
+            <a href="#session-dates" className="ml-2 font-medium text-white underline-offset-4 hover:underline">
+              Change dates
+            </a>
           </p>
         </div>
         <div className="rounded-xl bg-white/15 px-4 py-2 text-right">
@@ -101,6 +106,47 @@ export default async function SessionsPage({ searchParams }: PageProps<"/admin/s
           <p className="text-xs text-white/80">students in classes</p>
         </div>
       </section>
+
+      <Card
+        id="session-dates"
+        title="Session dates"
+        icon={CalendarCog}
+        description="When the school year starts and ends. Attendance, exams and ID card validity follow these dates."
+        className="mb-6 scroll-mt-24"
+      >
+        <div className="grid gap-6 lg:grid-cols-2">
+          {[current, ...(upcoming ? [upcoming] : [])].map((s) => (
+            <ActionForm key={s.id} action={updateSessionDates.bind(null, s.id)} className="rounded-xl border border-line p-4">
+              {(state) => (
+                <>
+                  <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-fg">
+                    {s.name}
+                    <Badge tone={s.status === "CURRENT" ? "green" : "indigo"}>{s.status === "CURRENT" ? "Current" : "Upcoming"}</Badge>
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Start date" name="startDate" errors={state.fieldErrors} required>
+                      <input type="date" name="startDate" required defaultValue={isoDate(s.startDate)} className={inputClass} />
+                    </Field>
+                    <Field label="End date" name="endDate" errors={state.fieldErrors} required>
+                      <input type="date" name="endDate" required defaultValue={isoDate(s.endDate)} className={inputClass} />
+                    </Field>
+                  </div>
+                  <div className="mt-4">
+                    <SubmitButton variant="secondary" size="sm" icon={<Save className="h-4 w-4" />}>
+                      Save dates
+                    </SubmitButton>
+                  </div>
+                </>
+              )}
+            </ActionForm>
+          ))}
+        </div>
+        <p className="mt-4 text-xs text-muted">
+          Existing attendance, fee receipts and exam papers must stay inside the session. Once fees are collected, the start month is
+          fixed because monthly and quarterly instalments count from it.
+          {!upcoming && " The next session will start the day after this one ends."}
+        </p>
+      </Card>
 
       {!upcoming ? (
         <Card title={`Year-end promotion to ${nextName}`} icon={Rocket}>

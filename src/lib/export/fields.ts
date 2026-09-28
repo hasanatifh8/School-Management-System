@@ -29,6 +29,7 @@ export const EXPORT_FIELDS: Record<ExportKind, ExportField[]> = {
     { key: "fatherOccupation", label: "Father's occupation", group: "Family" },
     { key: "motherName", label: "Mother's name", group: "Family", default: true },
     { key: "guardianName", label: "Guardian", group: "Family" },
+    { key: "guardianRelation", label: "Guardian relation", group: "Family" },
 
     { key: "phone", label: "Phone", group: "Contact", default: true },
     { key: "whatsappNumber", label: "WhatsApp", group: "Contact" },

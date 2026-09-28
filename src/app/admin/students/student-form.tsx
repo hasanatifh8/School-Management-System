@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { Select } from "@/components/select";
 import { AadhaarInput } from "@/components/aadhaar-input";
 import { PhotoInput } from "@/components/photo-input";
 import { SameAs } from "@/components/same-as";
-import { buttonVariants, FormActions, FormSection, inputClass, selectClass } from "@/components/ui";
+import { buttonVariants, FormActions, inputClass, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import {
@@ -21,6 +22,7 @@ import {
   shiftYears,
 } from "@/lib/student-options";
 import { todayISO } from "@/lib/attendance-shared";
+import { GuardianFields } from "./guardian-fields";
 
 type ClassOption = { id: string; name: string; sections: { id: string; name: string }[] };
 
@@ -45,6 +47,7 @@ type StudentValues = {
   fatherName: string | null;
   fatherOccupation: string | null;
   guardianName: string | null;
+  guardianRelation: string | null;
   motherName: string | null;
   admissionDate: Date | null;
   sectionId: string | null;
@@ -90,67 +93,23 @@ export function StudentForm({
     : true;
 
   return (
-    <ActionForm action={action} className="space-y-8">
+    <ActionForm action={action} className="space-y-6">
       {(state) => {
         const e = state.fieldErrors;
         return (
           <>
-            <FormSection title="Photo" description="Shown on the profile and in lists.">
-              <PhotoInput currentUrl={photoUrl} error={e?.photo?.[0]} />
-            </FormSection>
-
-            <FormSection title="Personal information" description="Basic details as per school records.">
-              <div className="grid gap-4 sm:col-span-2 sm:grid-cols-3">
-                <Field label="First name" name="firstName" errors={e} required>
-                  <input name="firstName" maxLength={100} required defaultValue={student?.firstName} className={inputClass} />
-                </Field>
-                <Field label="Middle name" name="middleName" errors={e}>
-                  <input name="middleName" maxLength={100} placeholder="Optional" defaultValue={student?.middleName ?? ""} className={inputClass} />
-                </Field>
-                <Field label="Last name" name="lastName" errors={e} required>
-                  <input name="lastName" maxLength={100} required defaultValue={student?.lastName} className={inputClass} />
-                </Field>
+            <AdmissionSection step={1} title="Student details" description="As per the birth certificate and Aadhaar card.">
+              <div className="sm:col-span-2 lg:col-span-3">
+                <PhotoInput currentUrl={photoUrl} error={e?.photo?.[0]} />
               </div>
-              <Field label="Father's name" name="fatherName" errors={e}>
-                <input name="fatherName" maxLength={100} defaultValue={student?.fatherName ?? ""} className={inputClass} />
+              <Field label="First name" name="firstName" errors={e} required>
+                <input name="firstName" maxLength={100} required defaultValue={student?.firstName} className={inputClass} />
               </Field>
-              <Field label="Mother's name" name="motherName" errors={e}>
-                <input name="motherName" maxLength={100} defaultValue={student?.motherName ?? ""} className={inputClass} />
+              <Field label="Middle name" name="middleName" errors={e}>
+                <input name="middleName" maxLength={100} placeholder="Optional" defaultValue={student?.middleName ?? ""} className={inputClass} />
               </Field>
-              <Field label="Father's occupation" name="fatherOccupation" errors={e}>
-                <input
-                  name="fatherOccupation"
-                  maxLength={100}
-                  placeholder="e.g. Engineer, Business, Farmer"
-                  defaultValue={student?.fatherOccupation ?? ""}
-                  className={inputClass}
-                />
-              </Field>
-              <div>
-                <span className="mb-1.5 block text-sm font-medium text-fg-2">Guardian name</span>
-                <SameAs
-                  name="guardianIsFather"
-                  label="Father is the guardian"
-                  initial={guardianIsFather}
-                  note="Uses the father's name above."
-                >
-                  <input
-                    name="guardianName"
-                    maxLength={100}
-                    aria-label="Guardian name"
-                    placeholder="e.g. uncle, grandparent"
-                    defaultValue={student?.guardianName ?? ""}
-                    className={inputClass}
-                  />
-                </SameAs>
-              </div>
-              <Field label="Gender" name="gender" errors={e}>
-                <Select name="gender" defaultValue={student?.gender ?? ""} className={selectClass}>
-                  <option value="">Select gender</option>
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
-                </Select>
+              <Field label="Last name" name="lastName" errors={e} required>
+                <input name="lastName" maxLength={100} required defaultValue={student?.lastName} className={inputClass} />
               </Field>
               <Field
                 label="Date of birth"
@@ -166,6 +125,14 @@ export function StudentForm({
                   defaultValue={toDateInput(student?.dateOfBirth)}
                   className={inputClass}
                 />
+              </Field>
+              <Field label="Gender" name="gender" errors={e}>
+                <Select name="gender" defaultValue={student?.gender ?? ""} className={selectClass}>
+                  <option value="">Select gender</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </Select>
               </Field>
               <Field label="Blood group" name="bloodGroup" errors={e}>
                 <Select name="bloodGroup" defaultValue={student?.bloodGroup ?? ""} className={selectClass}>
@@ -187,9 +154,146 @@ export function StudentForm({
                   className={inputClass}
                 />
               </Field>
-            </FormSection>
+            </AdmissionSection>
 
-            <FormSection title="Category & religion" description="As recorded on admission documents.">
+            <AdmissionSection step={2} title="Parent & guardian details" description="Parents' names and the family's mobile numbers, used for notices and messages.">
+              <Field label="Father's name" name="fatherName" errors={e}>
+                <input name="fatherName" maxLength={100} defaultValue={student?.fatherName ?? ""} className={inputClass} />
+              </Field>
+              <Field label="Mother's name" name="motherName" errors={e}>
+                <input name="motherName" maxLength={100} defaultValue={student?.motherName ?? ""} className={inputClass} />
+              </Field>
+              <Field label="Father's occupation" name="fatherOccupation" errors={e}>
+                <input
+                  name="fatherOccupation"
+                  maxLength={100}
+                  placeholder="e.g. Engineer, Business, Farmer"
+                  defaultValue={student?.fatherOccupation ?? ""}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Mobile number" name="phone" errors={e}>
+                <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={student?.phone ?? ""} className={inputClass} />
+              </Field>
+              <div>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
+                <SameAs name="whatsappSameAsPhone" label="Same as mobile" initial={whatsappSameAsPhone} note="Uses the mobile number.">
+                  <input
+                    type="tel"
+                    name="whatsappNumber"
+                    inputMode="tel"
+                    maxLength={16}
+                    aria-label="WhatsApp number"
+                    placeholder="10-digit mobile"
+                    defaultValue={student?.whatsappNumber ?? ""}
+                    className={inputClass}
+                  />
+                </SameAs>
+                {e?.whatsappNumber?.[0] && (
+                  <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>
+                )}
+              </div>
+              <Field label="Email" name="email" errors={e}>
+                <input type="email" name="email" placeholder="name@example.com" defaultValue={student?.email ?? ""} className={inputClass} />
+              </Field>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">Guardian</span>
+                <SameAs name="guardianIsFather" label="Father is the guardian" initial={guardianIsFather} note="The father's name above is used as the guardian.">
+                  <GuardianFields
+                    name={student && !guardianIsFather ? (student.guardianName ?? "") : ""}
+                    relation={student?.guardianRelation ?? ""}
+                    errors={e}
+                  />
+                </SameAs>
+              </div>
+            </AdmissionSection>
+
+            <AdmissionSection step={3} title="Address" description="Permanent address and where letters should be sent." wide>
+              <Field label="Permanent address" name="primaryAddress" errors={e}>
+                <textarea name="primaryAddress" rows={3} placeholder="House no., street, city, state, PIN" defaultValue={student?.primaryAddress ?? ""} className={inputClass} />
+              </Field>
+              <div>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">Correspondence address</span>
+                <SameAs
+                  name="correspondenceSameAsPrimary"
+                  label="Same as permanent address"
+                  initial={correspondenceSame}
+                  note="Uses the permanent address."
+                >
+                  <textarea
+                    name="correspondenceAddress"
+                    aria-label="Correspondence address"
+                    rows={3}
+                    defaultValue={student?.correspondenceAddress ?? ""}
+                    className={inputClass}
+                  />
+                </SameAs>
+              </div>
+            </AdmissionSection>
+
+            <AdmissionSection step={4} title="Admission details" description="Class, roll number and house for this session. The class's subjects are allotted automatically.">
+              <Field label="Class & section" name="sectionId" errors={e}>
+                <Select name="sectionId" defaultValue={student?.sectionId ?? ""} className={selectClass}>
+                  <option value="">Not assigned</option>
+                  {classes.map((c) => (
+                    <optgroup key={c.id} label={c.name}>
+                      {c.sections.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {c.name} – {s.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </Select>
+              </Field>
+              <Field
+                label="Date of admission"
+                name="admissionDate"
+                errors={e}
+                hint={`Not in the future; the student must be at least ${MIN_STUDENT_AGE} on this date.`}
+              >
+                <input
+                  type="date"
+                  name="admissionDate"
+                  min={shiftYears(today, -MAX_STUDENT_AGE)}
+                  max={today}
+                  defaultValue={toDateInput(student?.admissionDate ?? new Date())}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Roll number" name="rollNumber" errors={e} hint="Unique in the section, or auto-assign from the class page.">
+                <input
+                  type="number"
+                  name="rollNumber"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 12"
+                  defaultValue={student?.rollNumber ?? ""}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="House" name="houseId" errors={e}>
+                <Select name="houseId" defaultValue={student?.houseId ?? ""} className={selectClass}>
+                  <option value="">No house</option>
+                  {houses.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Previous school" name="lastSchoolName" errors={e} className="sm:col-span-2">
+                <input
+                  name="lastSchoolName"
+                  placeholder="Name of the last school attended, if any"
+                  defaultValue={student?.lastSchoolName ?? ""}
+                  className={inputClass}
+                />
+              </Field>
+            </AdmissionSection>
+
+            <AdmissionSection step={5} title="Category & religion" description="As recorded on admission documents.">
               <Field label="Category" name="category" errors={e}>
                 <Select name="category" defaultValue={student?.category ?? ""} className={selectClass}>
                   <option value="">Select category</option>
@@ -213,134 +317,15 @@ export function StudentForm({
               <Field label="Caste" name="caste" errors={e}>
                 <input name="caste" defaultValue={student?.caste ?? ""} className={inputClass} />
               </Field>
-            </FormSection>
+            </AdmissionSection>
 
-            <FormSection
-              title="Academic"
-              description="The class's subjects are allotted automatically when a class is chosen."
+            <FormActions
+              note={
+                <>
+                  Fields marked <span className="text-danger">*</span> are required.
+                </>
+              }
             >
-              <Field label="Class & section" name="sectionId" errors={e}>
-                <Select name="sectionId" defaultValue={student?.sectionId ?? ""} className={selectClass}>
-                  <option value="">Not assigned</option>
-                  {classes.map((c) => (
-                    <optgroup key={c.id} label={c.name}>
-                      {c.sections.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {c.name} – {s.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </Select>
-              </Field>
-              <Field
-                label="Admission date"
-                name="admissionDate"
-                errors={e}
-                hint={`Not in the future; the student must be at least ${MIN_STUDENT_AGE} on this date.`}
-              >
-                <input
-                  type="date"
-                  name="admissionDate"
-                  min={shiftYears(today, -MAX_STUDENT_AGE)}
-                  max={today}
-                  defaultValue={toDateInput(student?.admissionDate ?? new Date())}
-                  className={inputClass}
-                />
-              </Field>
-              <Field
-                label="Roll number"
-                name="rollNumber"
-                errors={e}
-                hint="Unique in the section. Or use “Auto-assign roll numbers” on the class page."
-              >
-                <input
-                  type="number"
-                  name="rollNumber"
-                  min={1}
-                  step={1}
-                  inputMode="numeric"
-                  placeholder="e.g. 12"
-                  defaultValue={student?.rollNumber ?? ""}
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="House" name="houseId" errors={e}>
-                <Select name="houseId" defaultValue={student?.houseId ?? ""} className={selectClass}>
-                  <option value="">No house</option>
-                  {houses.map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Last school name" name="lastSchoolName" errors={e}>
-                <input
-                  name="lastSchoolName"
-                  placeholder="Previous school, if any"
-                  defaultValue={student?.lastSchoolName ?? ""}
-                  className={inputClass}
-                />
-              </Field>
-            </FormSection>
-
-            <FormSection title="Contact" description="How to reach the student directly.">
-              <Field label="Email" name="email" errors={e}>
-                <input type="email" name="email" placeholder="student@example.com" defaultValue={student?.email ?? ""} className={inputClass} />
-              </Field>
-              <Field label="Phone" name="phone" errors={e}>
-                <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={student?.phone ?? ""} className={inputClass} />
-              </Field>
-              <div>
-                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
-                <SameAs
-                  name="whatsappSameAsPhone"
-                  label="Same as phone"
-                  initial={whatsappSameAsPhone}
-                  note="Uses the phone number above."
-                >
-                  <input
-                    type="tel"
-                    name="whatsappNumber"
-                    inputMode="tel"
-                    maxLength={16}
-                    aria-label="WhatsApp number"
-                    placeholder="10-digit mobile"
-                    defaultValue={student?.whatsappNumber ?? ""}
-                    className={inputClass}
-                  />
-                </SameAs>
-                {e?.whatsappNumber?.[0] && (
-                  <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>
-                )}
-              </div>
-            </FormSection>
-
-            <FormSection title="Address" description="Primary (permanent) and correspondence address.">
-              <Field label="Primary address" name="primaryAddress" errors={e} className="sm:col-span-2">
-                <textarea name="primaryAddress" rows={2} defaultValue={student?.primaryAddress ?? ""} className={inputClass} />
-              </Field>
-              <div className="sm:col-span-2">
-                <span className="mb-1.5 block text-sm font-medium text-fg-2">Correspondence address</span>
-                <SameAs
-                  name="correspondenceSameAsPrimary"
-                  label="Same as primary address"
-                  initial={correspondenceSame}
-                  note="Uses the primary address above."
-                >
-                  <textarea
-                    name="correspondenceAddress"
-                    aria-label="Correspondence address"
-                    rows={2}
-                    defaultValue={student?.correspondenceAddress ?? ""}
-                    className={inputClass}
-                  />
-                </SameAs>
-              </div>
-            </FormSection>
-
-            <FormActions>
               {cancelHref && (
                 <Link href={cancelHref} className={buttonVariants.secondary}>
                   Cancel
@@ -352,5 +337,36 @@ export function StudentForm({
         );
       }}
     </ActionForm>
+  );
+}
+
+/** A numbered part of the admission form, like the sections of a printed form. */
+function AdmissionSection({
+  step,
+  title,
+  description,
+  wide,
+  children,
+}: {
+  step: number;
+  title: string;
+  description?: string;
+  /** Two columns instead of three, for long fields like addresses. */
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-line">
+      <header className="flex items-start gap-3 border-b border-line bg-surface-2 px-4 py-3 sm:px-5">
+        <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-fg tabular-nums">
+          {step}
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-fg">{title}</h3>
+          {description && <p className="mt-0.5 text-xs leading-5 text-muted">{description}</p>}
+        </div>
+      </header>
+      <div className={`grid gap-x-5 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 ${wide ? "" : "lg:grid-cols-3"}`}>{children}</div>
+    </section>
   );
 }

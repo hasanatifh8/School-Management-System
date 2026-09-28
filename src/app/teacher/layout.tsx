@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BookOpen, CalendarCheck, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Users } from "lucide-react";
+import { BookOpen, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Users } from "lucide-react";
 import { SchoolLogo } from "@/components/school-logo";
 import { AccountCard, AppShell, type NavGroup } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -32,7 +32,13 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
   const otherSections = ctx.subjectSections.filter((s) => s.section.id !== ctx.classSection?.id);
 
   const groups: NavGroup[] = [
-    { items: [{ href: "/teacher", label: "Dashboard", icon: <LayoutDashboard />, exact: true }] },
+    {
+      items: [
+        { href: "/teacher", label: "Dashboard", icon: <LayoutDashboard />, exact: true },
+        { href: "/teacher/timetable", label: "Timetable", icon: <CalendarClock /> },
+        { href: "/teacher/calendar", label: "School calendar", icon: <CalendarDays /> },
+      ],
+    },
     ...(myClass
       ? [
           {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Copy, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { Copy, Pencil, Plus, Trash2, Users, Wallet } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, ButtonLink, Card, EmptyState, Table, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -10,7 +10,7 @@ import { copyPreviousStructure, deleteFeeHead } from "../actions";
 /** Every fee of the session against every class, with the yearly total per student. */
 export default async function FeeStructurePage() {
   const { school, session, canManage } = await getFeesAccess();
-  const [heads, classes, previous] = await Promise.all([
+  const [heads, classes, previous, optedIn] = await Promise.all([
     loadFeeHeads(session.id),
     db.schoolClass.findMany({ where: { schoolId: school.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     db.academicSession.findFirst({
@@ -18,7 +18,9 @@ export default async function FeeStructurePage() {
       orderBy: { startDate: "desc" },
       select: { name: true },
     }),
+    db.studentFeeHead.groupBy({ by: ["headId"], where: { head: { sessionId: session.id }, student: { status: "ACTIVE" } }, _count: true }),
   ]);
+  const payers = new Map(optedIn.map((o) => [o.headId, o._count]));
 
   if (!heads.length) {
     return (
@@ -101,6 +103,15 @@ export default async function FeeStructurePage() {
                         : `due by the ${h.dueDay}${h.dueDay === 1 ? "st" : h.dueDay === 2 ? "nd" : h.dueDay === 3 ? "rd" : "th"}`}
                   </span>
                 </p>
+                {h.optional && (
+                  <Link
+                    href={`/admin/fees/structure/${h.id}/students`}
+                    className="mt-1.5 inline-flex items-center gap-1 rounded text-xs font-medium text-accent-text hover:underline"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    {payers.get(h.id) ?? 0} student(s) · Add or remove
+                  </Link>
+                )}
               </td>
               {classes.map((c) => (
                 <td key={c.id} className={`${tdClass} text-right tabular-nums`}>

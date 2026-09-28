@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { BookOpen, CalendarDays, Droplet, FileText, Hash, History, IdCard, LayoutGrid, Mail, Pencil, Phone, RotateCcw, UserRound, UserRoundX, Wallet } from "lucide-react";
+import { BookOpen, CalendarDays, CircleCheck, Droplet, FileText, Hash, History, IdCard, LayoutGrid, Mail, Pencil, Phone, RotateCcw, UserRound, UserRoundX, Wallet } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { AttendanceSummaryCard } from "@/components/attendance/attendance-summary";
-import { Avatar, Badge, ButtonLink, Card, EmptyState, InfoItem, MenuLink, MoreMenu, PageHeader, StatusTab, TextLink, checkboxClass, tabBarClass } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, Callout, Card, EmptyState, InfoItem, MenuLink, MoreMenu, PageHeader, StatusTab, TextLink, checkboxClass, tabBarClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
@@ -19,7 +19,7 @@ const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "sh
 
 export default async function StudentPage({ params, searchParams }: PageProps<"/admin/students/[id]">) {
   const { id } = await params;
-  const tabParam = (await searchParams).tab;
+  const { tab: tabParam, admitted } = await searchParams;
   const tab: Tab = tabParam === "documents" ? "documents" : tabParam === "edit" ? "edit" : "overview";
   const school = await getCurrentSchool();
   const [student, classes, allSubjects, houses] = await Promise.all([
@@ -124,6 +124,35 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
         }
       />
 
+      {admitted && !removed && tab === "overview" && (
+        <Callout
+          icon={CircleCheck}
+          tone="success"
+          className="mb-6"
+          action={
+            <span className="flex flex-wrap items-center gap-2">
+              {student.section ? (
+                <ButtonLink href={`/admin/fees/students/${student.id}`} icon={Wallet} size="sm">
+                  Collect fees
+                </ButtonLink>
+              ) : (
+                <ButtonLink href={tabHref("edit")} icon={Pencil} size="sm">
+                  Assign a class
+                </ButtonLink>
+              )}
+              <ButtonLink href={tabHref("overview")} variant="ghost" size="sm">
+                Later
+              </ButtonLink>
+            </span>
+          }
+        >
+          <strong className="font-semibold">Admission saved.</strong> {name} is now {student.studentCode}.{" "}
+          {student.section
+            ? "Collect the admission and first fees now?"
+            : "Assign a class to charge fees. They're set per class."}
+        </Callout>
+      )}
+
       <div className="mb-6 border-b border-line">
         <nav aria-label="Student sections" className={tabBarClass}>
           <StatusTab href={tabHref("overview")} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
@@ -189,7 +218,10 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                 <InfoItem icon={UserRound} label="Mother">
                   {student.motherName ?? "—"}
                   {student.guardianName && student.guardianName !== student.fatherName && (
-                    <span className="block text-muted">Guardian: {student.guardianName}</span>
+                    <span className="block text-muted">
+                      Guardian: {student.guardianName}
+                      {student.guardianRelation && ` (${student.guardianRelation})`}
+                    </span>
                   )}
                 </InfoItem>
                 <InfoItem icon={Phone} label="Phone">

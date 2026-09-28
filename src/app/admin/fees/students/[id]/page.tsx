@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bus, Receipt, TriangleAlert } from "lucide-react";
+import { Bus, Receipt, School, TriangleAlert } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Avatar, Badge, Breadcrumbs, Callout, Card, EmptyState, PagedList, ProgressBar } from "@/components/ui";
+import { Avatar, Badge, Breadcrumbs, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar } from "@/components/ui";
 import { photoUrl } from "@/lib/photos";
 import { loadStudentAccount, getFeesAccess } from "@/lib/fees";
 import { FREQUENCY_META, MODE_LABELS, rupees } from "@/lib/fees-shared";
@@ -15,7 +15,7 @@ const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "sho
 /** A student's fees for the session: what's due, collecting a payment, and past receipts. */
 export default async function StudentFeesPage({ params }: PageProps<"/admin/fees/students/[id]">) {
   const { id } = await params;
-  const { school } = await getFeesAccess();
+  const { school, canManage } = await getFeesAccess();
   const account = await loadStudentAccount(school.id, id);
   if (!account) notFound();
   const { student, totals, dues, optionalHeads, receipts, today, session } = account;
@@ -55,7 +55,8 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
         )}
       </section>
 
-      {!student.section && active && (
+      {/* Fees paid before the class was removed still list; say why nothing new is charged. */}
+      {!student.section && active && dues.length > 0 && (
         <Callout icon={TriangleAlert} tone="warning">
           This student has no class, so no class fees apply. Assign a class first.
         </Callout>
@@ -63,7 +64,37 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">
-          {active ? (
+          {active && dues.length === 0 ? (
+            // Fees are set per class, so there is nothing to collect yet: say why
+            // rather than showing "All paid up".
+            <Card>
+              {student.section ? (
+                <EmptyState
+                  icon={Receipt}
+                  title={`No fees set for ${student.section.class.name}`}
+                  description="Add this class's amounts in the fee structure, then collect here."
+                  action={
+                    canManage && (
+                      <ButtonLink href="/admin/fees/structure" variant="secondary">
+                        Open fee structure
+                      </ButtonLink>
+                    )
+                  }
+                />
+              ) : (
+                <EmptyState
+                  icon={School}
+                  title="No class assigned"
+                  description="Fees are set per class, so none apply yet. Assign a class to this student, then collect the admission fee here."
+                  action={
+                    canManage && (
+                      <ButtonLink href={`/admin/students/${student.id}?tab=edit`}>Assign a class</ButtonLink>
+                    )
+                  }
+                />
+              )}
+            </Card>
+          ) : active ? (
             <CollectForm dues={dues} today={today} minDate={session.startDate.toISOString().slice(0, 10)} action={collectFee.bind(null, student.id)} />
           ) : (
             <Card>
@@ -74,7 +105,11 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
 
         <div className="space-y-6 self-start">
           {optionalHeads.length > 0 && active && (
-            <Card title="Optional fees" icon={Bus} description="Charged only if the student uses them.">
+            <Card
+              title="Optional fees"
+              icon={Bus}
+              description="Charged only if the student uses them. To add a fee for many students at once, use its link in the fee structure."
+            >
               <ul className="space-y-3">
                 {optionalHeads.map((h) => (
                   <li key={h.id} className="flex items-center justify-between gap-3 text-sm">

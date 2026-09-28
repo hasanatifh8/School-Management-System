@@ -1,6 +1,8 @@
 import Link from "next/link";
 import {
+  Bell,
   BookOpen,
+  CalendarDays,
   CalendarOff,
   CalendarRange,
   ChevronRight,
@@ -25,6 +27,8 @@ const groups: { title: string; items: Item[] }[] = [
     items: [
       { href: "/admin/sessions", icon: CalendarRange, tone: "indigo", title: "Academic sessions", text: "Current session, next year and promotions" },
       { href: "/admin/attendance/holidays", icon: CalendarOff, tone: "violet", title: "School holidays", text: "Days no class takes attendance" },
+      { href: "/admin/calendar", icon: CalendarDays, tone: "teal", title: "School calendar", text: "Plan exams, events and holidays for the year" },
+      { href: "/admin/timetable/periods", icon: Bell, tone: "amber", title: "Bell schedule", text: "Periods, breaks and school days" },
       { href: "/admin/subjects", icon: BookOpen, tone: "sky", title: "Subjects", text: "Subjects offered across the school" },
       { href: "/admin/houses", icon: Shield, tone: "rose", title: "Houses", text: "Red, Green… and their members" },
     ],

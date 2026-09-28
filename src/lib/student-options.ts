@@ -13,6 +13,19 @@ export const RELIGIONS = ["Hindu", "Muslim", "Christian", "Sikh", "Buddhist", "J
 
 export const DEFAULT_NATIONALITY = "Indian";
 
+/** How a guardian other than the father is related to the student. */
+export const GUARDIAN_RELATIONS = [
+  "Mother",
+  "Grandfather",
+  "Grandmother",
+  "Uncle",
+  "Aunt",
+  "Brother",
+  "Sister",
+  "Other relative",
+  "Legal guardian",
+] as const;
+
 /** Allowed student age range, checked against the date of birth. */
 export const MIN_STUDENT_AGE = 2;
 export const MAX_STUDENT_AGE = 25;

@@ -86,7 +86,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
               </MenuLink>
             </MoreMenu>
             <ButtonLink href="/admin/students/new" icon={UserPlus}>
-              Add student
+              New admission
             </ButtonLink>
           </>
         }
@@ -162,7 +162,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
               !filtered && !showRemoved ? (
                 <>
                   <ButtonLink href="/admin/students/new" icon={UserPlus}>
-                    Add student
+                    New admission
                   </ButtonLink>
                   <ButtonLink href="/admin/students/import" icon={FileSpreadsheet} variant="secondary">
                     Bulk upload

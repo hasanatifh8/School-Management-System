@@ -1,15 +1,23 @@
 import Link from "next/link";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { BackButton } from "./back-button";
 import { cx } from "./cx";
 
 /* ───────────────────────── Page structure ───────────────────────── */
 
 export type Crumb = { label: string; href?: string };
 
+/** Back button plus the trail; Back falls back to the nearest parent crumb. */
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
+  const parent = items.findLast((c) => c.href)?.href;
   return (
     <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-1 text-xs font-medium text-muted">
+      {parent && (
+        <span className="mr-2">
+          <BackButton fallback={parent} />
+        </span>
+      )}
       {items.map((c, i) => (
         <span key={i} className="flex items-center gap-1">
           {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-subtle" aria-hidden />}

@@ -3,6 +3,8 @@ import {
   ArrowLeftRight,
   BookOpen,
   CalendarCheck,
+  CalendarClock,
+  CalendarDays,
   CalendarRange,
   ClipboardList,
   GraduationCap,
@@ -69,6 +71,8 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           items: [
             { href: "/admin/classes", label: "Classes", icon: <School /> },
             { href: "/admin/subjects", label: "Subjects", icon: <BookOpen /> },
+            { href: "/admin/timetable", label: "Timetable", icon: <CalendarClock /> },
+            { href: "/admin/calendar", label: "School calendar", icon: <CalendarDays /> },
             { href: "/admin/exams", label: "Exams & tests", icon: <ClipboardList /> },
             { href: "/admin/houses", label: "Houses", icon: <Shield /> },
           ],

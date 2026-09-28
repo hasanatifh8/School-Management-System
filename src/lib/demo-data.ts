@@ -169,6 +169,7 @@ export async function loadDemoData(tx: Prisma.TransactionClient, schoolId: strin
         fatherName,
         motherName,
         guardianName: fatherName,
+        guardianRelation: "Father",
         // Age fits the class: about 5 years old in Class 1.
         dateOfBirth: new Date(Date.UTC(year - 5 - section.classIndex, (rollNumber * 3) % 12, 10 + rollNumber)),
         nationality: "Indian",

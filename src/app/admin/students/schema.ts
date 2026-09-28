@@ -12,7 +12,14 @@ import {
 } from "@/lib/action-state";
 import { isoDate, todayISO } from "@/lib/attendance-shared";
 import { normalizeDocumentNumber } from "@/lib/document-types";
-import { MAX_STUDENT_AGE, MIN_STUDENT_AGE, RELIGIONS, dateOfBirthBounds, shiftYears } from "@/lib/student-options";
+import {
+  GUARDIAN_RELATIONS,
+  MAX_STUDENT_AGE,
+  MIN_STUDENT_AGE,
+  RELIGIONS,
+  dateOfBirthBounds,
+  shiftYears,
+} from "@/lib/student-options";
 
 export const studentSchema = z
   .object({
@@ -66,6 +73,10 @@ export const studentSchema = z
     fatherName: optionalName("Father's name"),
     fatherOccupation: z.string().trim().max(100).optional().transform((v) => v || null),
     guardianName: optionalName("Guardian name"),
+    guardianRelation: z
+      .enum([...GUARDIAN_RELATIONS, ""], { message: "Choose the guardian's relation from the list" })
+      .optional()
+      .transform((v) => v || null),
     guardianIsFather: z.literal("on").optional(),
     motherName: optionalName("Mother's name"),
     admissionDate: optionalDate.superRefine((d, ctx) => {
@@ -97,6 +108,10 @@ export const studentSchema = z
       ctx.addIssue({ code: "custom", path: ["fatherName"], message: "Enter the father's name, or untick “Father is the guardian”" });
       return z.NEVER;
     }
+    if (!guardianIsFather && data.guardianName && !data.guardianRelation) {
+      ctx.addIssue({ code: "custom", path: ["guardianRelation"], message: "Choose how the guardian is related to the student" });
+      return z.NEVER;
+    }
     // A child is admitted at MIN_STUDENT_AGE at the earliest.
     if (data.dateOfBirth && data.admissionDate) {
       const earliest = shiftYears(isoDate(data.dateOfBirth), MIN_STUDENT_AGE);
@@ -118,6 +133,7 @@ export const studentSchema = z
       whatsappNumber: whatsappSameAsPhone ? data.phone : data.whatsappNumber,
       correspondenceAddress: correspondenceSameAsPrimary ? data.primaryAddress : data.correspondenceAddress,
       guardianName: guardianIsFather ? data.fatherName : data.guardianName,
+      guardianRelation: guardianIsFather ? "Father" : data.guardianName ? data.guardianRelation : null,
     };
   });
 

@@ -87,6 +87,7 @@ export default async function TeacherStudentPage({ params }: PageProps<"/teacher
               </InfoItem>
               <InfoItem icon={Shield} label="Guardian">
                 {student.guardianName ?? "—"}
+                {student.guardianName && student.guardianRelation && <span className="block text-muted">{student.guardianRelation}</span>}
               </InfoItem>
               <InfoItem icon={IdCard} label="Aadhaar">
                 {student.aadhaarNumber ? maskDocumentNumber(student.aadhaarNumber) : "—"}

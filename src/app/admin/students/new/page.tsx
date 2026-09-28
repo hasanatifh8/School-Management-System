@@ -15,7 +15,7 @@ export default async function NewStudentPage() {
         breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "New admission" }]}
       />
       <Card>
-        <StudentForm action={createStudent} classes={classes} houses={houses} submitLabel="Add student" cancelHref="/admin/students" />
+        <StudentForm action={createStudent} classes={classes} houses={houses} submitLabel="Save admission" cancelHref="/admin/students" />
       </Card>
     </>
   );

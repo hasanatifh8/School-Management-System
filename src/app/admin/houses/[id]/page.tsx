@@ -27,7 +27,7 @@ import { photoUrl } from "@/lib/photos";
 import { fullName, getClassesWithSections, sectionLabel } from "@/lib/queries";
 import { getCurrentSchool } from "@/lib/school";
 import { assignStudentsToHouse, deleteHouse, removeStudentFromHouse, updateHouse } from "../actions";
-import { SelectionControls } from "./selection-controls";
+import { SelectionControls } from "@/components/selection-controls";
 
 export default async function HousePage({ params, searchParams }: PageProps<"/admin/houses/[id]">) {
   const { id } = await params;

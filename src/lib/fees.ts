@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { dueKey, dueTotals, studentDues, type FeeHeadInfo } from "@/lib/fees-shared";
+import { MONTH_NAMES, dueKey, dueTotals, studentDues, type FeeHeadInfo } from "@/lib/fees-shared";
 import { getPortalSchool, getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 
@@ -156,6 +156,60 @@ export async function outstandingByStudent(schoolId: string, where: Prisma.Stude
     result.set(s.id, { dueNow: t.dueNow, paid: t.paid, total: t.total });
   }
   return result;
+}
+
+/**
+ * Running totals for each month of the session up to this month: fees falling
+ * due (every active student with a class) and fees collected. The gap is what
+ * is still pending.
+ */
+export async function monthlyFeeTrend(schoolId: string) {
+  const { session, today } = await getFeesAccess();
+  const start = isoDate(session.startDate);
+  const students = await db.student.findMany({
+    where: { schoolId, status: "ACTIVE", sectionId: { not: null } },
+    select: { id: true, admissionDate: true, section: { select: { classId: true } } },
+  });
+  const ids = students.map((s) => s.id);
+  const [heads, paid, optIns, receipts] = await Promise.all([
+    loadFeeHeads(session.id),
+    paidByStudent(session.id, ids),
+    optInsByStudent(session.id, ids),
+    db.feeReceipt.findMany({ where: { schoolId, sessionId: session.id, cancelledAt: null }, select: { date: true, total: true } }),
+  ]);
+
+  const due = new Map<string, number>();
+  for (const s of students) {
+    const items = studentDues({
+      heads,
+      classId: s.section!.classId,
+      admissionDate: isoDate(s.admissionDate),
+      optIns: optIns.get(s.id) ?? new Set(),
+      paid: paid.get(s.id) ?? new Map(),
+      session: { start, name: session.name },
+      today,
+    });
+    for (const i of items) due.set(i.due.slice(0, 7), (due.get(i.due.slice(0, 7)) ?? 0) + i.amount);
+  }
+  const collected = new Map<string, number>();
+  for (const r of receipts) {
+    const m = isoDate(r.date).slice(0, 7);
+    collected.set(m, (collected.get(m) ?? 0) + r.total);
+  }
+
+  const months: { month: string; label: string; due: number; collected: number }[] = [];
+  let [y, m] = start.slice(0, 7).split("-").map(Number);
+  let dueSum = 0;
+  let collectedSum = 0;
+  for (let i = 0; i < 12; i++) {
+    const key = `${y}-${String(m).padStart(2, "0")}`;
+    if (key > today.slice(0, 7)) break;
+    dueSum += due.get(key) ?? 0;
+    collectedSum += collected.get(key) ?? 0;
+    months.push({ month: key, label: MONTH_NAMES[m - 1], due: dueSum, collected: collectedSum });
+    [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1];
+  }
+  return months;
 }
 
 /** Next receipt number for the session, e.g. "2026-27/0001". */

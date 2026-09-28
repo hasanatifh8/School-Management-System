@@ -22,17 +22,21 @@ export function getUpcomingSession(schoolId: string) {
   return db.academicSession.findFirst({ where: { schoolId, status: "UPCOMING" }, orderBy: { startDate: "asc" } });
 }
 
-/** The session after `current`, created as UPCOMING if it doesn't exist yet. */
+/**
+ * The session after `current`, created as UPCOMING if it doesn't exist yet.
+ * It starts the day after `current` ends and runs for a year.
+ */
 export async function ensureNextSession(
   tx: Prisma.TransactionClient,
   schoolId: string,
-  current: { startDate: Date },
+  current: { startDate: Date; endDate: Date },
 ) {
-  const year = current.startDate.getUTCFullYear() + 1;
-  const name = sessionName(year);
+  const name = sessionName(current.startDate.getUTCFullYear() + 1);
+  const start = new Date(current.endDate.getTime() + 86_400_000);
+  const end = new Date(Date.UTC(start.getUTCFullYear() + 1, start.getUTCMonth(), start.getUTCDate() - 1));
   return tx.academicSession.upsert({
     where: { schoolId_name: { schoolId, name } },
-    create: { schoolId, name, ...sessionDates(year), status: "UPCOMING" },
+    create: { schoolId, name, startDate: start, endDate: end, status: "UPCOMING" },
     update: {},
   });
 }

@@ -14,6 +14,8 @@ export type ImportColumn = {
   width?: number;
 };
 
+import { GUARDIAN_RELATIONS } from "@/lib/student-options";
+
 const GENDERS = ["Male", "Female", "Other"] as const;
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
@@ -31,6 +33,7 @@ export const IMPORT_COLUMNS: Record<ImportKind, ImportColumn[]> = {
     { key: "fatherOccupation", header: "Father's occupation", example: "Engineer", width: 18 },
     { key: "motherName", header: "Mother's name", example: "Sunita Sharma", width: 18 },
     { key: "guardianName", header: "Guardian", example: "", note: "Blank = father is the guardian", width: 18 },
+    { key: "guardianRelation", header: "Guardian relation", example: "", list: GUARDIAN_RELATIONS, note: "Needed when Guardian is filled", width: 16 },
     { key: "phone", header: "Phone", example: "9876543210", width: 14 },
     { key: "aadhaarNumber", header: "Aadhaar number", example: "1234-5678-9012", note: "12 digits", width: 17 },
     { key: "bloodGroup", header: "Blood group", example: "B+", list: BLOOD_GROUPS, width: 12 },

@@ -138,6 +138,7 @@ model School {
   website         String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @default(now()) @updatedAt
+  timetableDays   Int[]        @default([1, 2, 3, 4, 5, 6]) // school days in the timetable, 1 = Monday … 7 = Sunday
 
   logo   SchoolLogo?
   admins SchoolAdmin[]
@@ -163,6 +164,8 @@ model School {
   messaging      MessagingSettings?
   notices        Notice[]
   exams          Exam[]
+  periods        Period[]
+  calendarEvents CalendarEvent[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -262,6 +265,7 @@ model Student {
   fatherName            String?
   fatherOccupation      String?
   guardianName          String?
+  guardianRelation      String? // e.g. "Father", "Grandmother"
   motherName            String?
   admissionDate         DateTime         @default(now())
   status                Status           @default(ACTIVE)
@@ -328,6 +332,7 @@ model Teacher {
   salaryPayments SalaryPayment[]
   notices        Notice[]
   exams          Exam[]
+  timetableSlots TimetableSlot[]
 
   @@unique([schoolId, employeeCode])
 }
@@ -364,6 +369,8 @@ model Section {
   attendanceDays     AttendanceDay[]
   examSections       ExamSection[]
   examResults        ExamResult[]
+  timetable          Timetable?
+  timetableSlots     TimetableSlot[]
 
   @@unique([classId, name])
 }
@@ -380,6 +387,7 @@ model Subject {
   students           StudentSubject[]
   teacherAssignments SubjectTeacherAssignment[]
   examPapers         ExamPaper[]
+  timetableSlots     TimetableSlot[]
 
   @@unique([schoolId, code])
 }
@@ -432,11 +440,12 @@ model AcademicSession {
   status    SessionStatus @default(UPCOMING)
   createdAt DateTime      @default(now())
 
-  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  enrollments Enrollment[]
-  feeHeads    FeeHead[]
-  feeReceipts FeeReceipt[]
-  exams       Exam[]
+  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  enrollments    Enrollment[]
+  feeHeads       FeeHead[]
+  feeReceipts    FeeReceipt[]
+  exams          Exam[]
+  calendarEvents CalendarEvent[]
 
   @@unique([schoolId, name])
 }
@@ -568,9 +577,11 @@ model Holiday {
   schoolId  String
   date      DateTime @db.Date
   name      String
+  eventId   String? // added by a published calendar holiday; removed with it
   createdAt DateTime @default(now())
 
-  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  event  CalendarEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([schoolId, date])
 }
@@ -910,4 +921,91 @@ model ExamResult {
 
   @@id([examId, sectionId])
   @@index([sectionId])
+}
+
+/**
+ * ───────────────────────── Timetable ─────────────────────────
+ */
+
+// The school's bell schedule: the periods of a day, shared by every class timetable.
+model Period {
+  id        String  @id @default(cuid())
+  schoolId  String
+  name      String // e.g. "Period 1", "Lunch break"
+  startTime String // "08:00" (24-hour)
+  endTime   String
+  isBreak   Boolean @default(false) // breaks are shown but not filled in
+  sortOrder Int     @default(0)
+
+  school School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  slots  TimetableSlot[]
+
+  @@index([schoolId])
+}
+
+// A section's weekly timetable. Admins can lock it so the class teacher can't edit.
+model Timetable {
+  sectionId String   @id
+  locked    Boolean  @default(false)
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+}
+
+// What a section has in one period on one day.
+model TimetableSlot {
+  id        String  @id @default(cuid())
+  sectionId String
+  day       Int // 1 = Monday … 7 = Sunday
+  periodId  String
+  subjectId String?
+  teacherId String?
+  label     String? // instead of a subject, e.g. "Library" or "Games"
+
+  section Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  period  Period   @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  teacher Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  @@unique([sectionId, day, periodId])
+  @@index([teacherId])
+}
+
+/**
+ * ───────────────────────── School calendar ─────────────────────────
+ */
+
+enum CalendarEventType {
+  HOLIDAY
+  EXAM
+  TEST
+  EVENT
+  SPORTS
+  MEETING // e.g. parent-teacher meeting
+  ACTIVITY
+}
+
+// The session plan made by the admin. Teachers see it once published;
+// a published holiday also becomes a school holiday for attendance.
+model CalendarEvent {
+  id          String            @id @default(cuid())
+  schoolId    String
+  sessionId   String
+  type        CalendarEventType
+  title       String
+  startDate   DateTime          @db.Date
+  endDate     DateTime          @db.Date
+  description String?
+  classIds    String[] // empty = the whole school
+  published   Boolean           @default(false)
+  createdBy   String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  school   School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session  AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  holidays Holiday[]
+
+  @@index([schoolId, startDate])
 }

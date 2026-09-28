@@ -43,6 +43,7 @@ function studentValues(s: StudentForExport) {
     fatherOccupation: s.fatherOccupation,
     motherName: s.motherName,
     guardianName: s.guardianName,
+    guardianRelation: s.guardianRelation,
     phone: s.phone,
     whatsappNumber: s.whatsappNumber,
     email: s.email,
