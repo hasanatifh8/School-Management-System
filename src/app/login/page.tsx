@@ -23,7 +23,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       subtitle={school ? `Sign in to ${school.name}.` : "Sign in to your school's Scholdesk portal."}
       footer={
         <>
-          Forgot your password? Teachers: ask your school admin. School admins: ask your Power Admin.{" "}
+          Forgot your password? Teachers and cashiers: ask your school admin. School admins: ask your Power Admin.{" "}
           <Link href="/power/login" className="font-medium text-fg-2 underline-offset-4 hover:text-accent-text hover:underline">
             Power Admin sign-in
           </Link>

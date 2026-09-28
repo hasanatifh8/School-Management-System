@@ -20,7 +20,7 @@ export function LoginForm({ initialRole }: { initialRole: Role }) {
         onChange={setRole}
         className="w-full"
         options={[
-          { value: "admin", label: "School admin", icon: ShieldUser },
+          { value: "admin", label: "Admin & cashier", icon: ShieldUser },
           { value: "teacher", label: "Teacher", icon: Presentation },
         ]}
       />
