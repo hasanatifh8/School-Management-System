@@ -18,6 +18,7 @@ import {
   Settings,
   Shield,
   ShieldCheck,
+  Sparkles,
   UserCog,
   Wallet,
 } from "lucide-react";
@@ -49,7 +50,12 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const groups: NavGroup[] = feesOnly
     ? [{ items: [fees] }]
     : [
-        { items: [{ href: "/admin", label: "Dashboard", icon: <LayoutDashboard />, exact: true }] },
+        {
+          items: [
+            { href: "/admin", label: "Dashboard", icon: <LayoutDashboard />, exact: true },
+            { href: "/admin/assistant", label: "Ask AI", icon: <Sparkles /> },
+          ],
+        },
         {
           label: "Daily",
           items: [

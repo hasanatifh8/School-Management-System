@@ -244,6 +244,24 @@ This section is for school admins and Power Admin. Fees staff can't see it.
 - Each notice shows every recipient as **Sent**, **Failed** (with the provider's error), **Skipped** (no number) or **Waiting**. **Retry failed** tries the failed ones again.
 - *Notices → Sent* lists all notices from admins and teachers.
 
+## Ask AI (admin assistant)
+
+*Admin → Ask AI* answers questions about the school's data in plain English or Hindi, e.g. "Who was absent today?", "Which Class 8 students haven't paid fees?", "Expenses this month vs budget", "Toppers in the half-yearly exam".
+
+- It runs on an **open-source model** (Qwen, Llama, Mistral…) through any OpenAI-compatible server: your own **Ollama** or **vLLM**, or a host of open models such as **Groq**, **OpenRouter** or **Together**.
+- The model doesn't get database access. It calls read-only lookups (students, teachers, staff, classes, attendance, fee dues and collections, expenses, exams and results, calendar, timetable), and they return only the signed-in admin's school. It can't change anything.
+- Only full admins and Power Admin can use it (not fees staff). Conversations aren't saved.
+- Answers can be wrong, so check important figures in the app.
+
+**Setup**
+- **Locally:** install [Ollama](https://ollama.com), run `ollama pull qwen2.5:7b`, and keep Ollama running. No settings needed.
+- **On Vercel:** the server can't reach Ollama on your computer, so set:
+  - `AI_BASE_URL`, e.g. `https://api.groq.com/openai/v1`, or your own server such as `https://ollama.example.com/v1`
+  - `AI_MODEL`, e.g. `openai/gpt-oss-120b` (Groq) or `qwen2.5:14b` (Ollama)
+  - `AI_API_KEY` for hosted providers
+- Choose a model that supports **tool calling** (GPT-OSS, Qwen 2.5/3, Llama 3.1+, Mistral). Bigger models (14B+) handle complex questions better.
+- With a hosted provider, the looked-up records (names, phone numbers, fees) are sent to that provider. To keep data in-house, host the model yourself.
+
 ## Project structure
 
 ```
