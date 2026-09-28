@@ -1,10 +1,11 @@
 import type { LucideIcon } from "lucide-react";
-import { CalendarCheck, Megaphone, Wallet } from "lucide-react";
+import { CalendarCheck, Megaphone, Sparkles, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
 import { PRODUCT, PoweredBy, ScholdeskLogo } from "@/components/brand";
 import { SchoolLogo } from "@/components/school-logo";
 
 const features: { icon: LucideIcon; title: string; text: string }[] = [
+  { icon: Sparkles, title: "Ask your school anything", text: "AI answers from your own records, in English or Hindi." },
   { icon: CalendarCheck, title: "Attendance in seconds", text: "Everyone starts present — tap only the exceptions." },
   { icon: Wallet, title: "Fees without the queue", text: "Find a student, collect, print the receipt." },
   { icon: Megaphone, title: "Parents in the loop", text: "WhatsApp and SMS notices from one place." },
@@ -45,11 +46,15 @@ export function AuthLayout({
         </div>
 
         <div className="relative max-w-md">
+          <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 py-1 pl-1 pr-3 text-xs font-medium text-white/80 backdrop-blur">
+            <span className="rounded-full bg-gradient-to-r from-[#6d60f2] to-violet-400 px-2 py-0.5 font-semibold text-white">New</span>
+            AI-powered school management
+          </p>
           <h2 className="text-display-sm font-semibold xl:text-display">
             Run your school,{" "}
             <span className="bg-gradient-to-r from-[#aea5fb] to-violet-300 bg-clip-text text-transparent">beautifully.</span>
           </h2>
-          <ul className="mt-12 space-y-6">
+          <ul className="mt-10 space-y-5">
             {features.map(({ icon: FIcon, title: t, text }) => (
               <li key={t} className="flex gap-4">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5">
@@ -65,14 +70,7 @@ export function AuthLayout({
         </div>
 
         <div className="relative flex items-end justify-between gap-6">
-          {/* Glass preview of the dashboard's key number */}
-          <div className="w-72 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-            <p className="text-sm text-white/60">Attendance today</p>
-            <p className="mt-2 text-display-sm font-semibold tabular-nums">96.4%</p>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full w-[96%] rounded-full bg-gradient-to-r from-[#6d60f2] to-violet-300" />
-            </div>
-          </div>
+          <AskAiPreview />
           <PoweredBy tone="dark" className="text-white/60" />
         </div>
       </section>
@@ -97,6 +95,11 @@ export function AuthLayout({
           ) : (
             <ScholdeskLogo className="h-16 w-auto lg:hidden" priority />
           )}
+          {/* The brand panel is hidden on phones; keep the AI message visible there. */}
+          <p className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent-text lg:hidden">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+            Now with Ask AI: answers from your school&apos;s data
+          </p>
           <h1 className={`mt-8 text-h1 font-semibold text-fg ${school ? "" : "lg:mt-0"}`}>{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
           <div className="mt-8">{children}</div>
@@ -108,5 +111,38 @@ export function AuthLayout({
         </div>
       </section>
     </main>
+  );
+}
+
+/**
+ * A glass card that plays a short Ask AI exchange: the question, typing dots,
+ * then the answer. CSS only; with reduced motion the answer simply shows.
+ */
+function AskAiPreview() {
+  return (
+    <div className="w-80 rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl" aria-label="Example: asking the AI assistant about pending fees">
+      <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-white/50">
+        <Sparkles className="h-3.5 w-3.5 text-[#aea5fb]" aria-hidden /> Ask AI
+      </p>
+      <p className="ml-auto mt-3 w-fit max-w-[90%] animate-rise rounded-2xl rounded-br-md bg-[#6d60f2] px-3 py-2 text-sm" style={{ animationDelay: "400ms" }}>
+        Who hasn&apos;t paid fees this month?
+      </p>
+      <div className="mt-3 grid">
+        {/* Typing dots, replaced by the answer in the same spot. */}
+        <span className="col-start-1 row-start-1 flex h-9 w-14 items-center justify-center gap-1 self-start rounded-2xl rounded-tl-md bg-white/10 [animation:fade-in_250ms_ease-out_900ms_both,fade-in_250ms_ease-out_2300ms_reverse_forwards]" aria-hidden>
+          {[0, 150, 300].map((d) => (
+            <span key={d} className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/70" style={{ animationDelay: `${d}ms` }} />
+          ))}
+        </span>
+        <div className="col-start-1 row-start-1 animate-rise rounded-2xl rounded-tl-md bg-white/10 px-3 py-2.5 text-sm text-white/85" style={{ animationDelay: "2500ms" }}>
+          <p>
+            <strong className="font-semibold text-white">14 students</strong> have <strong className="font-semibold text-white">₹86,400</strong> pending. Most are in Class 8 – B.
+          </p>
+          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs text-[#cfc9fd]">
+            <Megaphone className="h-3 w-3" aria-hidden /> Send a fee reminder
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
