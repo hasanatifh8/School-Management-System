@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { BookOpen, CalendarDays, CircleCheck, Droplet, FileText, Hash, History, IdCard, LayoutGrid, Mail, Pencil, Phone, RotateCcw, UserRound, UserRoundX, Wallet } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { DeletePermanently } from "@/components/delete-permanently";
+import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { AttendanceSummaryCard } from "@/components/attendance/attendance-summary";
 import { Avatar, Badge, ButtonLink, Callout, Card, EmptyState, InfoItem, MenuLink, MoreMenu, PageHeader, StatusTab, TextLink, checkboxClass, tabBarClass } from "@/components/ui";
@@ -179,17 +181,20 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             title={removed ? "Restore student" : "Remove student"}
             description={
               removed
-                ? "Bring this student back to the active list."
+                ? "Bring this student back to the active list, or delete them for good."
                 : "The record, fees and attendance are kept, and the student can be restored later."
             }
             className={removed ? undefined : "border-danger-line"}
           >
             {removed ? (
-              <ActionForm action={restoreStudent.bind(null, student.id)} compact className="flex items-center gap-3">
-                <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
-                  Restore student
-                </SubmitButton>
-              </ActionForm>
+              <div className="flex flex-wrap items-center gap-3">
+                <ActionForm action={restoreStudent.bind(null, student.id)} compact className="flex items-center gap-3">
+                  <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
+                    Restore student
+                  </SubmitButton>
+                </ActionForm>
+                <DeletePermanently kind="student" action={deletePermanently.bind(null, "student", student.id)} schoolCode={school.code} title={`Delete ${fullName(student)} permanently?`} />
+              </div>
             ) : (
               <ActionForm action={removeStudent.bind(null, student.id)} compact className="flex items-center gap-3">
                 <SubmitButton

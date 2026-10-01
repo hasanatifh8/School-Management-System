@@ -21,6 +21,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { DeletePermanently } from "@/components/delete-permanently";
+import { deletePermanently } from "../../permanent-delete-actions";
 import { Avatar, Badge, ButtonLink, Card, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass } from "@/components/ui";
 import { todayISO } from "@/lib/attendance-shared";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
@@ -162,17 +164,20 @@ export default async function StaffMemberPage({ params, searchParams }: PageProp
             title={removed ? "Restore staff member" : "Remove staff member"}
             description={
               removed
-                ? "Put them back on the payroll."
+                ? "Put them back on the payroll, or delete them for good."
                 : `They leave the payroll; past salaries stay on record.${cashier ? " Their cashier sign-in is turned off." : ""}`
             }
             className={removed ? undefined : "border-danger-line"}
           >
             {removed ? (
-              <ActionForm action={restoreStaffMember.bind(null, staff.id)} compact className="flex items-center gap-3">
-                <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
-                  Restore staff member
-                </SubmitButton>
-              </ActionForm>
+              <div className="flex flex-wrap items-center gap-3">
+                <ActionForm action={restoreStaffMember.bind(null, staff.id)} compact className="flex items-center gap-3">
+                  <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
+                    Restore staff member
+                  </SubmitButton>
+                </ActionForm>
+                <DeletePermanently kind="staff" action={deletePermanently.bind(null, "staff", staff.id)} schoolCode={school.code} title={`Delete ${staff.name} permanently?`} />
+              </div>
             ) : (
               <ActionForm action={removeStaffMember.bind(null, staff.id)} compact className="flex items-center gap-3">
                 <SubmitButton variant="danger" confirm={`Remove ${staff.name}?`} confirmMessage="They leave the payroll. Past salaries are kept." icon={<UserRoundX className="h-4 w-4" />}>

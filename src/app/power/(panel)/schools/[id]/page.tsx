@@ -46,9 +46,10 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
   ]);
   if (!school) notFound();
 
-  const [removedStudents, removedTeachers] = await Promise.all([
+  const [removedStudents, removedTeachers, removedStaff] = await Promise.all([
     db.student.count({ where: { schoolId: id, status: "INACTIVE" } }),
     db.teacher.count({ where: { schoolId: id, status: "INACTIVE" } }),
+    db.staffMember.count({ where: { schoolId: id, status: "INACTIVE" } }),
   ]);
   const active = school.status === "ACTIVE";
   const empty = !school._count.students && !school._count.teachers && !school._count.classes && !school._count.subjects;
@@ -156,7 +157,7 @@ export default async function PowerSchoolPage({ params, searchParams }: PageProp
               <div className="border-t border-line pt-5">
                 <p className="font-medium text-fg">Purge removed records</p>
                 <p className="mb-2 text-muted">
-                  Permanently deletes removed students ({removedStudents}) and teachers ({removedTeachers}) with their photos
+                  Permanently deletes removed students ({removedStudents}), teachers ({removedTeachers}) and staff ({removedStaff}) with their photos
                   and documents.
                 </p>
                 <ActionForm action={purgeRemovedPeople.bind(null, id)} compact className="flex flex-wrap items-center gap-2">

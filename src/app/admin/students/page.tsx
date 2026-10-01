@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { RemovedCleanupBar } from "@/components/delete-permanently";
+import { deletePermanently } from "../permanent-delete-actions";
 import { ChevronRight, Download, FileSpreadsheet, GraduationCap, IdCard, SearchX, UserPlus } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
@@ -39,9 +41,10 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
   const filters = studentWhere(school.id, f);
   const showRemoved = f.removed;
 
-  const [activeCount, removedCount, classes, houses] = await Promise.all([
+  const [activeCount, removedCount, allRemoved, classes, houses] = await Promise.all([
     db.student.count({ where: { ...filters, status: "ACTIVE" } }),
     db.student.count({ where: { ...filters, status: "INACTIVE" } }),
+    db.student.count({ where: { schoolId: school.id, status: "INACTIVE" } }),
     getClassesWithSections(school.id),
     getHouses(school.id),
   ]);
@@ -146,6 +149,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
             </ListToolbar>
           </div>
         </div>
+        {showRemoved && <RemovedCleanupBar kind="student" count={allRemoved} action={deletePermanently.bind(null, "student", null)} schoolCode={school.code} />}
 
         {students.length === 0 ? (
           <EmptyState

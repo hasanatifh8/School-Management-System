@@ -46,23 +46,52 @@ export async function wipeSchoolData(tx: Tx, schoolId: string) {
   return counts;
 }
 
-/** Permanently deletes removed students/teachers whose last change is older than `days`. */
+export type PersonKind = "student" | "teacher" | "staff";
+
+/**
+ * Permanently deletes removed (INACTIVE) students, teachers or staff of a
+ * school, with their photos and documents. `ids` null means all removed ones.
+ * Active people are never touched. Fee receipts and salary payments keep the
+ * copied name; attendance, marks, logins and enrollments go with the person.
+ */
+export async function deleteRemovedPeople(tx: Tx, schoolId: string, kind: PersonKind, ids: string[] | null, removedBefore?: Date) {
+  const where = {
+    schoolId,
+    status: "INACTIVE" as const,
+    ...(ids ? { id: { in: ids } } : {}),
+    ...(removedBefore ? { updatedAt: { lte: removedBefore } } : {}),
+  };
+  const people =
+    kind === "student"
+      ? await tx.student.findMany({ where, select: { id: true, photoId: true } })
+      : kind === "teacher"
+        ? await tx.teacher.findMany({ where, select: { id: true, photoId: true } })
+        : await tx.staffMember.findMany({ where, select: { id: true, photoId: true } });
+  const found = people.map((p) => p.id);
+  if (!found.length) return 0;
+
+  const owner = { student: "studentId", teacher: "teacherId", staff: "staffMemberId" }[kind];
+  await tx.documentFile.deleteMany({ where: { document: { [owner]: { in: found } } } }); // cascades to documents
+  if (kind === "student") {
+    await tx.enrollment.deleteMany({ where: { studentId: { in: found } } });
+    await tx.student.deleteMany({ where: { id: { in: found } } });
+  } else if (kind === "teacher") {
+    await tx.teacher.deleteMany({ where: { id: { in: found } } });
+  } else {
+    await tx.staffMember.deleteMany({ where: { id: { in: found } } }); // cashier sign-in cascades
+  }
+  await tx.photo.deleteMany({ where: { id: { in: people.flatMap((p) => (p.photoId ? [p.photoId] : [])) } } });
+  return found.length;
+}
+
+/** Permanently deletes removed students, teachers and staff whose last change is older than `days`. */
 export async function purgeRemoved(tx: Tx, schoolId: string, days: number) {
   const before = new Date(Date.now() - days * 86_400_000);
-  const where = { schoolId, status: "INACTIVE" as const, updatedAt: { lte: before } };
-  const students = await tx.student.findMany({ where, select: { id: true, photoId: true } });
-  const teachers = await tx.teacher.findMany({ where, select: { id: true, photoId: true } });
-  const ids = [...students, ...teachers].map((p) => p.id);
-
-  await tx.documentFile.deleteMany({
-    where: { document: { OR: [{ studentId: { in: ids } }, { teacherId: { in: ids } }] } },
-  });
-  await tx.enrollment.deleteMany({ where: { studentId: { in: students.map((s) => s.id) } } });
-  await tx.student.deleteMany({ where: { id: { in: students.map((s) => s.id) } } });
-  await tx.teacher.deleteMany({ where: { id: { in: teachers.map((t) => t.id) } } });
-  const photoIds = [...students, ...teachers].flatMap((p) => (p.photoId ? [p.photoId] : []));
-  await tx.photo.deleteMany({ where: { id: { in: photoIds } } });
-  return { students: students.length, teachers: teachers.length };
+  return {
+    students: await deleteRemovedPeople(tx, schoolId, "student", null, before),
+    teachers: await deleteRemovedPeople(tx, schoolId, "teacher", null, before),
+    staff: await deleteRemovedPeople(tx, schoolId, "staff", null, before),
+  };
 }
 
 /** Deletes stored files that nothing points to any more (across all schools). */

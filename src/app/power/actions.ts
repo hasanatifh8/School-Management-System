@@ -250,12 +250,12 @@ export async function purgeRemovedPeople(id: string, _: ActionState, formData: F
   const days = Number(formData.get("days") ?? 30);
   if (!Number.isInteger(days) || days < 0 || days > 3650) return { error: "Enter a number of days from 0." };
   const result = await db.$transaction((tx) => purgeRemoved(tx, id, days), LONG_TX);
-  await audit("Removed records purged", school, `${result.students} students, ${result.teachers} teachers (removed ≥ ${days} days)`);
+  await audit("Removed records purged", school, `${result.students} students, ${result.teachers} teachers, ${result.staff} staff (removed ≥ ${days} days)`);
   revalidatePath("/", "layout");
   return {
     ok: true,
-    message: result.students + result.teachers
-      ? `Permanently deleted ${result.students} student(s) and ${result.teachers} teacher(s).`
+    message: result.students + result.teachers + result.staff
+      ? `Permanently deleted ${result.students} student(s), ${result.teachers} teacher(s) and ${result.staff} staff member(s).`
       : "Nothing to purge.",
   };
 }

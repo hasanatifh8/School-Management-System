@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { RemovedCleanupBar } from "@/components/delete-permanently";
+import { deletePermanently } from "../permanent-delete-actions";
 import { ChevronRight, Phone, SearchX, UserCog, UserPlus, Wallet } from "lucide-react";
 import type { Prisma } from "@/generated/prisma/client";
 import { Pagination } from "@/components/pagination";
@@ -53,9 +55,10 @@ export default async function StaffPage({ searchParams }: PageProps<"/admin/staf
   if (access === "cashier") filters.cashierAccount = { isNot: null };
   if (access === "none") filters.cashierAccount = { is: null };
 
-  const [activeCount, removedCount, jobs, payroll] = await Promise.all([
+  const [activeCount, removedCount, allRemoved, jobs, payroll] = await Promise.all([
     db.staffMember.count({ where: { ...filters, status: "ACTIVE" } }),
     db.staffMember.count({ where: { ...filters, status: "INACTIVE" } }),
+    db.staffMember.count({ where: { schoolId: school.id, status: "INACTIVE" } }),
     db.staffMember.findMany({ where: { schoolId: school.id }, distinct: ["designation"], orderBy: { designation: "asc" }, select: { designation: true } }),
     db.staffMember.aggregate({ where: { schoolId: school.id, status: "ACTIVE" }, _sum: { monthlySalary: true }, _count: true }),
   ]);
@@ -111,6 +114,7 @@ export default async function StaffPage({ searchParams }: PageProps<"/admin/staf
             </ListToolbar>
           </div>
         </div>
+        {showRemoved && <RemovedCleanupBar kind="staff" count={allRemoved} action={deletePermanently.bind(null, "staff", null)} schoolCode={school.code} />}
 
         {staff.length === 0 ? (
           <EmptyState

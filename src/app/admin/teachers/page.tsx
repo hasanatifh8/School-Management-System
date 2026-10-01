@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { RemovedCleanupBar } from "@/components/delete-permanently";
+import { deletePermanently } from "../permanent-delete-actions";
 import { ChevronRight, Crown, Download, FileSpreadsheet, Phone, Presentation, SearchX, UserPlus } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
@@ -37,9 +39,10 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
   const filters = teacherWhere(school.id, f);
   const showRemoved = f.removed;
 
-  const [activeCount, removedCount, subjects] = await Promise.all([
+  const [activeCount, removedCount, allRemoved, subjects] = await Promise.all([
     db.teacher.count({ where: { ...filters, status: "ACTIVE" } }),
     db.teacher.count({ where: { ...filters, status: "INACTIVE" } }),
+    db.teacher.count({ where: { schoolId: school.id, status: "INACTIVE" } }),
     db.subject.findMany({ where: { schoolId: school.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   const paging = paginate(params, showRemoved ? removedCount : activeCount);
@@ -131,6 +134,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
             </ListToolbar>
           </div>
         </div>
+        {showRemoved && <RemovedCleanupBar kind="teacher" count={allRemoved} action={deletePermanently.bind(null, "teacher", null)} schoolCode={school.code} />}
 
         {teachers.length === 0 ? (
           <EmptyState
