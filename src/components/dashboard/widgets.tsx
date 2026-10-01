@@ -1,7 +1,7 @@
 // Building blocks shared by the admin and teacher dashboards.
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight, Cake, CalendarDays, History, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ArrowRight, Award, Cake, CalendarDays, ChevronRight, History, TriangleAlert, type LucideIcon } from "lucide-react";
 import { AnimatedNumber, Avatar, Card, EmptyState, IconTile, TextLink, type IconTone } from "@/components/ui";
 import { cx } from "@/components/ui/cx";
 import { parseISODate } from "@/lib/attendance-shared";
@@ -194,6 +194,43 @@ export function UpcomingEventsCard({ events, calendarHref, empty }: { events: Ca
               </li>
             );
           })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/* ───────────────────────── Results ───────────────────────── */
+
+export type PublishedResult = { examId: string; examName: string; kind: "EXAM" | "TEST"; sectionId: string; section: string; publishedAt: Date; publishedBy: string };
+
+const publishedDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+
+/** Results published most recently, one row per exam and section, each linking to its result sheet. */
+export function RecentResultsCard({ results, empty }: { results: PublishedResult[]; empty: ReactNode }) {
+  return (
+    <Card title="Recent results" icon={Award} description="Published result sheets" padded={false} action={<TextLink href="/admin/exams">All exams</TextLink>}>
+      {results.length === 0 ? (
+        empty
+      ) : (
+        <ul className="divide-y divide-line">
+          {results.map((r) => (
+            <li key={`${r.examId}:${r.sectionId}`}>
+              <Link href={`/admin/exams/${r.examId}/results/${r.sectionId}`} className="group flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2 sm:px-6">
+                <IconTile icon={Award} tone={r.kind === "EXAM" ? "violet" : "sky"} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-fg">{r.examName}</span>
+                  <span className="block truncate text-xs text-muted">
+                    {r.section} · published {publishedDate.format(r.publishedAt)} by {r.publishedBy}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-0.5 text-xs font-medium text-accent-text">
+                  <span className="hidden sm:inline">View results</span>
+                  <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden />
+                </span>
+              </Link>
+            </li>
+          ))}
         </ul>
       )}
     </Card>
