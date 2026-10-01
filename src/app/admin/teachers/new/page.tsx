@@ -1,10 +1,12 @@
+import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { Card, PageHeader } from "@/components/ui";
 import { createTeacher } from "../actions";
 import { TeacherForm } from "../teacher-form";
 
 export default async function NewTeacherPage() {
-  await getCurrentSchool(); // admins only
+  const school = await getCurrentSchool(); // admins only
+  const subjects = await db.subject.findMany({ where: { schoolId: school.id }, orderBy: { name: "asc" }, select: { id: true, name: true, code: true } });
   return (
     <>
       <PageHeader
@@ -13,7 +15,7 @@ export default async function NewTeacherPage() {
         breadcrumbs={[{ label: "Teachers", href: "/admin/teachers" }, { label: "Add teacher" }]}
       />
       <Card>
-        <TeacherForm action={createTeacher} submitLabel="Add teacher" cancelHref="/admin/teachers" offerLogin />
+        <TeacherForm action={createTeacher} submitLabel="Add teacher" cancelHref="/admin/teachers" offerLogin subjects={subjects} />
       </Card>
     </>
   );

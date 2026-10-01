@@ -38,6 +38,8 @@ export function TeacherForm({
   cancelHref,
   photoUrl,
   offerLogin = false,
+  subjects = [],
+  teacherSubjectIds = [],
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   teacher?: TeacherValues;
@@ -47,6 +49,9 @@ export function TeacherForm({
   photoUrl?: string | null;
   /** Show "Create a login for this teacher" (new teachers). */
   offerLogin?: boolean;
+  /** The school's subjects, to tick the ones this teacher can teach. */
+  subjects?: { id: string; name: string; code: string }[];
+  teacherSubjectIds?: string[];
 }) {
   const dob = ageBounds(MIN_TEACHER_AGE, MAX_TEACHER_AGE);
   const today = todayISO();
@@ -181,6 +186,31 @@ export function TeacherForm({
                   />
                 </div>
               </Field>
+            </FormSection>
+
+            <FormSection title="Subjects they teach" description="Only these teachers are offered for a subject when assigning subject teachers in a class.">
+              {subjects.length === 0 ? (
+                <p className="text-sm text-muted sm:col-span-2">
+                  No subjects yet.{" "}
+                  <Link href="/admin/subjects" className="font-medium text-accent-text hover:underline">
+                    Add subjects
+                  </Link>{" "}
+                  first.
+                </p>
+              ) : (
+                <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {subjects.map((sub) => (
+                    <label
+                      key={sub.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-line px-3 py-2.5 text-sm transition hover:border-accent-line hover:bg-accent-soft/30 has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft/60"
+                    >
+                      <input type="checkbox" name="subjectIds" value={sub.id} defaultChecked={teacherSubjectIds.includes(sub.id)} className={checkboxClass} />
+                      <span className="flex-1 font-medium text-fg-2">{sub.name}</span>
+                      <span className="font-mono text-[11px] text-subtle">{sub.code}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </FormSection>
 
             <FormSection title="Contact" description="Used for school communication.">

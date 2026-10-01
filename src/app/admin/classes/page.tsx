@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, BookOpen, Plus, School, Users } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
-import { Avatar, Badge, EmptyState, IconTile, PageHeader, inputClass } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, EmptyState, IconTile, PageHeader, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
@@ -30,9 +30,42 @@ export default async function ClassesPage() {
       <PageHeader
         title="Classes"
         subtitle="Sections, curriculum, class teachers and subject teachers"
+        action={
+          <ButtonLink href="#add-class" icon={Plus} className="lg:hidden">
+            Add class
+          </ButtonLink>
+        }
       />
 
-      <div className="grid items-start gap-6 md:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        {/* Add class: first on phones, a sidebar that stays in view on larger screens */}
+        <aside id="add-class" className="scroll-mt-24 lg:sticky lg:top-6 lg:order-2">
+          <section className="rounded-2xl border border-line bg-surface p-6 shadow-card">
+            <div className="flex items-center gap-3">
+              <IconTile icon={Plus} tone="indigo" />
+              <div>
+                <h2 className="font-semibold text-fg">Add a class</h2>
+                <p className="text-xs text-muted">You can add sections and subjects next.</p>
+              </div>
+            </div>
+            <ActionForm action={createClass} className="mt-5 space-y-4">
+              <Field label="Class name" name="name" required>
+                <input name="name" required placeholder="e.g. Class 6" className={inputClass} />
+              </Field>
+              <Field label="Sections" name="sections" hint="Comma-separated, e.g. A, B, C">
+                <input name="sections" placeholder="A, B, C" defaultValue="A" className={inputClass} />
+              </Field>
+              <SubmitButton icon={<Plus className="h-4 w-4" />}>Create class</SubmitButton>
+            </ActionForm>
+          </section>
+        </aside>
+
+        <div className="grid items-start gap-6 md:grid-cols-2 lg:order-1 2xl:grid-cols-3">
+        {classes.length === 0 && (
+          <div className="md:col-span-2 2xl:col-span-3">
+            <EmptyState icon={School} title="No classes yet" description="Use the Add a class panel to create your first class." />
+          </div>
+        )}
         {classes.map((c) => {
           const students = c.sections.reduce((n, s) => n + s._count.students, 0);
           return (
@@ -92,32 +125,8 @@ export default async function ClassesPage() {
           );
         })}
 
-        {/* Add class */}
-        <section className="flex flex-col rounded-2xl border-2 border-dashed border-line bg-surface/60 p-6">
-          <div className="flex items-center gap-3">
-            <IconTile icon={Plus} tone="indigo" />
-            <div>
-              <h2 className="font-semibold text-fg">Add a class</h2>
-              <p className="text-xs text-muted">You can add sections and subjects next.</p>
-            </div>
-          </div>
-          <ActionForm action={createClass} className="mt-5 space-y-4">
-            <Field label="Class name" name="name" required>
-              <input name="name" required placeholder="e.g. Class 6" className={inputClass} />
-            </Field>
-            <Field label="Sections" name="sections" hint="Comma-separated, e.g. A, B, C">
-              <input name="sections" placeholder="A, B, C" defaultValue="A" className={inputClass} />
-            </Field>
-            <SubmitButton icon={<Plus className="h-4 w-4" />}>Create class</SubmitButton>
-          </ActionForm>
-        </section>
-      </div>
-
-      {classes.length === 0 && (
-        <div className="mt-6">
-          <EmptyState icon={School} title="No classes yet" description="Use the form above to create your first class." />
         </div>
-      )}
+      </div>
     </>
   );
 }

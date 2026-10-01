@@ -24,6 +24,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { DeletePermanently } from "@/components/delete-permanently";
+import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { Avatar, Badge, ButtonLink, Card, IconTile, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass } from "@/components/ui";
 import { todayISO } from "@/lib/attendance-shared";
@@ -74,6 +76,7 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
   const requested = (await searchParams).tab;
   const tab: Tab = TABS.find((t) => t === requested) ?? "overview";
   const school = await getCurrentSchool();
+  const allSubjects = await db.subject.findMany({ where: { schoolId: school.id }, orderBy: { name: "asc" }, select: { id: true, name: true, code: true } });
   const teacher = await db.teacher.findFirst({
     where: { id, schoolId: school.id },
     include: {
@@ -85,6 +88,7 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
         orderBy: [{ section: { class: { sortOrder: "asc" } } }, { section: { name: "asc" } }],
       },
       salaryPayments: { orderBy: [{ month: "desc" }, { createdAt: "desc" }], take: 6 },
+      canTeach: { include: { subject: { select: { id: true, name: true } } }, orderBy: { subject: { name: "asc" } } },
       documents: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -186,6 +190,8 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
               action={updateTeacher.bind(null, teacher.id)}
               teacher={teacher}
               photoUrl={photoUrl(teacher.photoId)}
+              subjects={allSubjects}
+              teacherSubjectIds={teacher.canTeach.map((c) => c.subjectId)}
               submitLabel="Save changes"
               cancelHref={base}
             />
@@ -194,17 +200,20 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
             title={removed ? "Restore teacher" : "Remove teacher"}
             description={
               removed
-                ? "Bring this teacher back to the active list."
+                ? "Bring this teacher back to the active list, or delete them for good."
                 : "Their class teacher and subject roles are cleared. The record is kept and can be restored."
             }
             className={removed ? undefined : "border-danger-line"}
           >
             {removed ? (
-              <ActionForm action={restoreTeacher.bind(null, teacher.id)} compact className="flex items-center gap-3">
-                <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
-                  Restore teacher
-                </SubmitButton>
-              </ActionForm>
+              <div className="flex flex-wrap items-center gap-3">
+                <ActionForm action={restoreTeacher.bind(null, teacher.id)} compact className="flex items-center gap-3">
+                  <SubmitButton variant="secondary" icon={<RotateCcw className="h-4 w-4" />}>
+                    Restore teacher
+                  </SubmitButton>
+                </ActionForm>
+                <DeletePermanently kind="teacher" action={deletePermanently.bind(null, "teacher", teacher.id)} schoolCode={school.code} title={`Delete ${name} permanently?`} />
+              </div>
             ) : (
               <ActionForm action={removeTeacher.bind(null, teacher.id)} compact className="flex items-center gap-3">
                 <SubmitButton
@@ -310,6 +319,7 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                   </Detail>
                   <Detail label="Qualification">{teacher.qualification}</Detail>
                   <Detail label="Specialization">{teacher.specialization}</Detail>
+                  <Detail label="Can teach">{teacher.canTeach.length > 0 && teacher.canTeach.map((c) => c.subject.name).join(", ")}</Detail>
                   <Detail label="Experience">
                     {teacher.experienceYears != null && `${teacher.experienceYears} year${teacher.experienceYears === 1 ? "" : "s"}`}
                   </Detail>

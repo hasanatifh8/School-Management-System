@@ -373,7 +373,11 @@ const TOOLS: Tool[] = [
         ? { OR: [{ name: { contains: a.subject, mode: "insensitive" as const } }, { code: { equals: a.subject, mode: "insensitive" as const } }] }
         : undefined;
       if (subjectMatch) {
-        where.OR = [{ subjectAssignments: { some: { subject: subjectMatch } } }, { specialization: { contains: a.subject, mode: "insensitive" } }];
+        where.OR = [
+          { canTeach: { some: { subject: subjectMatch } } },
+          { subjectAssignments: { some: { subject: subjectMatch } } },
+          { specialization: { contains: a.subject, mode: "insensitive" } },
+        ];
       }
       const teachers = await db.teacher.findMany({
         where,

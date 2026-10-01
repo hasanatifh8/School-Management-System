@@ -23,6 +23,13 @@ async function suggestUsername(tx: Prisma.TransactionClient, schoolCode: string,
   }
 }
 
+/** The ticked "Subjects they teach" that belong to this school. */
+async function chosenSubjects(schoolId: string, formData: FormData) {
+  const ids = formData.getAll("subjectIds").map(String);
+  if (!ids.length) return [];
+  return (await db.subject.findMany({ where: { schoolId, id: { in: ids } }, select: { id: true } })).map((s) => s.id);
+}
+
 async function findTeacher(schoolId: string, id: string) {
   const teacher = await db.teacher.findFirst({ where: { id, schoolId } });
   if (!teacher) throw new Error("Teacher not found");
@@ -38,6 +45,7 @@ export async function createTeacher(_: ActionState, formData: FormData): Promise
   const upload = await readPhotoUpload(formData);
   if ("error" in upload) return { error: upload.error, fieldErrors: { photo: [upload.error] } };
 
+  const subjectIds = await chosenSubjects(school.id, formData);
   const withLogin = formData.get("createLogin") === "on";
   const password = withLogin ? generatePassword() : null;
   const passwordHash = password ? await hashPassword(password) : null;
@@ -52,6 +60,7 @@ export async function createTeacher(_: ActionState, formData: FormData): Promise
         employeeCode,
         joiningDate: joiningDate ?? new Date(),
         ...(passwordHash && { username: await suggestUsername(tx, school.code, employeeCode), passwordHash }),
+        canTeach: { create: subjectIds.map((subjectId) => ({ subjectId })) },
       },
     });
   });
@@ -80,8 +89,14 @@ export async function updateTeacher(
 
   const upload = await readPhotoUpload(formData);
   if ("error" in upload) return { error: upload.error, fieldErrors: { photo: [upload.error] } };
+  const subjectIds = await chosenSubjects(school.id, formData);
+  let unassigned = 0;
 
   await db.$transaction(async (tx) => {
+    // Subjects they no longer teach: drop them, and their classes for those subjects.
+    await tx.teacherSubject.deleteMany({ where: { teacherId: id, subjectId: { notIn: subjectIds } } });
+    await tx.teacherSubject.createMany({ data: subjectIds.map((subjectId) => ({ teacherId: id, subjectId })), skipDuplicates: true });
+    unassigned = (await tx.subjectTeacherAssignment.deleteMany({ where: { teacherId: id, subjectId: { notIn: subjectIds } } })).count;
     const { photoId, staleId } = await resolvePhotoChange(
       tx,
       school.id,
@@ -96,7 +111,10 @@ export async function updateTeacher(
     if (staleId) await tx.photo.delete({ where: { id: staleId } });
   });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Saved." };
+  return {
+    ok: true,
+    message: unassigned ? `Saved. Removed from ${unassigned} class subject assignment(s) for subjects they no longer teach.` : "Saved.",
+  };
 }
 
 /**

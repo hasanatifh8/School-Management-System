@@ -213,8 +213,14 @@ export async function assignSubjectTeacher(
   } else {
     const teacher = await db.teacher.findFirst({
       where: { id: teacherId, schoolId: school.id, status: "ACTIVE" },
+      include: { canTeach: { where: { subjectId }, include: { subject: { select: { name: true } } } } },
     });
     if (!teacher) return { error: "Teacher not found." };
+    // Only teachers who teach this subject (set on their profile) can be its teacher here.
+    if (!teacher.canTeach.length) {
+      const subject = await db.subject.findUnique({ where: { id: subjectId }, select: { name: true } });
+      return { error: `${fullName(teacher)} doesn't teach ${subject?.name ?? "this subject"}. Add it under "Subjects they teach" on their profile first.` };
+    }
     await db.subjectTeacherAssignment.upsert({
       where: { sectionId_subjectId: { sectionId, subjectId } },
       create: { sectionId, subjectId, teacherId },
