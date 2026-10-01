@@ -8,10 +8,10 @@ import { addDays, formatISO } from "@/lib/attendance-shared";
 const arrow =
   "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface text-fg-2 shadow-card transition hover:bg-surface-2 aria-disabled:pointer-events-none aria-disabled:opacity-40";
 
-/** Previous / next day, a date picker and a "Today" shortcut. Navigates with ?date=. */
+/** Previous / next day, a date picker and a "Today" shortcut. Navigates with ?date= (kept after any query in `basePath`). */
 export function DateNav({ basePath, date, min, max }: { basePath: string; date: string; min: string; max: string }) {
   const router = useRouter();
-  const href = (d: string) => `${basePath}?date=${d}`;
+  const href = (d: string) => `${basePath}${basePath.includes("?") ? "&" : "?"}date=${d}`;
   const prev = addDays(date, -1);
   const next = addDays(date, 1);
   return (
