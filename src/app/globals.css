@@ -18,6 +18,10 @@
   }
 }
 
+/* Short screens (laptops): `short:` under 860px tall, `shorter:` under 720px. */
+@custom-variant short (@media (max-height: 859px));
+@custom-variant shorter (@media (max-height: 719px));
+
 :root {
   color-scheme: light;
   /* Neutrals */

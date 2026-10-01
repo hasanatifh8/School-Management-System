@@ -12,7 +12,7 @@ type Role = "admin" | "teacher";
 export function LoginForm({ initialRole }: { initialRole: Role }) {
   const [role, setRole] = useState<Role>(initialRole);
   return (
-    <ActionForm action={signIn} className="space-y-6">
+    <ActionForm action={signIn} className="space-y-6 lg:short:space-y-4 lg:shorter:space-y-3">
       <SegmentedControl
         name="role"
         label="Sign in as"
@@ -43,7 +43,11 @@ export function LoginForm({ initialRole }: { initialRole: Role }) {
         </span>
         <PasswordField name="password" autoComplete="current-password" labelledBy="password-label" />
       </div>
-      <SubmitButton size="lg" className="w-full" icon={<LogIn className="h-4 w-4" />}>
+      <SubmitButton
+        size="lg"
+        className="w-full bg-gradient-to-r from-[#1e1652] via-[#2b1d6e] to-[#1a1240] py-3.5 text-base lg:shorter:py-2.5 shadow-[0_10px_30px_-8px_rgb(91_78_232/0.6)] ring-1 ring-white/10 hover:brightness-125"
+        icon={<LogIn className="h-4 w-4" />}
+      >
         Sign in
       </SubmitButton>
     </ActionForm>
