@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useMemo, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { Banknote, Building2, CreditCard, FileCheck2, IndianRupee, QrCode, Wallet } from "lucide-react";
 import { Field, FormMessage } from "@/components/forms";
 import { Badge, Button, SegmentedControl, SuccessState, checkboxClass, inputClass } from "@/components/ui";
@@ -28,23 +28,32 @@ export function CollectForm({
   today,
   minDate,
   action,
+  canDiscount = false,
 }: {
   dues: DueItem[];
   today: string;
   minDate: string;
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
+  /** Admins may waive part of an instalment (needs a reason). */
+  canDiscount?: boolean;
 }) {
   const open = dues.filter((d) => d.balance > 0);
   const [selected, setSelected] = useState(() => new Set(open.filter((d) => d.due <= today).map((d) => dueKey(d.headId, d.period))));
   const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(open.map((d) => [dueKey(d.headId, d.period), String(d.balance)])));
+  const [discounts, setDiscounts] = useState<Record<string, string>>({});
   const [showPaid, setShowPaid] = useState(false);
   const [mode, setMode] = useState("CASH");
   const [state, formAction, pending] = useActionState(action, {});
 
-  const total = useMemo(
-    () => open.reduce((n, d) => (selected.has(dueKey(d.headId, d.period)) ? n + (Number(amounts[dueKey(d.headId, d.period)]) || 0) : n), 0),
-    [open, selected, amounts],
-  );
+  const sumOf = (values: Record<string, string>) => open.reduce((n, d) => (selected.has(dueKey(d.headId, d.period)) ? n + (Number(values[dueKey(d.headId, d.period)]) || 0) : n), 0);
+  const total = sumOf(amounts);
+  const discountTotal = sumOf(discounts);
+  /** A discount lowers what's left to pay on that instalment. */
+  const setDiscount = (d: DueItem, k: string, value: string) => {
+    const disc = Math.min(Number(value) || 0, d.balance);
+    setDiscounts((x) => ({ ...x, [k]: value ? String(disc) : "" }));
+    setAmounts((a) => ({ ...a, [k]: String(d.balance - disc) }));
+  };
   const toggle = (k: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -93,6 +102,7 @@ export function CollectForm({
                 <th className="px-3 py-2.5">Due</th>
                 <th className="px-3 py-2.5 text-right">Amount</th>
                 <th className="px-3 py-2.5 text-right">Balance</th>
+                {canDiscount && <th className="px-3 py-2.5 text-right">Discount</th>}
                 <th className="px-3 py-2.5 pr-4 text-right sm:pr-6">Paying now</th>
               </tr>
             </thead>
@@ -115,7 +125,26 @@ export function CollectForm({
                       <Badge tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Badge>
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{rupees(d.amount)}</td>
-                    <td className="px-3 py-2.5 text-right font-medium tabular-nums">{rupees(d.balance)}</td>
+                    <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                      {rupees(d.balance)}
+                      {d.discount > 0 && <span className="block text-xs font-normal text-success">−{rupees(d.discount)} discount</span>}
+                    </td>
+                    {canDiscount && (
+                      <td className="px-3 py-2.5 text-right">
+                        {payable && (
+                          <input
+                            name={`disc:${k}`}
+                            disabled={!on}
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={discounts[k] ?? ""}
+                            onChange={(e) => setDiscount(d, k, e.target.value.replace(/[^\d]/g, ""))}
+                            aria-label={`Discount for ${d.headName} ${d.label}`}
+                            className="h-9 w-20 rounded-lg border border-line-strong bg-surface px-2 text-right text-sm tabular-nums text-success transition focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 disabled:bg-surface-2 disabled:text-subtle"
+                          />
+                        )}
+                      </td>
+                    )}
                     <td className="px-3 py-2.5 pr-4 text-right sm:pr-6">
                       {payable && (
                         <input
@@ -167,6 +196,11 @@ export function CollectForm({
             <Field label="Remarks" name="remarks" errors={state.fieldErrors}>
               <input name="remarks" maxLength={200} className={inputClass} />
             </Field>
+            {discountTotal > 0 && (
+              <Field label="Reason for discount" name="discountNote" errors={state.fieldErrors} required className="sm:col-span-2">
+                <input name="discountNote" required maxLength={200} placeholder="e.g. Sibling discount, staff ward, scholarship" className={inputClass} />
+              </Field>
+            )}
           </div>
           <FormMessage state={state} />
         </div>
@@ -176,8 +210,9 @@ export function CollectForm({
           <div>
             <p className="text-eyebrow uppercase text-muted">Total</p>
             <p className="text-display-sm font-semibold tabular-nums text-fg">{rupees(total)}</p>
+            {discountTotal > 0 && <p className="text-xs font-medium text-success">+ {rupees(discountTotal)} discount</p>}
           </div>
-          <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={total <= 0}>
+          <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={total + discountTotal <= 0}>
             Collect & make receipt
           </Button>
         </div>

@@ -107,6 +107,8 @@ export type DueItem = {
   due: string;
   amount: number;
   paid: number;
+  /** Waived off when collecting; counts as settled. */
+  discount: number;
   balance: number;
   status: DueStatus;
 };
@@ -126,6 +128,7 @@ export function studentDues({
   admissionDate,
   optIns,
   paid,
+  discounts = new Map(),
   session,
   today,
 }: {
@@ -134,6 +137,7 @@ export function studentDues({
   admissionDate: string; // ISO date
   optIns: Set<string>;
   paid: Map<string, number>; // dueKey → rupees
+  discounts?: Map<string, number>; // dueKey → rupees waived
   session: { start: string; name: string };
   today: string;
 }): DueItem[] {
@@ -144,11 +148,12 @@ export function studentDues({
     const applies = amount != null && amount > 0 && (!head.optional || optIns.has(head.id));
     for (const p of feePeriods(head, session.start, session.name)) {
       const paidSoFar = paid.get(dueKey(head.id, p.key)) ?? 0;
+      const discount = discounts.get(dueKey(head.id, p.key)) ?? 0;
       const charged =
         applies && (head.frequency !== "ONE_TIME" || admissionDate >= session.start) && p.end >= admissionDate;
-      if (!charged && !paidSoFar) continue;
-      const due = charged ? amount! : paidSoFar;
-      const balance = Math.max(0, due - paidSoFar);
+      if (!charged && !paidSoFar && !discount) continue;
+      const due = charged ? amount! : paidSoFar + discount;
+      const balance = Math.max(0, due - paidSoFar - discount);
       items.push({
         headId: head.id,
         headName: head.name,
@@ -158,8 +163,9 @@ export function studentDues({
         due: p.due,
         amount: due,
         paid: paidSoFar,
+        discount,
         balance,
-        status: balance === 0 ? "PAID" : paidSoFar > 0 ? "PARTIAL" : p.due <= today ? "OVERDUE" : "UPCOMING",
+        status: balance === 0 ? "PAID" : paidSoFar + discount > 0 ? "PARTIAL" : p.due <= today ? "OVERDUE" : "UPCOMING",
       });
     }
   }
@@ -169,15 +175,17 @@ export function studentDues({
 export function dueTotals(items: DueItem[], today: string) {
   let total = 0;
   let paid = 0;
+  let discount = 0;
   let dueNow = 0;
   let upcoming = 0;
   for (const i of items) {
     total += i.amount;
     paid += i.paid;
+    discount += i.discount;
     if (i.due <= today) dueNow += i.balance;
     else upcoming += i.balance;
   }
-  return { total, paid, dueNow, upcoming };
+  return { total, paid, discount, dueNow, upcoming };
 }
 
 /* ───────────────────────── Amount in words (Indian system) ───────────────────────── */

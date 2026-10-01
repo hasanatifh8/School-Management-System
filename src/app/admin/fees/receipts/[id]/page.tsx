@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { GraduationCap, HandCoins, XCircle } from "lucide-react";
+import { Download, GraduationCap, HandCoins, XCircle } from "lucide-react";
+import { AutoPrint } from "@/components/fees/auto-print";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { ButtonLink, Card, SuccessState, buttonVariants, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -26,7 +27,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
   const logo = await db.schoolLogo.findUnique({ where: { schoolId: school.id }, select: { updatedAt: true } });
   const logoUrl = schoolLogoUrl({ id: school.id, logo });
   // Consecutive instalments of the same fee become one line: "Tuition fee · Apr 2026 – Sep 2026 (6)".
-  const lines: { key: string; name: string; period: string; amount: number }[] = [];
+  const lines: { key: string; name: string; period: string; amount: number; discount: number }[] = [];
   let run: { first: string; last: string; count: number } | null = null;
   for (const item of receipt.items) {
     const prev = lines.at(-1);
@@ -35,11 +36,13 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
       run.count++;
       prev.period = `${run.first} – ${run.last} (${run.count})`;
       prev.amount += item.amount;
+      prev.discount += item.discount;
     } else {
       run = { first: item.periodLabel, last: item.periodLabel, count: 1 };
-      lines.push({ key: item.id, name: item.headName, period: item.periodLabel, amount: item.amount });
+      lines.push({ key: item.id, name: item.headName, period: item.periodLabel, amount: item.amount, discount: item.discount });
     }
   }
+  const discount = lines.reduce((n, l) => n + l.discount, 0);
   // Two copies share an A4 page; a long receipt prints as one copy instead.
   const fitsTwo = lines.length <= 7;
   const copies = sp.copies === "1" || (!fitsTwo && sp.copies !== "2") ? ["Receipt"] : ["Parent copy", "Office copy"];
@@ -95,7 +98,8 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
             <th className="w-8 py-[1.2mm] pl-1 font-semibold">#</th>
             <th className="py-[1.2mm] font-semibold">Fee</th>
             <th className="py-[1.2mm] font-semibold">Period</th>
-            <th className="py-[1.2mm] pr-1 text-right font-semibold">Amount</th>
+            {discount > 0 && <th className="py-[1.2mm] text-right font-semibold">Discount</th>}
+            <th className="py-[1.2mm] pr-1 text-right font-semibold">{discount > 0 ? "Paid" : "Amount"}</th>
           </tr>
         </thead>
         <tbody>
@@ -104,6 +108,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               <td className="py-[1mm] pl-1 text-slate-500">{i + 1}</td>
               <td className="py-[1mm]">{item.name}</td>
               <td className="py-[1mm]">{item.period}</td>
+              {discount > 0 && <td className="py-[1mm] text-right tabular-nums">{item.discount ? rupees(item.discount) : "—"}</td>}
               <td className="py-[1mm] pr-1 text-right tabular-nums">{rupees(item.amount)}</td>
             </tr>
           ))}
@@ -111,8 +116,9 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
         <tfoot>
           <tr className="border-b-2 border-slate-400">
             <td colSpan={3} className="py-[1.5mm] pl-1 text-right font-semibold">
-              Total
+              {discount > 0 ? "Total paid" : "Total"}
             </td>
+            {discount > 0 && <td className="py-[1.5mm] text-right font-semibold tabular-nums">{rupees(discount)}</td>}
             <td className="py-[1.5mm] pr-1 text-right text-[11pt] font-bold tabular-nums">{rupees(receipt.total)}</td>
           </tr>
         </tfoot>
@@ -122,12 +128,17 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
       <div className="mt-auto flex items-end justify-between gap-4 pt-[3mm] text-[8.5pt]">
         <div className="space-y-[0.5mm]">
           <p>
-            <span className="text-slate-500">Paid by:</span> {MODE_LABELS[receipt.mode]}
-            {receipt.reference && ` · ${receipt.reference}`}
+            <span className="text-slate-500">Paid by:</span>{" "}
+            {receipt.total ? `${MODE_LABELS[receipt.mode]}${receipt.reference ? ` · ${receipt.reference}` : ""}` : "Nothing to pay (fully discounted)"}
           </p>
           {receipt.remarks && (
             <p>
               <span className="text-slate-500">Remarks:</span> {receipt.remarks}
+            </p>
+          )}
+          {discount > 0 && (
+            <p>
+              <span className="text-slate-500">Discount of {rupees(discount)}:</span> {receipt.discountNote}
             </p>
           )}
           <p>
@@ -168,8 +179,13 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
             />
           </Card>
         )}
+        {sp.print === "1" && <AutoPrint />}
         <div className="flex flex-wrap items-center gap-2">
           <PrintButton />
+          <a href={`/api/fees/receipts/${receipt.id}`} download className={buttonVariants.secondary}>
+            <Download className="h-4 w-4" />
+            Download PDF
+          </a>
           {(fitsTwo || copies.length === 2) && (
             <Link href={`?copies=${copies.length === 2 ? "1" : "2"}${sp.new === "1" ? "&new=1" : ""}`} className={buttonVariants.secondary}>
               {copies.length === 2 ? "Print one copy instead" : "Print parent + office copies"}

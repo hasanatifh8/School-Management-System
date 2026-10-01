@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bus, Receipt, School, TriangleAlert } from "lucide-react";
+import { BookOpenCheck, Bus, Receipt, School, TriangleAlert } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Avatar, Badge, Breadcrumbs, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar } from "@/components/ui";
 import { photoUrl } from "@/lib/photos";
@@ -28,7 +28,13 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
         <div className="flex flex-wrap items-center gap-4">
           <Avatar name={name} src={photoUrl(student.photoId)} size="lg" />
           <div className="min-w-0 flex-1">
-            <Breadcrumbs items={[{ label: "Collect fees", href: "/admin/fees/collect" }, { label: name }]} />
+            <Breadcrumbs
+              items={[
+                { label: "Collect fees", href: "/admin/fees/collect" },
+                ...(student.section ? [{ label: sectionLabel(student.section), href: `/admin/fees/collect?section=${student.section.id}` }] : []),
+                { label: name },
+              ]}
+            />
             <h2 className="text-h2 font-semibold text-fg">
               <Link href={`/admin/students/${student.id}`} className="rounded transition hover:text-accent-text">
                 {name}
@@ -43,6 +49,9 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
               {!active && <Badge tone="red">Removed</Badge>}
             </p>
           </div>
+          <ButtonLink href={`/admin/fees/students/${student.id}/ledger`} variant="secondary" icon={BookOpenCheck}>
+            Fee ledger
+          </ButtonLink>
         </div>
         <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-line pt-6 sm:grid-cols-4">
           <Tile label={`Fees for ${session.name}`} value={rupees(totals.total)} />
@@ -95,7 +104,7 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
               )}
             </Card>
           ) : active ? (
-            <CollectForm dues={dues} today={today} minDate={session.startDate.toISOString().slice(0, 10)} action={collectFee.bind(null, student.id)} />
+            <CollectForm dues={dues} today={today} minDate={session.startDate.toISOString().slice(0, 10)} action={collectFee.bind(null, student.id)} canDiscount={canManage} />
           ) : (
             <Card>
               <p className="text-sm text-fg-2">This student was removed, so no new payments can be taken. Past receipts are listed alongside.</p>

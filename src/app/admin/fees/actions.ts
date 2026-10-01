@@ -208,7 +208,7 @@ const paymentSchema = z.object({
 /** Records a payment against the chosen instalments and creates a numbered receipt. */
 export async function collectFee(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const access = await getFeesAccess();
-  const { school, session, today, who } = access;
+  const { school, session, today, who, canManage } = access;
   const account = await loadStudentAccount(school.id, studentId);
   if (!account || account.student.status !== "ACTIVE") return { error: "Student not found." };
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData));
@@ -220,20 +220,27 @@ export async function collectFee(studentId: string, _: ActionState, formData: Fo
     return { error: "Enter the cheque / UPI / transaction number.", fieldErrors: { reference: ["Required for this payment mode"] } };
   }
 
+  // Each chosen instalment sends "pay:<key>" and, for admins, "disc:<key>" (rupees waived).
   const byKey = new Map(account.dues.map((d) => [dueKey(d.headId, d.period), d]));
-  const lines: { headId: string; headName: string; period: string; periodLabel: string; amount: number }[] = [];
-  for (const [key, raw] of formData) {
-    if (!key.startsWith("pay:")) continue;
-    const text = String(raw).replace(/[,\s₹]/g, "");
-    if (!text) continue;
-    const item = byKey.get(key.slice(4));
-    const n = Number(text);
+  const rupeesIn = (name: string) => String(formData.get(name) ?? "").replace(/[,\s₹]/g, "");
+  const lines: { headId: string; headName: string; period: string; periodLabel: string; amount: number; discount: number }[] = [];
+  for (const key of new Set([...formData.keys()].filter((k) => k.startsWith("pay:") || k.startsWith("disc:")).map((k) => k.slice(k.indexOf(":") + 1)))) {
+    const item = byKey.get(key);
     if (!item) return { error: "One of the chosen fees no longer applies. Reload the page." };
-    if (!Number.isInteger(n) || n < 0) return { error: `Enter whole rupees for ${item.headName} (${item.label}).` };
-    if (n > item.balance) return { error: `${item.headName} (${item.label}): only ${rupees(item.balance)} is left to pay.` };
-    if (n > 0) lines.push({ headId: item.headId, headName: item.headName, period: item.period, periodLabel: item.label, amount: n });
+    const [payText, discText] = [rupeesIn(`pay:${key}`), rupeesIn(`disc:${key}`)];
+    const amount = payText ? Number(payText) : 0;
+    const discount = discText ? Number(discText) : 0;
+    if (!Number.isInteger(amount) || amount < 0 || !Number.isInteger(discount) || discount < 0) return { error: `Enter whole rupees for ${item.headName} (${item.label}).` };
+    if (discount && !canManage) return { error: "Only a school admin can give a discount." };
+    if (amount + discount > item.balance) return { error: `${item.headName} (${item.label}): only ${rupees(item.balance)} is left, including any discount.` };
+    if (amount + discount > 0) lines.push({ headId: item.headId, headName: item.headName, period: item.period, periodLabel: item.label, amount, discount });
   }
   if (!lines.length) return { error: "Choose at least one fee and enter the amount paid." };
+  const discounted = lines.some((l) => l.discount > 0);
+  const discountNote = String(formData.get("discountNote") ?? "").trim().slice(0, 200) || null;
+  if (discounted && (!discountNote || discountNote.length < 3)) {
+    return { error: "Say why the discount is given, e.g. sibling or staff ward.", fieldErrors: { discountNote: ["Reason needed for a discount"] } };
+  }
 
   const { student } = account;
   const receipt = await db.$transaction(async (tx) =>
@@ -247,6 +254,7 @@ export async function collectFee(studentId: string, _: ActionState, formData: Fo
         mode,
         reference,
         remarks,
+        discountNote: discounted ? discountNote : null,
         total: lines.reduce((n, l) => n + l.amount, 0),
         studentName: fullName(student),
         studentCode: student.studentCode,

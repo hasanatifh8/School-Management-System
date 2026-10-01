@@ -54,24 +54,30 @@ export async function loadFeeHeads(sessionId: string): Promise<(FeeHeadInfo & { 
   }));
 }
 
-/** Rupees paid per instalment (dueKey) by each student this session, ignoring cancelled receipts. */
+/**
+ * Rupees paid and discounted per instalment (dueKey) by each student this
+ * session, ignoring cancelled receipts.
+ */
 async function paidByStudent(sessionId: string, studentIds?: string[]) {
   const items = await db.feeReceiptItem.findMany({
     where: {
       headId: { not: null },
       receipt: { sessionId, cancelledAt: null, ...(studentIds ? { studentId: { in: studentIds } } : { studentId: { not: null } }) },
     },
-    select: { headId: true, period: true, amount: true, receipt: { select: { studentId: true } } },
+    select: { headId: true, period: true, amount: true, discount: true, receipt: { select: { studentId: true } } },
   });
-  const map = new Map<string, Map<string, number>>();
-  for (const i of items) {
-    const sid = i.receipt.studentId!;
+  const paid = new Map<string, Map<string, number>>();
+  const discounts = new Map<string, Map<string, number>>();
+  const add = (map: Map<string, Map<string, number>>, sid: string, k: string, n: number) => {
     if (!map.has(sid)) map.set(sid, new Map());
-    const m = map.get(sid)!;
+    map.get(sid)!.set(k, (map.get(sid)!.get(k) ?? 0) + n);
+  };
+  for (const i of items) {
     const k = dueKey(i.headId!, i.period);
-    m.set(k, (m.get(k) ?? 0) + i.amount);
+    add(paid, i.receipt.studentId!, k, i.amount);
+    if (i.discount) add(discounts, i.receipt.studentId!, k, i.discount);
   }
-  return map;
+  return { paid, discounts };
 }
 
 async function optInsByStudent(sessionId: string, studentIds?: string[]) {
@@ -110,7 +116,8 @@ export async function loadStudentAccount(schoolId: string, studentId: string) {
     classId: student.section?.classId ?? null,
     admissionDate: isoDate(student.admissionDate),
     optIns: optIns.get(student.id) ?? new Set(),
-    paid: paid.get(student.id) ?? new Map(),
+    paid: paid.paid.get(student.id) ?? new Map(),
+    discounts: paid.discounts.get(student.id),
     session: { start: isoDate(session.startDate), name: session.name },
     today,
   });
@@ -148,7 +155,8 @@ export async function outstandingByStudent(schoolId: string, where: Prisma.Stude
       classId: s.section!.classId,
       admissionDate: isoDate(s.admissionDate),
       optIns: optIns.get(s.id) ?? new Set(),
-      paid: paid.get(s.id) ?? new Map(),
+      paid: paid.paid.get(s.id) ?? new Map(),
+      discounts: paid.discounts.get(s.id),
       session: { start: isoDate(session.startDate), name: session.name },
       today,
     });
@@ -185,11 +193,13 @@ export async function monthlyFeeTrend(schoolId: string) {
       classId: s.section!.classId,
       admissionDate: isoDate(s.admissionDate),
       optIns: optIns.get(s.id) ?? new Set(),
-      paid: paid.get(s.id) ?? new Map(),
+      paid: paid.paid.get(s.id) ?? new Map(),
+      discounts: paid.discounts.get(s.id),
       session: { start, name: session.name },
       today,
     });
-    for (const i of items) due.set(i.due.slice(0, 7), (due.get(i.due.slice(0, 7)) ?? 0) + i.amount);
+    // Discounts are waived, so they are not counted as due.
+    for (const i of items) due.set(i.due.slice(0, 7), (due.get(i.due.slice(0, 7)) ?? 0) + i.amount - i.discount);
   }
   const collected = new Map<string, number>();
   for (const r of receipts) {
@@ -221,3 +231,47 @@ export async function nextReceiptNumber(tx: Prisma.TransactionClient, schoolId: 
   });
   return `${sessionName}/${String(counter.value).padStart(4, "0")}`;
 }
+
+/**
+ * A student's fee ledger: every instalment of the current session with what
+ * was charged, discounted, paid and is still pending, plus the receipts that
+ * paid it; and every receipt across sessions as the payment history.
+ */
+export async function loadLedger(schoolId: string, studentId: string) {
+  const account = await loadStudentAccount(schoolId, studentId);
+  if (!account) return null;
+  const items = await db.feeReceiptItem.findMany({
+    where: { headId: { not: null }, receipt: { studentId, sessionId: account.session.id, cancelledAt: null } },
+    select: { headId: true, period: true, receipt: { select: { id: true, number: true, date: true } } },
+    orderBy: { receipt: { date: "asc" } },
+  });
+  const payments = new Map<string, { id: string; number: string; date: string }[]>();
+  for (const i of items) {
+    const k = dueKey(i.headId!, i.period);
+    const list = payments.get(k) ?? [];
+    if (!list.some((p) => p.id === i.receipt.id)) list.push({ id: i.receipt.id, number: i.receipt.number, date: isoDate(i.receipt.date) });
+    payments.set(k, list);
+  }
+  const rows = account.dues.map((d) => ({ ...d, payments: payments.get(dueKey(d.headId, d.period)) ?? [] }));
+  const history = await db.feeReceipt.findMany({
+    where: { studentId, schoolId },
+    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+    include: { session: { select: { name: true } }, items: { select: { discount: true } } },
+  });
+  return {
+    ...account,
+    rows,
+    history: history.map((r) => ({
+      id: r.id,
+      number: r.number,
+      date: isoDate(r.date),
+      session: r.session.name,
+      mode: r.mode,
+      paid: r.total,
+      discount: r.items.reduce((n, i) => n + i.discount, 0),
+      cancelled: !!r.cancelledAt,
+    })),
+  };
+}
+
+export type Ledger = NonNullable<Awaited<ReturnType<typeof loadLedger>>>;

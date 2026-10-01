@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Receipt } from "lucide-react";
+import { CalendarRange, Receipt, School } from "lucide-react";
 import { Pagination } from "@/components/pagination";
 import { Badge, Card, EmptyState, Table, buttonVariants, inputClass, selectClass, tbodyClass, tdClass, thClass, theadClass, trClass } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
@@ -8,13 +8,22 @@ import { getFeesAccess } from "@/lib/fees";
 import { MODE_LABELS, PAYMENT_MODES, rupees, type PaymentModeKey } from "@/lib/fees-shared";
 import { paginate } from "@/lib/pagination";
 import type { Prisma } from "@/generated/prisma/client";
+import { ClassWiseReceipts } from "./class-wise";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /** Receipts between two dates, searchable, with totals by payment mode. */
 export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/fees/receipts">) {
   const sp = await searchParams;
-  const { school, today } = await getFeesAccess();
+  const { school, today, session } = await getFeesAccess();
+  if (sp.view === "class") {
+    return (
+      <div className="space-y-6">
+        <ViewToggle classWise />
+        <ClassWiseReceipts schoolId={school.id} sessionId={session.id} sessionName={session.name} sp={sp} />
+      </div>
+    );
+  }
   const from = typeof sp.from === "string" && parseISODate(sp.from) ? sp.from : `${today.slice(0, 7)}-01`;
   const to = typeof sp.to === "string" && parseISODate(sp.to) ? sp.to : today;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
@@ -51,6 +60,7 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
 
   return (
     <div className="space-y-6">
+      <ViewToggle classWise={false} />
       <Card>
         <form className="flex flex-wrap items-end gap-3" action="/admin/fees/receipts">
           <label className="block">
@@ -133,5 +143,23 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
         <Pagination paging={paging} noun="receipts" />
       </Card>
     </div>
+  );
+}
+
+/** Switch between receipts by date and receipts by class and section. */
+function ViewToggle({ classWise }: { classWise: boolean }) {
+  const item = (active: boolean) =>
+    `inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${active ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`;
+  return (
+    <nav aria-label="Receipts view" className="inline-flex rounded-xl border border-line bg-surface-2 p-1">
+      <Link href="/admin/fees/receipts" aria-current={classWise ? undefined : "page"} className={item(!classWise)}>
+        <CalendarRange className="h-4 w-4" aria-hidden />
+        Date-wise
+      </Link>
+      <Link href="/admin/fees/receipts?view=class" aria-current={classWise ? "page" : undefined} className={item(classWise)}>
+        <School className="h-4 w-4" aria-hidden />
+        Class-wise
+      </Link>
+    </nav>
   );
 }
