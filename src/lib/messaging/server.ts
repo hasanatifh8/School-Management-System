@@ -1,9 +1,11 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
-import { formatISO, parseISODate, shortDate, todayISO } from "@/lib/attendance-shared";
+import { formatISO, isoDate, parseISODate, shortDate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { canEncrypt, decrypt } from "@/lib/secrets";
+import { noticeStatus } from "@/lib/notices-shared";
 import { normalizeIndianMobile } from "@/lib/student-options";
 import { personalize, providerById, type Channel } from "./providers";
 import { sendMessage } from "./send";
@@ -44,7 +46,11 @@ export type AudienceSpec =
   | { type: "classes"; sectionIds: string[] }
   | { type: "students"; studentIds: string[] }
   | { type: "absent"; date: string; sectionIds: string[] }
-  | { type: "school" };
+  | { type: "school" }
+  | { type: "none" }; // no students: teachers and/or staff only
+
+/** Teachers and non-teaching staff who get the notice too (admins only). */
+export type Roles = { teachers: boolean; staff: boolean };
 
 const studentSelect = {
   id: true,
@@ -67,6 +73,8 @@ export async function resolveAudience(schoolId: string, spec: AudienceSpec, only
   let where: Prisma.StudentWhereInput;
   let label: string;
   switch (spec.type) {
+    case "none":
+      return { students: [], label: "" };
     case "school":
       where = { ...base, sectionId: onlySectionId ?? { not: null } };
       label = onlySectionId ? "Whole class" : "Whole school";
@@ -100,52 +108,113 @@ export async function resolveAudience(schoolId: string, spec: AudienceSpec, only
   return { students, label };
 }
 
-type AudienceStudent = Awaited<ReturnType<typeof resolveAudience>>["students"][number];
+/** Someone a notice goes to: a student's parent, a teacher or a staff member. */
+type Person = {
+  ref: { studentId: string } | { teacherId: string } | { staffId: string };
+  name: string;
+  className: string | null; // class, or "Teacher" / the staff member's job
+  phone: string | null;
+  whatsapp: string | null;
+  roll: string;
+  father: string;
+};
 
-function recipientFor(s: AudienceStudent, channel: Channel, body: string, school: string, date: string) {
-  const className = s.section ? `${s.section.class.name} – ${s.section.name}` : "";
-  const raw = channel === "WHATSAPP" ? (s.whatsappNumber ?? s.phone) : s.phone;
+/** Students (from `spec`) plus, when chosen, active teachers and staff. */
+export async function resolveRecipients(schoolId: string, spec: AudienceSpec, roles: Roles, onlySectionId?: string) {
+  const [{ students, label }, teachers, staff] = await Promise.all([
+    resolveAudience(schoolId, spec, onlySectionId),
+    roles.teachers && !onlySectionId
+      ? db.teacher.findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: [{ firstName: "asc" }, { lastName: "asc" }], select: { id: true, firstName: true, middleName: true, lastName: true, phone: true, whatsappNumber: true } })
+      : [],
+    roles.staff && !onlySectionId
+      ? db.staffMember.findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true, designation: true, phone: true, whatsappNumber: true } })
+      : [],
+  ]);
+  const people: Person[] = [
+    ...students.map((s) => ({
+      ref: { studentId: s.id },
+      name: fullName(s),
+      className: s.section ? `${s.section.class.name} – ${s.section.name}` : null,
+      phone: s.phone,
+      whatsapp: s.whatsappNumber,
+      roll: s.rollNumber != null ? String(s.rollNumber) : "",
+      father: s.fatherName ?? "",
+    })),
+    ...teachers.map((t) => ({ ref: { teacherId: t.id }, name: fullName(t), className: "Teacher", phone: t.phone, whatsapp: t.whatsappNumber, roll: "", father: "" })),
+    ...staff.map((m) => ({ ref: { staffId: m.id }, name: m.name, className: m.designation, phone: m.phone, whatsapp: m.whatsappNumber, roll: "", father: "" })),
+  ];
+  const labels = [label, teachers.length || roles.teachers ? "Teachers" : "", staff.length || roles.staff ? "Staff" : ""].filter(Boolean);
+  return { people, label: labels.join(" · ") || "No one chosen", counts: { students: students.length, teachers: teachers.length, staff: staff.length } };
+}
+
+/** One message for one person on one channel. Placeholders use the person's own name for teachers and staff. */
+function recipientFor(p: Person, channel: Channel, body: string, school: string, date: string, attachmentUrl: string | null) {
+  const raw = channel === "WHATSAPP" ? (p.whatsapp ?? p.phone) : p.phone;
   const phone = raw ? normalizeIndianMobile(raw) : null;
+  const text = personalize(body, { student: p.name, class: p.className ?? "", roll: p.roll, father: p.father, date, school });
   return {
-    studentId: s.id,
-    name: fullName(s),
-    className: className || null,
+    ...p.ref,
+    name: p.name,
+    className: p.className,
     phone,
     channel,
-    message: personalize(body, { student: fullName(s), class: className, roll: s.rollNumber != null ? String(s.rollNumber) : "", father: s.fatherName ?? "", date, school }),
+    message: attachmentUrl ? `${text}\n\nAttachment: ${attachmentUrl}` : text,
     status: phone ? ("PENDING" as const) : ("SKIPPED" as const),
     error: phone ? null : raw ? `Not a valid mobile number: ${raw}` : "No mobile number",
   };
 }
 
-/** How many messages a notice would send, and the first one as a sample. */
-export async function previewAudience(schoolId: string, schoolName: string, spec: AudienceSpec, channels: Channel[], body: string, onlySectionId?: string) {
-  const { students, label } = await resolveAudience(schoolId, spec, onlySectionId);
+/** How many messages a notice would send, who to, and the first one as a sample. */
+export async function previewAudience(
+  schoolId: string,
+  schoolName: string,
+  spec: AudienceSpec,
+  roles: Roles,
+  channels: Channel[],
+  body: string,
+  onlySectionId?: string,
+  attachmentUrl: string | null = null,
+) {
+  const { people, label, counts } = await resolveRecipients(schoolId, spec, roles, onlySectionId);
   const date = formatISO(todayISO(), shortDate);
-  const rows = students.flatMap((s) => channels.map((c) => recipientFor(s, c, body, schoolName, date)));
+  const rows = people.flatMap((p) => channels.map((c) => recipientFor(p, c, body, schoolName, date, attachmentUrl)));
   return {
     label,
-    students: students.length,
+    ...counts,
+    people: people.length,
     messages: rows.filter((r) => r.status === "PENDING").length,
     skipped: rows.filter((r) => r.status === "SKIPPED").length,
     sample: rows.find((r) => r.status === "PENDING") ?? rows[0] ?? null,
   };
 }
 
-/** Saves a notice with one recipient row per student per channel, ready to send. */
+export type NoticeFile = { fileName: string; mimeType: string; size: number; data: Uint8Array<ArrayBuffer> };
+
+/**
+ * Saves a notice with one recipient row per person per channel. Messages wait
+ * until `publishAt`. An attachment gets a secret link (under `siteUrl`) that
+ * every message ends with.
+ */
 export async function createNotice(input: {
   schoolId: string;
   schoolName: string;
   spec: AudienceSpec;
+  roles: Roles;
   channels: Channel[];
   title: string;
   body: string;
+  publishAt: Date;
+  expiresOn: Date;
+  attachment: NoticeFile | null;
+  siteUrl: string;
   sentBy: string;
   teacherId?: string;
   onlySectionId?: string;
 }) {
-  const { students, label } = await resolveAudience(input.schoolId, input.spec, input.onlySectionId);
-  const date = formatISO(todayISO(), shortDate);
+  const { people, label } = await resolveRecipients(input.schoolId, input.spec, input.roles, input.onlySectionId);
+  const token = input.attachment ? randomBytes(9).toString("base64url") : null;
+  const attachmentUrl = token ? `${input.siteUrl}/n/${token}` : null;
+  const date = formatISO(isoDate(input.publishAt) > todayISO() ? isoDate(input.publishAt) : todayISO(), shortDate);
   return db.notice.create({
     data: {
       schoolId: input.schoolId,
@@ -153,9 +222,14 @@ export async function createNotice(input: {
       body: input.body,
       channels: input.channels,
       audience: label,
+      forTeachers: input.roles.teachers && !input.onlySectionId,
+      forStaff: input.roles.staff && !input.onlySectionId,
       sentBy: input.sentBy,
       teacherId: input.teacherId,
-      recipients: { create: students.flatMap((s) => input.channels.map((c) => recipientFor(s, c, input.body, input.schoolName, date))) },
+      publishAt: input.publishAt,
+      expiresOn: input.expiresOn,
+      ...(input.attachment && token && { attachment: { create: { token, ...input.attachment } } }),
+      recipients: { create: people.flatMap((p) => input.channels.map((c) => recipientFor(p, c, input.body, input.schoolName, date, attachmentUrl))) },
     },
   });
 }
@@ -172,6 +246,9 @@ const PARALLEL = 5;
  * A claim older than 2 minutes (a sender that died) can be taken over.
  */
 export async function sendNextBatch(schoolId: string, noticeId: string) {
+  // A scheduled notice waits for its publish time.
+  const notice = await db.notice.findUnique({ where: { id: noticeId }, select: { publishAt: true } });
+  if (!notice || notice.publishAt > new Date()) return noticeCounts(noticeId);
   const messaging = await loadMessaging(schoolId);
   const pending = await db.$queryRaw<{ id: string; channel: Channel; phone: string | null; message: string }[]>`
     UPDATE "NoticeRecipient" SET "providerRef" = 'claimed', "sentAt" = now()
@@ -205,6 +282,8 @@ export async function sendNextBatch(schoolId: string, noticeId: string) {
 /** Keeps sending a notice for up to `seconds` (used in the background after Send). */
 export async function sendForAWhile(schoolId: string, noticeId: string, seconds = 50) {
   const deadline = Date.now() + seconds * 1000;
+  const notice = await db.notice.findUnique({ where: { id: noticeId }, select: { publishAt: true } });
+  if (!notice || notice.publishAt > new Date()) return noticeCounts(noticeId); // scheduled for later
   while (Date.now() < deadline) {
     const c = await sendNextBatch(schoolId, noticeId);
     if (!c.PENDING) return c;
@@ -218,4 +297,39 @@ export async function noticeCounts(noticeId: string) {
   const c = { PENDING: 0, SENT: 0, FAILED: 0, SKIPPED: 0 };
   for (const g of groups) c[g.status] = g._count;
   return { ...c, total: c.PENDING + c.SENT + c.FAILED + c.SKIPPED };
+}
+
+/**
+ * Sends notices whose publish time has come and that still have messages
+ * waiting (scheduled notices on their day, or any left unfinished), within
+ * `seconds`. `schoolId` limits it to one school. Returns how many it worked on.
+ */
+export async function sendDueNotices(seconds = 50, schoolId?: string) {
+  const deadline = Date.now() + seconds * 1000;
+  const due = await db.notice.findMany({
+    where: { ...(schoolId && { schoolId }), publishAt: { lte: new Date() }, recipients: { some: { status: "PENDING" } } },
+    orderBy: { publishAt: "asc" },
+    select: { id: true, schoolId: true },
+  });
+  let worked = 0;
+  for (const n of due) {
+    const left = Math.floor((deadline - Date.now()) / 1000);
+    if (left < 3) break;
+    await sendForAWhile(n.schoolId, n.id, left);
+    worked++;
+  }
+  return worked;
+}
+
+/** Published notices that haven't expired yet, newest first (`take` at most). */
+export async function loadActiveNotices(schoolId: string, take: number, where: Prisma.NoticeWhereInput = {}) {
+  const now = new Date();
+  const today = todayISO();
+  const recent = await db.notice.findMany({
+    where: { ...where, schoolId, publishAt: { lte: now } },
+    orderBy: { publishAt: "desc" },
+    take: take * 4,
+    include: { attachment: { select: { token: true, fileName: true } } },
+  });
+  return recent.filter((n) => noticeStatus(n, now, today) === "ACTIVE").slice(0, take);
 }

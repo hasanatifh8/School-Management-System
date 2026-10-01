@@ -21,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AttendanceChart, type ClassAttendance } from "@/components/dashboard/attendance-chart";
+import { NoticeBoard } from "@/components/notices/notice-detail";
 import {
   ActivityCard,
   AttentionChip,
@@ -203,6 +204,10 @@ export default async function TeacherDashboard() {
           </>
         }
       />
+
+      <div className="mb-6 empty:hidden">
+        <NoticeBoard schoolId={ctx.school.id} audience="teachers" title="Notices for teachers" />
+      </div>
 
       {noClasses ? (
         <Card>

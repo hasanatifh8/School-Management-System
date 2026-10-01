@@ -337,6 +337,8 @@ model Teacher {
   notices        Notice[]
   exams          Exam[]
   timetableSlots TimetableSlot[]
+  canTeach       TeacherSubject[]
+  noticeMessages NoticeRecipient[]
 
   @@unique([schoolId, employeeCode])
 }
@@ -392,6 +394,7 @@ model Subject {
   teacherAssignments SubjectTeacherAssignment[]
   examPapers         ExamPaper[]
   timetableSlots     TimetableSlot[]
+  qualifiedTeachers  TeacherSubject[]
 
   @@unique([schoolId, code])
 }
@@ -417,6 +420,19 @@ model StudentSubject {
   subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@id([studentId, subjectId])
+}
+
+// Subjects a teacher can teach (set on the teacher's profile). Only these
+// teachers are offered as that subject's teacher in a section.
+model TeacherSubject {
+  teacherId String
+  subjectId String
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([teacherId, subjectId])
+  @@index([subjectId])
 }
 
 // Subject teacher: who teaches a subject in a particular section.
@@ -664,6 +680,7 @@ model FeeReceipt {
   cancelledAt  DateTime?
   cancelledBy  String?
   cancelReason String?
+  discountNote String? // why a discount was given (required when any line has one)
 
   school  School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   session AcademicSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -682,7 +699,8 @@ model FeeReceiptItem {
   headName    String
   period      String // e.g. "2026-04", "Q1", "H2", "Y", "ONCE"
   periodLabel String
-  amount      Int
+  amount      Int // paid
+  discount    Int     @default(0) // waived off this instalment; it counts as settled
 
   receipt FeeReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   head    FeeHead?   @relation(fields: [headId], references: [id], onDelete: SetNull)
@@ -716,11 +734,12 @@ model StaffMember {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  photo          Photo?          @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  school         School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  photo          Photo?            @relation(fields: [photoId], references: [id], onDelete: SetNull)
   documents      Document[]
   salaryPayments SalaryPayment[]
   cashierAccount SchoolAdmin?
+  noticeMessages NoticeRecipient[]
 
   @@unique([schoolId, employeeCode])
   @@index([schoolId])
@@ -804,30 +823,55 @@ model MessagingSettings {
   school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 }
 
-// A message sent to parents, by an admin or a class teacher.
+// A notice sent by an admin or a class teacher: by WhatsApp/SMS to students'
+// parents, and (admins) to teachers and non-teaching staff. Messages go out at
+// `publishAt` (now, or 7 AM on a later publish date); the notice is active until
+// the end of `expiresOn`, and shows on teachers' and staff notice boards.
 model Notice {
-  id        String           @id @default(cuid())
-  schoolId  String
-  title     String
-  body      String
-  channels  MessageChannel[]
-  audience  String // e.g. "Class 1 – A, Class 2 – B" or "Absent on 26 Sept"
-  sentBy    String
-  teacherId String?
-  createdAt DateTime         @default(now())
+  id          String           @id @default(cuid())
+  schoolId    String
+  title       String
+  body        String
+  channels    MessageChannel[]
+  audience    String // e.g. "Class 1 – A, Teachers" or "Absent on 26 Sept"
+  forTeachers Boolean          @default(false)
+  forStaff    Boolean          @default(false)
+  sentBy      String
+  teacherId   String?
+  publishAt   DateTime         @default(now())
+  expiresOn   DateTime?        @db.Date // last active day; older notices have none
+  createdAt   DateTime         @default(now())
 
   school     School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   teacher    Teacher?          @relation(fields: [teacherId], references: [id], onDelete: SetNull)
   recipients NoticeRecipient[]
+  attachment NoticeAttachment?
 
   @@index([schoolId, createdAt])
+  @@index([publishAt])
 }
 
-// One message to one phone on one channel, with its delivery result.
+// A notice's file (PDF, PNG or JPG). Messages carry a link with `token`
+// (unguessable), which opens the file without signing in until the notice expires.
+model NoticeAttachment {
+  noticeId String @id
+  token    String @unique
+  fileName String
+  mimeType String
+  size     Int
+  data     Bytes
+
+  notice Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+}
+
+// One message to one phone on one channel, with its delivery result. The
+// recipient is a student's parent, a teacher or a staff member.
 model NoticeRecipient {
   id          String         @id @default(cuid())
   noticeId    String
   studentId   String?
+  teacherId   String?
+  staffId     String?
   name        String
   className   String?
   phone       String?
@@ -838,8 +882,10 @@ model NoticeRecipient {
   providerRef String?
   sentAt      DateTime?
 
-  notice  Notice   @relation(fields: [noticeId], references: [id], onDelete: Cascade)
-  student Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  notice  Notice       @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  student Student?     @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  staff   StaffMember? @relation(fields: [staffId], references: [id], onDelete: SetNull)
 
   @@index([noticeId, status])
   @@index([studentId])

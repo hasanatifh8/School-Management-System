@@ -1,14 +1,16 @@
 "use client";
 
 import { startTransition, useActionState, useMemo, useRef, useState } from "react";
-import { Eye, Loader2, MessageCircle, MessageSquareText, Search, Send, TriangleAlert } from "lucide-react";
+import { CalendarClock, Eye, Loader2, MessageCircle, MessageSquareText, Paperclip, Presentation, Search, Send, TriangleAlert, UserCog } from "lucide-react";
 import { FormMessage } from "@/components/forms";
 import { Badge, buttonVariants, checkboxClass, inputClass, useConfirm } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { PLACEHOLDERS, TEMPLATES, smsParts } from "@/lib/messaging/providers";
 import type { NoticePreview } from "@/app/admin/notices/actions";
+import { addDays } from "@/lib/attendance-shared";
+import { ATTACHMENT_ACCEPT } from "@/lib/notices-shared";
 
-type Audience = "classes" | "students" | "absent" | "school";
+type Audience = "classes" | "students" | "absent" | "school" | "none";
 type Student = { id: string; name: string; className: string; hasPhone: boolean };
 
 /**
@@ -24,6 +26,7 @@ export function NoticeComposer({
   preview,
   send,
   absentDate,
+  people,
 }: {
   /** Open ready to message the parents of students absent on this date. */
   absentDate?: string;
@@ -34,6 +37,8 @@ export function NoticeComposer({
   today: string;
   preview: (s: NoticePreview, f: FormData) => Promise<NoticePreview>;
   send: (s: ActionState, f: FormData) => Promise<ActionState>;
+  /** Admins only: active teachers and staff, to add them as recipients. */
+  people?: { teachers: number; staff: number };
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -44,6 +49,8 @@ export function NoticeComposer({
   const [title, setTitle] = useState(absentDate ? absentTemplate.title : "");
   const [body, setBody] = useState(absentDate ? absentTemplate.body : "");
   const [changed, setChanged] = useState(true);
+  const [publishDate, setPublishDate] = useState(today);
+  const [expiryDate, setExpiryDate] = useState(addDays(today, 7));
   const [previewState, runPreview, previewing] = useActionState(preview, {});
   const [sendState, runSend, sending] = useActionState(send, {});
   const confirm = useConfirm();
@@ -79,6 +86,7 @@ export function NoticeComposer({
           { id: "students", label: "Students", hint: "Pick individual students" },
           { id: "absent", label: "Absent students", hint: "Marked absent on a day" },
           { id: "school", label: "Whole school", hint: "Every student" },
+          { id: "none", label: "No students", hint: "Only teachers or staff" },
         ]
       : [
           { id: "school", label: "Whole class", hint: "Everyone in my class" },
@@ -99,7 +107,8 @@ export function NoticeComposer({
       {/* 1. Who */}
       <section className="rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <h2 className="text-base font-semibold text-fg">1. Who should get it?</h2>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <p className="mt-1 text-xs text-muted">Students: their parents get the message.</p>
+        <div className={`mt-3 grid gap-2 sm:grid-cols-2 ${mode === "admin" ? "xl:grid-cols-5" : "xl:grid-cols-3"}`}>
           {choices.map((c) => (
             <label key={c.id} className="flex cursor-pointer gap-3 rounded-xl border border-line p-3 text-sm transition hover:border-accent-line has-[:checked]:border-accent has-[:checked]:bg-accent-soft/60">
               <input type="radio" name="audience" value={c.id} checked={audience === c.id} onChange={() => setAudience(c.id)} className="mt-0.5 accent-accent" />
@@ -197,6 +206,31 @@ export function NoticeComposer({
             <p className="basis-full text-xs text-muted">Uses the attendance marked for that day. Tip: pick the “Absent today” template below.</p>
           </div>
         )}
+
+        {people && (
+          <fieldset className="mt-5 border-t border-line pt-4">
+            <legend className="mb-2 text-sm font-medium text-fg-2">Also send to</legend>
+            <div className="flex flex-wrap gap-3">
+              {(
+                [
+                  ["toTeachers", "Teachers", Presentation, people.teachers, "On their phone and the teacher portal"],
+                  ["toStaff", "Non-teaching staff", UserCog, people.staff, "On their phone; cashiers also see it in Fees"],
+                ] as const
+              ).map(([name, label, Icon, count, hint]) => (
+                <label key={name} className="flex cursor-pointer items-start gap-3 rounded-xl border border-line px-4 py-3 text-sm transition hover:border-accent-line has-[:checked]:border-accent has-[:checked]:bg-accent-soft/60">
+                  <input type="checkbox" name={name} className={`${checkboxClass} mt-0.5`} />
+                  <Icon className="mt-0.5 h-4 w-4 text-muted" />
+                  <span>
+                    <span className="block font-medium text-fg">
+                      {label} <span className="font-normal text-subtle">({count})</span>
+                    </span>
+                    <span className="block text-xs text-muted">{hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
       </section>
 
       {/* 2. How */}
@@ -243,11 +277,11 @@ export function NoticeComposer({
         </div>
         <div className="mt-4 space-y-3">
           <label className="block max-w-xl">
-            <span className="mb-1.5 block text-sm font-medium text-fg-2">Title (for your records)</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-2">Notice title</span>
             <input name="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} placeholder="e.g. Annual Day invitation" className={inputClass} />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-fg-2">Message</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-2">Description / message</span>
             <textarea ref={bodyRef} name="body" value={body} onChange={(e) => setBody(e.target.value)} rows={5} maxLength={1000} className={inputClass} />
           </label>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -262,6 +296,41 @@ export function NoticeComposer({
             <p className="text-xs text-muted">
               {body.length}/1000 · about {smsParts(body)} SMS part{smsParts(body) === 1 ? "" : "s"} each
             </p>
+          </div>
+          <div className="grid gap-3 pt-2 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-fg-2">Publish date</span>
+              <input
+                type="date"
+                name="publishDate"
+                required
+                value={publishDate}
+                min={today}
+                onChange={(e) => {
+                  setPublishDate(e.target.value);
+                  if (e.target.value && expiryDate < e.target.value) setExpiryDate(addDays(e.target.value, 7));
+                }}
+                className={inputClass}
+              />
+              <span className="mt-1 block text-xs text-muted">{publishDate > today ? "Messages go out at 7 AM on this day." : "Messages go out as soon as you send."}</span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-fg-2">Expiry date</span>
+              <input type="date" name="expiryDate" required value={expiryDate} min={publishDate} onChange={(e) => setExpiryDate(e.target.value)} className={inputClass} />
+              <span className="mt-1 block text-xs text-muted">Active until the end of this day; the attachment link stops working after it.</span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-fg-2">
+                <Paperclip className="h-4 w-4" /> Attachment (optional)
+              </span>
+              <input
+                type="file"
+                name="attachment"
+                accept={ATTACHMENT_ACCEPT}
+                className="block w-full text-sm text-fg-2 file:mr-3 file:rounded-lg file:border-0 file:bg-accent-soft file:px-3 file:py-2 file:text-sm file:font-medium file:text-accent-text hover:file:bg-accent-soft/70"
+              />
+              <span className="mt-1 block text-xs text-muted">PDF, PNG or JPG up to 4 MB. Messages include a link to it.</span>
+            </label>
           </div>
           {/<[a-z ]+>/i.test(body) && (
             <p className="flex items-center gap-1.5 text-xs text-warning">
@@ -293,8 +362,11 @@ export function NoticeComposer({
                 <dd className="text-sm font-medium text-fg">{p.label}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted">Students</dt>
-                <dd className="text-2xl font-semibold tabular-nums text-fg">{p.students}</dd>
+                <dt className="text-xs text-muted">People</dt>
+                <dd className="text-2xl font-semibold tabular-nums text-fg">{p.people}</dd>
+                <dd className="text-xs text-muted">
+                  {[p.students && `${p.students} students`, p.teachers && `${p.teachers} teachers`, p.staff && `${p.staff} staff`].filter(Boolean).join(" · ")}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted">Messages to send</dt>
@@ -305,6 +377,17 @@ export function NoticeComposer({
                 <dd className={`text-2xl font-semibold tabular-nums ${p.skipped ? "text-warning" : "text-fg"}`}>{p.skipped}</dd>
               </div>
             </dl>
+            <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-2">
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarClock className="h-4 w-4 text-muted" />
+                {p.scheduled ? `Scheduled for ${p.publishLabel}` : "Sends now"} · active until {p.expiryLabel}
+              </span>
+              {p.attachment && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Paperclip className="h-4 w-4 text-muted" /> {p.attachment}
+                </span>
+              )}
+            </p>
             {p.sample && (
               <div className="max-w-md rounded-2xl rounded-tl-sm bg-success-soft px-4 py-3 text-sm text-fg ring-1 ring-inset ring-success-line">
                 <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-success">Sample · to {p.sample.name}</p>
@@ -318,14 +401,18 @@ export function NoticeComposer({
               onClick={(e) => {
                 e.preventDefault();
                 const button = e.currentTarget;
-                confirm({ title: `Send ${p.messages} message(s) now?`, message: "Messages can't be recalled once sent.", confirmLabel: "Send" }).then(
+                confirm(
+                  p.scheduled
+                    ? { title: `Schedule ${p.messages} message(s) for ${p.publishLabel}?`, message: "They go out automatically on that day.", confirmLabel: "Schedule" }
+                    : { title: `Send ${p.messages} message(s) now?`, message: "Messages can't be recalled once sent.", confirmLabel: "Send" },
+                ).then(
                   (ok) => ok && button.form?.requestSubmit(button),
                 );
               }}
               className={buttonVariants.primary}
             >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Send {p.messages} message{p.messages === 1 ? "" : "s"}
+              {p.scheduled ? "Schedule" : "Send"} {p.messages} message{p.messages === 1 ? "" : "s"}
             </button>
           </div>
         )}

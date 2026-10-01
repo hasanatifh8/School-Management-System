@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { getFeesAccess, outstandingByStudent } from "@/lib/fees";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
 import { sectionLabel } from "@/lib/queries";
+import { NoticeBoard } from "@/components/notices/notice-detail";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
@@ -44,6 +45,7 @@ export default async function FeesOverviewPage() {
 
   return (
     <div className="space-y-6">
+      <NoticeBoard schoolId={school.id} audience="staff" title="Notices for staff" />
       <StatGrid>
         <StatCard icon={IndianRupee} tone="emerald" label="Collected today" value={todayAgg._sum.total ?? 0} prefix="₹" detail={`${todayAgg._count} receipt(s)`} href="/admin/fees/receipts" />
         <StatCard icon={CalendarDays} tone="indigo" label="This month" value={monthAgg._sum.total ?? 0} prefix="₹" detail={`${monthAgg._count} receipt(s)`} />

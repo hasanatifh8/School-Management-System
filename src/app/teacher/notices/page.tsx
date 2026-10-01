@@ -1,6 +1,6 @@
 import { Megaphone } from "lucide-react";
 import { NoticeComposer } from "@/components/notices/notice-composer";
-import { NoticeList } from "@/components/notices/notice-detail";
+import { NoticeBoard, NoticeList } from "@/components/notices/notice-detail";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { previewNotice, sendNotice } from "@/app/admin/notices/actions";
 import { todayISO } from "@/lib/attendance-shared";
@@ -25,7 +25,10 @@ export default async function TeacherNoticesPage({ searchParams }: PageProps<"/t
     : [];
   return (
     <>
-      <PageHeader title="Notices" subtitle={ctx.classSection ? `Message the parents of ${sectionLabel(ctx.classSection)} by WhatsApp or SMS.` : undefined} />
+      <PageHeader title="Notices" subtitle={ctx.classSection ? `Notices from the school, and messages to the parents of ${sectionLabel(ctx.classSection)} by WhatsApp or SMS.` : "Notices from the school."} />
+      <div className="mb-8">
+        <NoticeBoard schoolId={ctx.school.id} audience="teachers" title="Notice board" empty="No notices for teachers right now." />
+      </div>
       {blocked ? (
         <Card>
           <EmptyState icon={Megaphone} title="Can't send notices" description={blocked} />

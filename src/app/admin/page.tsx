@@ -30,11 +30,13 @@ import {
   KpiCard,
   KpiGrid,
   QuickAction,
+  RecentResultsCard,
   UpcomingEventsCard,
   longToday,
   upcomingBirthdays,
   type Activity,
 } from "@/components/dashboard/widgets";
+import { ActiveNoticesCard } from "@/components/dashboard/notices-widget";
 import { ButtonLink, Callout, Card, EmptyState, PageHeader, TextLink } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool, getViewer } from "@/lib/school";
@@ -45,7 +47,9 @@ import { attendancePercent, emptyCounts, isSunday, parseISODate } from "@/lib/at
 import { loadCalendar } from "@/lib/calendar";
 import { monthlyFeeTrend } from "@/lib/fees";
 import { rupees } from "@/lib/fees-shared";
+import { loadActiveNotices } from "@/lib/messaging/server";
 
+const shortDay = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 
 export default async function DashboardPage() {
   const school = await getCurrentSchool();
@@ -78,6 +82,8 @@ export default async function DashboardPage() {
     recentTeachers,
     recentNotices,
     recentResults,
+    activeNotices,
+    publishedResults,
   ] = await Promise.all([
     db.student.count({ where: active }),
     db.teacher.count({ where: active }),
@@ -120,7 +126,22 @@ export default async function DashboardPage() {
       take: 3,
       include: { exam: { select: { id: true, name: true } }, section: { include: { class: true } } },
     }),
+    loadActiveNotices(school.id, 5),
+    db.examResult.findMany({
+      where: { exam: { schoolId: school.id } },
+      orderBy: { publishedAt: "desc" },
+      take: 5,
+      include: { exam: { select: { id: true, name: true, kind: true } }, section: { include: { class: true } } },
+    }),
   ]);
+  const deliveries = activeNotices.length
+    ? await db.noticeRecipient.groupBy({ by: ["noticeId", "status"], where: { noticeId: { in: activeNotices.map((n) => n.id) } }, _count: true })
+    : [];
+  const deliveryOf = (noticeId: string) => {
+    const of = (status: string) => deliveries.find((d) => d.noticeId === noticeId && d.status === status)?._count ?? 0;
+    const d = { sent: of("SENT"), failed: of("FAILED"), pending: of("PENDING"), skipped: of("SKIPPED") };
+    return { ...d, total: d.sent + d.failed + d.pending + d.skipped };
+  };
   const feeTrend = feeHeadCount ? await monthlyFeeTrend(school.id) : [];
 
   /* ── Today's attendance ── */
@@ -191,7 +212,8 @@ export default async function DashboardPage() {
       at: n.createdAt,
       icon: Megaphone,
       tone: "teal" as const,
-      title: "Notice sent",
+      // Created now, sent on its publish date: say so rather than "sent".
+      title: n.publishAt > n.createdAt ? `Notice scheduled for ${shortDay.format(n.publishAt)}` : "Notice sent",
       text: `${n.title} · ${n.audience}`,
       href: `/admin/notices/${n.id}`,
     })),
@@ -352,6 +374,48 @@ export default async function DashboardPage() {
             />
           )}
         </Card>
+      </div>
+
+      {/* Notices and results */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <ActiveNoticesCard
+          notices={activeNotices.map((n) => ({
+            id: n.id,
+            title: n.title,
+            body: n.body,
+            audience: n.audience,
+            channels: n.channels,
+            sentBy: n.sentBy,
+            createdAt: n.publishAt.toISOString(),
+            expiresOn: n.expiresOn ? n.expiresOn.toISOString().slice(0, 10) : null,
+            attachment: n.attachment ? { token: n.attachment.token, fileName: n.attachment.fileName } : null,
+            delivery: deliveryOf(n.id),
+          }))}
+        />
+        <RecentResultsCard
+          results={publishedResults.map((r) => ({
+            examId: r.exam.id,
+            examName: r.exam.name,
+            kind: r.exam.kind,
+            sectionId: r.sectionId,
+            section: sectionLabel(r.section),
+            publishedAt: r.publishedAt,
+            publishedBy: r.publishedBy,
+          }))}
+          empty={
+            <EmptyState
+              compact
+              icon={BarChart3}
+              title="No results published yet"
+              description="Once marks are in, publish results from an exam's page; they show here."
+              action={
+                <ButtonLink href="/admin/exams" variant="secondary" size="sm">
+                  Open exams
+                </ButtonLink>
+              }
+            />
+          }
+        />
       </div>
 
       {/* Lists */}

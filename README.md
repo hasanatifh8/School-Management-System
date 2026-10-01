@@ -41,7 +41,7 @@ Open http://localhost:3000. It redirects to the Admin Portal. You can use a Neon
 |---|---|
 | **Students** | Add, edit and remove students: name (with optional middle name), blood group, Aadhaar, category, religion, caste, nationality, WhatsApp, primary and correspondence address, last school, and father's and mother's names. Each student gets a unique ID (`STU-<year>-0001`). Assign a class and section. The class's subjects are allotted automatically, and you can adjust each student's subjects. Search and filter by class. |
 | **Teachers** | Add, edit and remove teachers. Each teacher gets a unique ID (`TCH-0001`). The teacher's page shows their class-teacher and subject-teacher roles. |
-| **Classes** | Add classes with sections (A, B, …). Set the class curriculum, with an option to apply changes to students already in the class. Assign one **class teacher** per section (a teacher can be class teacher of only one section) and a **subject teacher** for each subject in each section. |
+| **Classes** | Add classes with sections (A, B, …); the *Add a class* panel stays in view beside the list. A class shows its sections as tabs. Each section has its own **Overview** (roll numbers, class teacher, subject teachers), **Timetable** (that section's weekly timetable: fill in, lock, print) and **Attendance** (that section's students for a day, with its monthly register); switching sections keeps the same tab. The **Curriculum** button beside the tabs sets the subjects for every section of the class, with an option to apply changes to students already in it. Assign one **class teacher** per section (a teacher can be class teacher of only one section) and a **subject teacher** for each subject in each section: each subject's list shows only teachers who teach it (*Subjects they teach* on the teacher's profile). Unticking a subject there also removes the teacher from that subject's classes. |
 | **Subjects** | Add and delete subjects (name and code). |
 | **Houses** | Create houses with any name and colour (e.g. Green House). Assign students one at a time from their profile, or in bulk from the house page. |
 | **Sessions** | Academic years run April–March (e.g. 2026-27). At year end, click **Promote class** on each class: everyone moves up by default, and you mark anyone repeating, leaving or passing out. The next session is created automatically. Then **Start** it from the Sessions page. Each student's class history is kept. |
@@ -57,13 +57,15 @@ Open http://localhost:3000. It redirects to the Admin Portal. You can use a Neon
 
 **Removing** a student or teacher marks them inactive and does not delete them. This keeps their history (attendance, marks, fees later) and lets them be restored. A removed teacher loses their class-teacher and subject-teacher roles.
 
+**Deleting permanently:** once someone is removed, an admin can delete them for good: one person from their profile (*Edit profile → Delete permanently*), or everyone removed at once from the list's *Removed* tab. Both ask for the school code. This deletes their profile, photo, documents, attendance, marks and any login; fee receipts and salary payments stay, with the person's name. Active people can't be deleted, and every deletion is recorded in the Power Admin activity log.
+
 ## Power Admin (multiple schools)
 
 Power Admin at **`/power`** manages every school on the system:
 
 - **Schools:** add, edit (name, code, board, principal, contact details, **logo**), suspend or reactivate.
 - **Open Admin Portal:** switches the Admin Portal to that school. The sidebar shows its logo, plus a *Switch school* link when there are several schools.
-- **Data tools:** download a full Excel backup, load demo data into an empty school, purge removed students and teachers, clean unused files, **reset** a school's data, or **delete** a school (both ask you to type the school code).
+- **Data tools:** download a full Excel backup, load demo data into an empty school, purge removed students, teachers and staff, clean unused files, **reset** a school's data, or **delete** a school (both ask you to type the school code).
 - **System:** database size, migrations, unused files, and an **activity log** of every Power Admin action (including failed sign-ins).
 
 **Setup:** set `POWER_ADMIN_PASSWORD` (at least 10 characters) in the environment: in Vercel under *Settings → Environment Variables*, then redeploy, or in `.env` locally. Without it, Power Admin stays switched off. Sessions last 8 hours, and changing the password signs everyone out.
@@ -150,10 +152,11 @@ Teachers sign in at **`/login`** under the **Teacher** tab (or `/login?role=teac
 - A new session starts empty; **Copy fees from the previous session** copies them over.
 
 **Collecting fees** (*Fees → Collect fees*)
-1. Find a student by name, ID, father's name or phone, or open a class to see who owes what.
+1. Pick a class, then a section: each section card shows its students and how much is due now. The section's student list has an **All classes** button to go back. Or search any student by name, ID, father's name or phone.
 2. The student's fee page lists every instalment for the session: **Due**, **Part paid**, **Paid** or **Upcoming**. Everything due up to today is ticked.
    - Change amounts for a part payment (you can't pay more than the balance).
    - Tick upcoming instalments to take an advance.
+   - **Discounts** (admins only): enter a discount on an instalment and a reason (e.g. sibling discount, scholarship). The discounted amount counts as settled; it shows on the receipt and in the ledger. A full waiver makes a ₹0 receipt.
 3. Choose the date and how it was paid (Cash, UPI, Card, Cheque, Bank transfer, Other). UPI, cheque and bank transfer need a reference number.
 4. Click **Collect**. A numbered receipt is created (e.g. `2026-27/0001`) and opens ready to print.
 - Students who join mid-session are charged only from the month they were admitted.
@@ -161,8 +164,11 @@ Teachers sign in at **`/login`** under the **Teacher** tab (or `/login?role=teac
 **Receipts**
 - Each receipt shows the school details, the student, the fees paid (consecutive months shown as one line), the total and the amount in words.
 - It prints on A4 with a **parent copy and an office copy**, or as a single copy.
-- *Fees → Receipts* lists receipts by date with totals by payment mode.
+- *Fees → Receipts* has two views: **Date-wise** (receipts between two dates with totals by payment mode) and **Class-wise** (classes → sections → that section's receipts this session, each with **View**, **PDF** and **Print**).
+- Every receipt can be downloaded as a **PDF** file (A4, with the school logo).
 - Receipts are never deleted. An admin can **cancel** one with a reason: it stays on record marked "Cancelled", and its amounts become due again.
+
+**Fee ledger** (*a student's fee page → Fee ledger*): every instalment this session with total fee, discount, paid, pending, payment date, receipt number and status, plus the student's full payment history. It can be printed, viewed as a PDF or downloaded.
 
 **Overview:** collected today, this month and this session; today's collection by payment mode; recent receipts; and the amount due now in each class.
 
@@ -233,13 +239,20 @@ This section is for school admins and Power Admin. Cashiers can't see it.
   - Changing it means entering the keys again.
 
 **Sending**
-- **Admins** (*Notices → Send notice*) can send to selected classes, individual students, students **absent** on a day (from attendance), or the whole school.
+- **Admins** (*Notices → Send notice*) choose the students whose parents get it (classes, individual students, students **absent** on a day, the whole school, or none) and can also send it to **Teachers** and **Non-teaching staff** (to their own phones).
 - **Class teachers** (*Teacher Portal → Notices*) can send to their whole class, their absent students, or students they pick. Other classes are never included.
-- Choose WhatsApp, SMS or both. Write the message, or start from a template (Absent today, Holiday, Fee reminder, Parent-teacher meeting).
-- Placeholders are filled in for each student: `{student}`, `{class}`, `{roll}`, `{father}`, `{date}`, `{school}`.
-- **Review** shows how many messages will go out, how many students have no number, and a sample message. Then **Send**.
-- WhatsApp uses the student's WhatsApp number, or their phone number if there isn't one. SMS uses the phone number.
+- Choose WhatsApp, SMS or both. Write the **title** and **description**, or start from a template (Absent today, Holiday, Fee reminder, Parent-teacher meeting).
+- **Publish date:** today sends right away; a later date **schedules** the notice, and its messages go out at 7 AM on that day.
+- **Expiry date:** the notice is **Active** until the end of that day, then **Expired** (lists show Scheduled / Active / Expired).
+- **Attachment** (optional): a PDF, PNG or JPG up to 4 MB. Messages end with a short secret link to open it (no sign-in needed); the link stops working once the notice expires.
+- Placeholders are filled in for each person: `{student}`, `{class}`, `{roll}`, `{father}`, `{date}`, `{school}`. For teachers and staff, `{student}` is their own name.
+- **Review** shows how many people and messages, how many have no number, the schedule, and a sample message. Then **Send** (or **Schedule**).
+- WhatsApp uses the WhatsApp number, or the phone number if there isn't one. SMS uses the phone number.
 - Attendance has shortcuts: **Message parents** on the admin absent list, and **Message absent parents** on the teacher's attendance page.
+
+**Notice boards:** active notices for teachers show in the Teacher Portal (home page and Notices); notices for staff show on the Fees page for cashiers. The admin dashboard lists active notices.
+
+**Scheduled sending** needs the daily job in `vercel.json` (7 AM India time): set `CRON_SECRET` to a long random value in Vercel. Opening *Notices* also sends anything that has become due.
 
 **Delivery**
 - Messages are sent in the background (up to 60 seconds after sending), and also while the notice page is open. They're never sent twice.

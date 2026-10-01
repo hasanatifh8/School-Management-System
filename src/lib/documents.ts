@@ -31,8 +31,9 @@ export type DocumentUpload = {
 
 export async function readDocumentUpload(
   formData: FormData,
+  field = "file",
 ): Promise<{ file: DocumentUpload } | { error: string }> {
-  const file = formData.get("file");
+  const file = formData.get(field);
   if (!(file instanceof File) || file.size === 0) return { error: "Choose a file to upload." };
   if (file.size > MAX_DOCUMENT_BYTES) return { error: `File must be ${MAX_DOCUMENT_LABEL} or smaller.` };
 

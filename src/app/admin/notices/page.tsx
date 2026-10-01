@@ -9,7 +9,7 @@ import { previewNotice, sendNotice } from "./actions";
 export default async function SendNoticePage({ searchParams }: PageProps<"/admin/notices">) {
   const absent = (await searchParams).absent;
   const school = await getCurrentSchool();
-  const [messaging, sections, students] = await Promise.all([
+  const [messaging, sections, students, teacherCount, staffCount] = await Promise.all([
     loadMessaging(school.id),
     db.section.findMany({
       where: { class: { schoolId: school.id } },
@@ -21,6 +21,8 @@ export default async function SendNoticePage({ searchParams }: PageProps<"/admin
       orderBy: [{ section: { class: { sortOrder: "asc" } } }, { firstName: "asc" }],
       select: { id: true, firstName: true, middleName: true, lastName: true, phone: true, whatsappNumber: true, section: { include: { class: true } } },
     }),
+    db.teacher.count({ where: { schoolId: school.id, status: "ACTIVE" } }),
+    db.staffMember.count({ where: { schoolId: school.id, status: "ACTIVE" } }),
   ]);
   return (
     <NoticeComposer
@@ -32,6 +34,7 @@ export default async function SendNoticePage({ searchParams }: PageProps<"/admin
       absentDate={typeof absent === "string" && /^\d{4}-\d{2}-\d{2}$/.test(absent) ? absent : undefined}
       preview={previewNotice}
       send={sendNotice}
+      people={{ teachers: teacherCount, staff: staffCount }}
     />
   );
 }
