@@ -1,6 +1,6 @@
 import { GraduationCap } from "lucide-react";
 import type { ResultRow, Sheet } from "@/lib/exam-marks";
-import { GRADES, PASS_PERCENT, formatExamDate, formatMarks } from "@/lib/exams-shared";
+import { GRADES, PASS_PERCENT, RESULT_LABELS, formatExamDate, formatMarks } from "@/lib/exams-shared";
 
 /** A cell below its paper's pass mark (or absent). */
 const isLow = (c: Cell) => c.kind === "absent" || (c.kind === "marks" && !c.pass);
@@ -134,10 +134,10 @@ export function ReportCard({ sheet, school, row, total, className = "" }: { shee
       </table>
       <div className="mt-[4mm] grid grid-cols-4 gap-[3mm] text-center">
         {[
-          ["Percentage", r.complete && r.max && r.result !== "Absent" ? `${r.percent.toFixed(1)}%` : "—"],
+          ["Percentage", r.complete && r.max && !r.absent ? `${r.percent.toFixed(1)}%` : "—"],
           ["Grade", r.complete ? r.grade : "—"],
           ["Rank", r.rank ? `${r.rank} of ${total}` : "—"],
-          ["Result", r.result],
+          ["Result", RESULT_LABELS[r.result]],
         ].map(([label, value]) => (
           <div key={label} className="rounded border border-slate-300 py-[2mm]">
             <p className="text-[7.5pt] uppercase tracking-wider text-slate-500">{label}</p>
@@ -160,7 +160,7 @@ export function ReportCard({ sheet, school, row, total, className = "" }: { shee
 /** The whole section's results as one printable table. */
 export function ResultSheet({ sheet, school, rows }: { sheet: Sheet; school: SchoolHeader; rows: ResultRow[] }) {
   const passed = rows.filter((r) => r.result === "Pass").length;
-  const complete = rows.filter((r) => r.complete && r.max && r.result !== "Absent");
+  const complete = rows.filter((r) => r.complete && r.max && !r.absent);
   const avg = complete.length ? complete.reduce((n, r) => n + r.percent, 0) / complete.length : 0;
   return (
     <article data-pdf-page className="relative mx-auto overflow-hidden bg-white p-[10mm] text-[8.5pt] text-slate-900 shadow-md ring-1 ring-slate-200 print:p-0 print:shadow-none print:ring-0">
@@ -170,9 +170,11 @@ export function ResultSheet({ sheet, school, rows }: { sheet: Sheet; school: Sch
         <span>
           Students: <b>{rows.length}</b>
         </span>
-        <span>
-          Passed: <b>{passed}</b>
-        </span>
+        {sheet.published && (
+          <span>
+            Passed: <b>{passed}</b>
+          </span>
+        )}
         <span>
           Class average: <b>{complete.length ? `${avg.toFixed(1)}%` : "—"}</b>
         </span>
@@ -215,11 +217,11 @@ export function ResultSheet({ sheet, school, rows }: { sheet: Sheet; school: Sch
                 <td className={`${cell} text-center font-semibold tabular-nums`}>
                   {formatMarks(r.obtained)}/{r.max}
                 </td>
-                <td className={`${cell} text-center tabular-nums`}>{r.complete && r.max && r.result !== "Absent" ? r.percent.toFixed(1) : "—"}</td>
+                <td className={`${cell} text-center tabular-nums`}>{r.complete && r.max && !r.absent ? r.percent.toFixed(1) : "—"}</td>
                 <td className={`${cell} text-center font-semibold`}>{r.complete ? r.grade : "—"}</td>
                 <td className={`${cell} text-center tabular-nums`}>{r.rank ?? "—"}</td>
-                <td className={`${cell} text-center font-semibold ${r.result === "Fail" || r.result === "Absent" ? "text-rose-700" : r.result === "Incomplete" ? "text-slate-400" : ""}`}>
-                  {r.result}
+                <td className={`${cell} text-center font-semibold ${r.result === "Fail" || r.result === "Absent" ? "text-rose-700" : r.result === "Incomplete" || r.result === "Awaited" ? "text-slate-400" : ""}`}>
+                  {RESULT_LABELS[r.result]}
                 </td>
               </tr>
             ))}

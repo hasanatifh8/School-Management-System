@@ -128,7 +128,7 @@ export function ResultsView({
   }
 
   /* ── List and result sheet share a header with tabs ── */
-  const complete = rows.filter((r) => r.complete && r.max && r.result !== "Absent");
+  const complete = rows.filter((r) => r.complete && r.max && !r.absent);
   const passed = rows.filter((r) => r.result === "Pass").length;
   const failed = rows.filter((r) => r.result === "Fail").length;
   const avg = complete.length ? complete.reduce((n, r) => n + r.percent, 0) / complete.length : null;
@@ -184,8 +184,17 @@ export function ResultsView({
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <StatCard icon={Users} tone="indigo" label="Students" value={rows.length} />
-          <StatCard icon={FileBarChart} tone="emerald" label="Passed" value={passed} />
-          <StatCard icon={FileBarChart} tone="rose" label="Failed" value={failed} />
+          {sheet.published ? (
+            <>
+              <StatCard icon={FileBarChart} tone="emerald" label="Passed" value={passed} />
+              <StatCard icon={FileBarChart} tone="rose" label="Failed" value={failed} />
+            </>
+          ) : (
+            <>
+              <StatCard icon={FileBarChart} tone="emerald" label="Marks complete" value={rows.filter((r) => r.result === "Awaited").length} detail="Result awaited" />
+              <StatCard icon={FileBarChart} tone="amber" label="Marks pending" value={rows.filter((r) => r.result === "Incomplete").length} detail="Not published yet" />
+            </>
+          )}
           <StatCard icon={TableProperties} tone="sky" label="Class average" value={avg == null ? "—" : `${avg.toFixed(1)}%`} />
           <StatCard icon={FileBarChart} tone="amber" label="Highest" value={top == null ? "—" : `${formatMarks(top)}%`} />
         </div>

@@ -179,5 +179,20 @@ export function parseMark(text: string, max: number): { empty: true } | { absent
   return { marks: n };
 }
 
+/**
+ * A student's result. Pass / Fail / Absent appear only once the section's results
+ * are published; before that it is "Incomplete" (marks missing) or "Awaited".
+ */
+export type ResultStatus = "Pass" | "Fail" | "Absent" | "Incomplete" | "Awaited";
+
+/** What each result is called on screen and on paper. */
+export const RESULT_LABELS: Record<ResultStatus, string> = {
+  Pass: "Pass",
+  Fail: "Fail",
+  Absent: "Absent",
+  Incomplete: "Marks pending",
+  Awaited: "Result awaited",
+};
+
 /** 32.5 → "32.5", 40 → "40" */
 export const formatMarks = (n: number) => String(Math.round(n * 100) / 100);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Download, Eye, Printer, Search, SearchX, Trophy, X } from "lucide-react";
 import { Avatar, Badge, EmptyState, PagedList, buttonVariants, inputClass, selectClass } from "@/components/ui";
+import { RESULT_LABELS, type ResultStatus } from "@/lib/exams-shared";
 
 const iconBtn = "rounded-lg p-2 text-subtle transition hover:bg-surface-3 hover:text-fg-2";
 
@@ -19,7 +20,7 @@ export type StudentResult = {
   percent: number | null;
   grade: string;
   rank: number | null;
-  result: "Pass" | "Fail" | "Incomplete" | "Absent";
+  result: ResultStatus;
   failed: string[];
 };
 
@@ -40,6 +41,7 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
       Fail: students.filter((s) => s.result === "Fail").length,
       Incomplete: students.filter((s) => s.result === "Incomplete").length,
       Absent: students.filter((s) => s.result === "Absent").length,
+      Awaited: students.filter((s) => s.result === "Awaited").length,
     }),
     [students],
   );
@@ -61,7 +63,8 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
     { key: "all", label: "All", tone: "bg-fg text-canvas" },
     { key: "Pass", label: "Pass", tone: "bg-success-solid text-white" },
     { key: "Fail", label: "Fail", tone: "bg-danger-solid text-white" },
-    { key: "Incomplete", label: "Incomplete", tone: "bg-warning-solid text-white" },
+    { key: "Awaited", label: "Result awaited", tone: "bg-accent text-white" },
+    { key: "Incomplete", label: "Marks pending", tone: "bg-warning-solid text-white" },
     { key: "Absent", label: "Absent", tone: "bg-fg-2 text-canvas" },
   ];
 
@@ -145,7 +148,7 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
                   )}
                 </span>
                 <span className="w-24 text-right">
-                  <Badge tone={s.result === "Pass" ? "green" : s.result === "Fail" || s.result === "Absent" ? "red" : "slate"}>{s.result}</Badge>
+                  <Badge tone={s.result === "Pass" ? "green" : s.result === "Fail" || s.result === "Absent" ? "red" : "slate"}>{RESULT_LABELS[s.result]}</Badge>
                 </span>
               </Link>
               <Link href={`${cardHref}${s.id}`} className={`${buttonVariants.secondary} !px-3 !py-1.5 text-xs`}>

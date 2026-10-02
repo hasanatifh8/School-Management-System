@@ -715,7 +715,7 @@ const TOOLS: Tool[] = [
           continue;
         }
         const results = computeResults(sheet);
-        const complete = results.filter((r) => r.complete && r.max && r.result !== "Absent");
+        const complete = results.filter((r) => r.complete && r.max && !r.absent);
         const summary = {
           section: sheet.section.label,
           published: !!sheet.published,
@@ -724,6 +724,7 @@ const TOOLS: Tool[] = [
           fail: results.filter((r) => r.result === "Fail").length,
           incomplete: results.filter((r) => r.result === "Incomplete").length,
           absent: results.filter((r) => r.result === "Absent").length,
+          awaitingPublication: results.filter((r) => r.result === "Awaited").length,
           averagePercent: complete.length ? Math.round((complete.reduce((n, r) => n + r.percent, 0) / complete.length) * 10) / 10 : null,
           toppers: complete
             .filter((r) => r.rank != null && r.rank <= 3)

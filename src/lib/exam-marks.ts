@@ -11,7 +11,7 @@ import "server-only";
 import type { ActionState } from "@/lib/action-state";
 import { isoDate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { formatMarks, gradeFor, paperName, parseMark, passes } from "@/lib/exams-shared";
+import { formatMarks, gradeFor, paperName, parseMark, passes, type ResultStatus } from "@/lib/exams-shared";
 import type { ExamActor, LoadedExam } from "@/lib/exams";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -136,7 +136,8 @@ export function completion(sheet: Sheet) {
  * Totals, percentage, grade, pass/fail and rank for every student of the sheet.
  * Optional papers are graded on their own pass marks but left out of the total
  * and the result. A student absent from every paper is "Absent": no rank, and
- * left out of class statistics.
+ * left out of class statistics. Until the results are published, nobody is
+ * shown as passed or failed: the result is "Incomplete" or "Awaited".
  */
 export function computeResults(sheet: Sheet) {
   const rows = sheet.students.map((s) => {
@@ -170,6 +171,8 @@ export function computeResults(sheet: Sheet) {
     });
     const percent = max ? (obtained / max) * 100 : 0;
     const absent = taken > 0 && absences === taken;
+    const verdict: ResultStatus = absent ? "Absent" : failed.length ? "Fail" : "Pass";
+    const result: ResultStatus = !complete && !absent ? "Incomplete" : sheet.published ? verdict : "Awaited";
     return {
       student: s,
       cells,
@@ -178,19 +181,15 @@ export function computeResults(sheet: Sheet) {
       percent,
       grade: max && !absent ? gradeFor(percent) : "—",
       complete,
-      failed: absent ? [] : failed,
-      result: absent
-        ? ("Absent" as const)
-        : !complete
-          ? ("Incomplete" as const)
-          : failed.length
-            ? ("Fail" as const)
-            : ("Pass" as const),
+      /** Papers below the pass mark; shown only once results are published. */
+      failed: absent || !sheet.published ? [] : failed,
+      absent,
+      result,
       rank: null as number | null,
     };
   });
   // Rank complete results by percentage; equal percentages share a rank (1, 1, 3).
-  const ranked = rows.filter((r) => r.complete && r.max && r.result !== "Absent").sort((a, b) => b.percent - a.percent);
+  const ranked = rows.filter((r) => r.complete && r.max && !r.absent).sort((a, b) => b.percent - a.percent);
   ranked.forEach((r, i) => {
     r.rank = i > 0 && Math.abs(ranked[i - 1].percent - r.percent) < 1e-9 ? ranked[i - 1].rank : i + 1;
   });
