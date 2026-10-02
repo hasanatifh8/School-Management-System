@@ -1,14 +1,13 @@
 import Link from "next/link";
-import { CalendarCog, CalendarRange, CircleCheck, CircleDashed, History, PartyPopper, Rocket, Save } from "lucide-react";
+import { CalendarCog, CalendarRange, CircleCheck, CircleDashed, History, PartyPopper, Rocket } from "lucide-react";
 import type { EnrollmentResult } from "@/generated/prisma/enums";
-import { ActionForm, Field, SubmitButton } from "@/components/forms";
+import { ActionForm, SubmitButton } from "@/components/forms";
 import {
   Badge,
   Card,
   PageHeader,
   Table,
   buttonVariants,
-  inputClass,
   tbodyClass,
   tdClass,
   thClass,
@@ -18,7 +17,8 @@ import {
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { getCurrentSession, getUpcomingSession, sessionName } from "@/lib/sessions";
-import { beginPromotion, startNextSession, updateSessionDates } from "./actions";
+import { beginPromotion, startNextSession } from "./actions";
+import { SessionDatesForm } from "./session-dates-form";
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -116,29 +116,10 @@ export default async function SessionsPage({ searchParams }: PageProps<"/admin/s
       >
         <div className="grid gap-6 lg:grid-cols-2">
           {[current, ...(upcoming ? [upcoming] : [])].map((s) => (
-            <ActionForm key={s.id} action={updateSessionDates.bind(null, s.id)} className="rounded-xl border border-line p-4">
-              {(state) => (
-                <>
-                  <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-fg">
-                    {s.name}
-                    <Badge tone={s.status === "CURRENT" ? "green" : "indigo"}>{s.status === "CURRENT" ? "Current" : "Upcoming"}</Badge>
-                  </p>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Start date" name="startDate" errors={state.fieldErrors} required>
-                      <input type="date" name="startDate" required defaultValue={isoDate(s.startDate)} className={inputClass} />
-                    </Field>
-                    <Field label="End date" name="endDate" errors={state.fieldErrors} required>
-                      <input type="date" name="endDate" required defaultValue={isoDate(s.endDate)} className={inputClass} />
-                    </Field>
-                  </div>
-                  <div className="mt-4">
-                    <SubmitButton variant="secondary" size="sm" icon={<Save className="h-4 w-4" />}>
-                      Save dates
-                    </SubmitButton>
-                  </div>
-                </>
-              )}
-            </ActionForm>
+            <SessionDatesForm
+              key={s.id}
+              session={{ id: s.id, name: s.name, status: s.status, startDate: isoDate(s.startDate), endDate: isoDate(s.endDate) }}
+            />
           ))}
         </div>
         <p className="mt-4 text-xs text-muted">
