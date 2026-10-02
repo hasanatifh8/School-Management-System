@@ -42,7 +42,15 @@ export default async function ClassTimetablePage({ params }: PageProps<"/admin/t
           </div>
         }
       >
-        {data.subjects.length === 0 ? (
+        {!data.periods.some((p) => !p.isBreak) ? (
+          <EmptyState
+            compact
+            icon={CalendarClock}
+            title="No periods in the bell schedule"
+            description="Add the periods of a school day first, then fill in the timetable."
+            action={<ButtonLink href="/admin/timetable/periods">Set up periods</ButtonLink>}
+          />
+        ) : data.subjects.length === 0 ? (
           <EmptyState
             compact
             icon={CalendarClock}

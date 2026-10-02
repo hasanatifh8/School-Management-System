@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Coffee, Copy, Eraser, Save, TriangleAlert } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { buttonVariants } from "@/components/ui";
@@ -36,16 +36,6 @@ export function TimetableEditor({
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
 }) {
   const [slots, setSlots] = useState(initial);
-  const ref = useRef<HTMLDivElement>(null);
-
-  // The form resets after a save; put the chosen values back in the selects.
-  useEffect(() => {
-    const form = ref.current?.closest("form");
-    if (!form) return;
-    const onReset = () => setTimeout(() => setSlots((prev) => ({ ...prev })));
-    form.addEventListener("reset", onReset);
-    return () => form.removeEventListener("reset", onReset);
-  }, []);
   const teaching = periods.filter((p) => !p.isBreak);
   const set = (key: string, slot: Slot) => setSlots((prev) => ({ ...prev, [key]: slot }));
   const clashes = Object.entries(slots).filter(([key, s]) => s.teacher && busy[`${s.teacher}:${key}`]).length;
@@ -61,8 +51,10 @@ export function TimetableEditor({
   }
 
   return (
-    <ActionForm action={action} className="space-y-4">
-      <div ref={ref} className="flex flex-wrap items-center gap-2">
+    // keepValues: a form reset would blank every controlled select (and so the saved teachers);
+    // the page remounts this editor with the saved grid instead.
+    <ActionForm action={action} keepValues className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="mr-auto text-sm text-muted">
           <span className="font-semibold text-fg tabular-nums">{filled}</span> of {teaching.length * days.length} periods filled
           {clashes > 0 && (

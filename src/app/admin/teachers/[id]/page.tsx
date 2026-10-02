@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BookOpen,
   Briefcase,
+  CalendarClock,
   CalendarDays,
   Crown,
   Droplet,
@@ -16,7 +17,9 @@ import {
   MapPin,
   MessageCircle,
   Pencil,
+  Layers,
   Phone,
+  Printer,
   RotateCcw,
   UserRound,
   UserRoundX,
@@ -27,13 +30,16 @@ import { ActionForm, SubmitButton } from "@/components/forms";
 import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
-import { Avatar, Badge, ButtonLink, Card, IconTile, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, Card, IconTile, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { loadTeacherTimetable } from "@/lib/timetable";
+import { DAY_NAMES, periodTime } from "@/lib/timetable-shared";
+import { TimetableGrid } from "@/components/timetable/timetable-grid";
 import {
   changeTeacherUsername,
   issueTeacherLogin,
@@ -51,7 +57,7 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", t
 const monthFormat = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 const GENDER_LABELS = { MALE: "Male", FEMALE: "Female", OTHER: "Other" } as const;
 
-const TABS = ["overview", "edit", "documents"] as const;
+const TABS = ["overview", "timetable", "edit", "documents"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Whole years and months from a date until today (India), e.g. "3 yrs 2 mos". */
@@ -105,6 +111,7 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
     },
   });
   if (!teacher) notFound();
+  const timetable = await loadTeacherTimetable(school.id, teacher.id);
 
   const name = fullName(teacher);
   const removed = teacher.status === "INACTIVE";
@@ -176,10 +183,13 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
       <div className="mb-6 border-b border-line">
         <nav aria-label="Teacher sections" className={tabBarClass}>
           <StatusTab href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
+          <StatusTab href={`${base}?tab=timetable`} active={tab === "timetable"} label="Timetable" icon={CalendarClock} count={timetable.count} />
           <StatusTab href={`${base}?tab=edit`} active={tab === "edit"} label="Edit profile" icon={Pencil} />
           <StatusTab href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={teacher.documents.length} />
         </nav>
       </div>
+
+      {tab === "timetable" && <TeacherTimetable timetable={timetable} teacherId={teacher.id} />}
 
       {tab === "documents" && <DocumentsPanel ownerKind="teacher" ownerId={teacher.id} documents={teacher.documents} />}
 
@@ -424,6 +434,82 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
         </div>
       )}
     </>
+  );
+}
+
+/** The periods this teacher is given in class timetables, as a week grid and a day-by-day list. */
+function TeacherTimetable({ timetable: t, teacherId }: { timetable: Awaited<ReturnType<typeof loadTeacherTimetable>>; teacherId: string }) {
+  const byDay = t.days.map((day) => ({ day, entries: t.entries.filter((e) => e.day === day) })).filter((d) => d.entries.length);
+  return (
+    <div className="space-y-6">
+      <StatGrid>
+        <StatCard icon={CalendarClock} tone="indigo" label="Periods a week" value={t.count} detail={`Across ${t.days.length} school day${t.days.length === 1 ? "" : "s"}`} />
+        <StatCard icon={Layers} tone="sky" label="Sections" value={t.sectionCount} detail="Classes with at least one period" />
+      </StatGrid>
+      <Card
+        title="Weekly timetable"
+        icon={CalendarClock}
+        description="Filled in from each class's timetable."
+        action={
+          <ButtonLink href={`/admin/timetable/teachers/${teacherId}`} variant="ghost" size="sm" icon={Printer}>
+            Open full view
+          </ButtonLink>
+        }
+      >
+        {!t.periods.some((p) => !p.isBreak) ? (
+          <p className="text-sm text-muted">
+            The bell schedule has no periods yet.{" "}
+            <Link href="/admin/timetable/periods" className="font-medium text-accent-text hover:underline">
+              Set up periods
+            </Link>
+          </p>
+        ) : t.count === 0 ? (
+          <p className="text-sm text-muted">
+            No periods assigned yet. Choose this teacher for a period in a{" "}
+            <Link href="/admin/timetable" className="font-medium text-accent-text hover:underline">
+              class timetable
+            </Link>
+            .
+          </p>
+        ) : (
+          <TimetableGrid days={t.days} periods={t.periods} cells={t.cells} />
+        )}
+      </Card>
+      {byDay.length > 0 && (
+        <Card title="Day by day" icon={CalendarDays} padded={false}>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className={theadClass}>
+                <tr>
+                  <th className={thClass}>Day</th>
+                  <th className={thClass}>Time</th>
+                  <th className={thClass}>Class</th>
+                  <th className={thClass}>Subject</th>
+                </tr>
+              </thead>
+              <tbody className={tbodyClass}>
+                {byDay.flatMap(({ day, entries }) =>
+                  entries.map((e, i) => (
+                    <tr key={`${day}:${e.period.id}`}>
+                      <td className={`${tdClass} font-medium text-fg`}>{i === 0 ? DAY_NAMES[day] : ""}</td>
+                      <td className={`${tdClass} whitespace-nowrap tabular-nums`}>
+                        {periodTime(e.period)} <span className="text-xs text-muted">· {e.period.name}</span>
+                      </td>
+                      <td className={tdClass}>
+                        <Link href={`/admin/timetable/class/${e.sectionId}`} className="text-accent-text hover:underline">
+                          {e.section}
+                        </Link>
+                      </td>
+                      <td className={`${tdClass} text-fg`}>{e.subject}</td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
 

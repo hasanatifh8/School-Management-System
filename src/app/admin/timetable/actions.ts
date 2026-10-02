@@ -26,9 +26,8 @@ export async function savePeriods(_: ActionState, formData: FormData): Promise<A
   const days = [...new Set(formData.getAll("day").map(Number))].filter((d) => d >= 1 && d <= 7).sort();
 
   if (!days.length) return { error: "Choose at least one school day." };
-  if (!names.length) return { error: "Add at least one period." };
+  // An empty schedule is allowed: it clears every class timetable.
   if (names.length > MAX_PERIODS) return { error: `A day can have at most ${MAX_PERIODS} periods and breaks.` };
-  if (!breaks.includes(false)) return { error: "Add at least one teaching period (not a break)." };
   for (let i = 0; i < names.length; i++) {
     const label = names[i] || `Row ${i + 1}`;
     if (!names[i] || names[i].length > 40) return { error: `${label}: enter a name (up to 40 letters).` };
@@ -55,7 +54,11 @@ export async function savePeriods(_: ActionState, formData: FormData): Promise<A
     await tx.school.update({ where: { id: school.id }, data: { timetableDays: days } });
   });
   revalidatePath("/", "layout");
-  return { ok: true, message: `Bell schedule saved: ${breaks.filter((b) => !b).length} periods a day, ${days.length} days a week.` };
+  const teaching = breaks.filter((b) => !b).length;
+  return {
+    ok: true,
+    message: names.length ? `Bell schedule saved: ${teaching} periods a day, ${days.length} days a week.` : "Bell schedule cleared. Add periods again whenever you're ready.",
+  };
 }
 
 export async function saveTimetable(sectionId: string, _: ActionState, formData: FormData): Promise<ActionState> {

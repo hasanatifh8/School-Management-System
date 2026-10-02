@@ -107,13 +107,29 @@ export async function loadTeacherTimetable(schoolId: string, teacherId: string) 
       include: { subject: true, section: { include: { class: true } } },
     }),
   ]);
+  const days = [...school.timetableDays].sort();
+  const order = new Map(periods.map((p, i) => [p.id, i]));
+  const period = new Map(periods.map((p) => [p.id, p]));
+  // Only periods that are still on the bell schedule and on a school day.
+  const live = slots.filter((s) => days.includes(s.day) && period.has(s.periodId));
   return {
-    days: [...school.timetableDays].sort(),
+    days,
     periods,
     cells: Object.fromEntries(
-      slots.map((s) => [slotKey(s.day, s.periodId), { title: s.subject?.name ?? s.label ?? "", sub: sectionLabel(s.section) }]),
+      live.map((s) => [slotKey(s.day, s.periodId), { title: s.subject?.name ?? s.label ?? "", sub: sectionLabel(s.section) }]),
     ),
-    count: slots.length,
+    count: live.length,
+    sectionCount: new Set(live.map((s) => s.sectionId)).size,
+    /** Each period taught, by day then time. */
+    entries: live
+      .sort((a, b) => a.day - b.day || order.get(a.periodId)! - order.get(b.periodId)!)
+      .map((s) => ({
+        day: s.day,
+        period: period.get(s.periodId)!,
+        sectionId: s.sectionId,
+        section: sectionLabel(s.section),
+        subject: s.subject?.name ?? s.label ?? "",
+      })),
   };
 }
 

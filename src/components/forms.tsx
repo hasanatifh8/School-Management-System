@@ -121,6 +121,8 @@ export function FormMessage({
  * Pass `syncKey` derived from server data to also resync when that data is
  * changed by another form on the page.
  * `children` may be a function (from Client Components only) to read field errors.
+ * Forms built from controlled `<select value>`s pass `keepValues`: a native
+ * reset would snap those to their first option while React state is unchanged.
  */
 export function ActionForm({
   action,
@@ -128,6 +130,7 @@ export function ActionForm({
   className = "",
   syncKey,
   compact = false,
+  keepValues = false,
 }: {
   action: Action;
   children: ReactNode | ((state: ActionState) => ReactNode);
@@ -135,6 +138,8 @@ export function ActionForm({
   syncKey?: string;
   /** Show the result as a small inline note (for one-line forms). */
   compact?: boolean;
+  /** Never reset the fields (the form is controlled and remounted with fresh data instead). */
+  keepValues?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const formRef = useRef<HTMLFormElement>(null);
@@ -147,13 +152,13 @@ export function ActionForm({
       return;
     }
     if (!state.ok) return;
-    formRef.current?.reset();
+    if (!keepValues) formRef.current?.reset();
     if (state.message) toast({ title: state.message });
-  }, [state, toast, compact]);
+  }, [state, toast, compact, keepValues]);
 
   useEffect(() => {
-    formRef.current?.reset();
-  }, [syncKey]);
+    if (!keepValues) formRef.current?.reset();
+  }, [syncKey, keepValues]);
 
   return (
     <form
