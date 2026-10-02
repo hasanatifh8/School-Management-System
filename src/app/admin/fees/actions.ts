@@ -349,9 +349,14 @@ function admissionFeeNote(account: NonNullable<Awaited<ReturnType<typeof loadStu
   if (admitted.slice(0, 7) <= start.slice(0, 7) || admitted > session.endDate.toISOString().slice(0, 10)) return null;
   const when = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(student.admissionDate);
   const from = student.feesFrom?.toISOString().slice(0, 10);
-  if (!from || from.slice(0, 7) >= admitted.slice(0, 7)) return `Admitted ${when}. Fees before admission are not charged.`;
+  // Opt-in fees (e.g. transport) set to start before admission are charged as chosen.
+  const optEarly = account.optionalHeads
+    .filter((o) => o.added && o.from && o.from < admitted.slice(0, 7))
+    .map((o) => `${o.name} charged from ${monthLabel(o.from!)}`);
+  const extra = optEarly.length ? ` ${optEarly.join("; ")}.` : "";
+  if (!from || from.slice(0, 7) >= admitted.slice(0, 7)) return `Admitted ${when}. ${optEarly.length ? "Other fees" : "Fees"} before admission are not charged.${extra}`;
   const picked = student.feesFromHeadIds.length ? heads.filter((h) => student.feesFromHeadIds.includes(h.id)).map((h) => h.name) : [];
-  return `Admitted ${when}. Fees before admission charged from ${monthLabel(from.slice(0, 7))}${picked.length ? ` for ${picked.join(", ")} only` : " for all fees"}.`;
+  return `Admitted ${when}. Fees before admission charged from ${monthLabel(from.slice(0, 7))}${picked.length ? ` for ${picked.join(", ")} only` : " for all fees"}.${extra}`;
 }
 
 /** The student's dues changed between loading the form and saving the payment. */

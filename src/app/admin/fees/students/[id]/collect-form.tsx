@@ -17,6 +17,14 @@ const MODE_ICONS = { CASH: Banknote, UPI: QrCode, CARD: CreditCard, CHEQUE: File
 
 const key = (d: DueItem) => dueKey(d.headId, d.period);
 
+/** Colours that tell the three kinds of dues apart: earlier months, this month, months ahead. */
+const TONE = {
+  previous: { label: "Previous dues", bar: "border-l-danger-solid", text: "text-danger", tint: "bg-danger-soft/50", dot: "bg-danger-solid" },
+  current: { label: "This month", bar: "border-l-warning-solid", text: "text-warning", tint: "bg-warning-soft/50", dot: "bg-warning-solid" },
+  advance: { label: "Pay in advance", bar: "border-l-info-solid", text: "text-info", tint: "bg-info-soft/50", dot: "bg-info-solid" },
+} as const;
+type Tone = keyof typeof TONE;
+
 /**
  * Collect a payment for a billing month: that month's fees as one total,
  * earlier unpaid months (with any late fee) as one line each, later months
@@ -137,12 +145,23 @@ export function CollectForm({
         </label>
       </div>
 
+      {open.length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-line px-4 py-2 text-xs text-muted sm:px-6" aria-hidden>
+          {(["previous", "current", "advance"] as const).map((t) => (
+            <span key={t} className="inline-flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${TONE[t].dot}`} />
+              {TONE[t].label}
+            </span>
+          ))}
+        </div>
+      )}
+
       {open.length === 0 ? (
         <SuccessState title="All paid up" description="Every fee for this session is paid." />
       ) : (
         <div className="divide-y divide-line">
           {/* This month, as one total */}
-          <Section title={`${summary.label} fees`} total={summary.currentTotal} late={lateIn(summary.current)} waiveLate={waiveLate}>
+          <Section tone="current" title={`${summary.label} fees`} total={summary.currentTotal} late={lateIn(summary.current)} waiveLate={waiveLate}>
             {summary.current.length === 0 ? (
               <p className="px-4 pb-4 text-sm text-muted sm:px-6">No fee falls due in {summary.label}.</p>
             ) : (
@@ -151,6 +170,7 @@ export function CollectForm({
                 title={summary.current.length === 1 ? summary.current[0].headName : `${summary.current.length} fees`}
                 open={expanded.has("current")}
                 onToggle={() => toggleOpen("current")}
+                tone="current"
                 {...groupProps}
               />
             )}
@@ -158,10 +178,10 @@ export function CollectForm({
 
           {/* Earlier months still unpaid */}
           {summary.previous.length > 0 && (
-            <Section title="Previous dues" total={summary.previousTotal} late={lateIn(summary.previous.flatMap((g) => g.items))} waiveLate={waiveLate}>
+            <Section tone="previous" title="Previous dues" total={summary.previousTotal} late={lateIn(summary.previous.flatMap((g) => g.items))} waiveLate={waiveLate}>
               <div className="divide-y divide-line">
                 {summary.previous.map((g) => (
-                  <MonthRow key={g.month} group={g} title={g.label} open={expanded.has(g.month)} onToggle={() => toggleOpen(g.month)} {...groupProps} />
+                  <MonthRow key={g.month} group={g} title={g.label} open={expanded.has(g.month)} onToggle={() => toggleOpen(g.month)} tone="previous" {...groupProps} />
                 ))}
               </div>
             </Section>
@@ -169,16 +189,16 @@ export function CollectForm({
 
           {/* Later months, folded away */}
           {summary.advance.length > 0 && (
-            <div>
+            <div className={`border-l-4 ${TONE.advance.bar}`}>
               <button
                 type="button"
                 onClick={() => setShowAdvance((v) => !v)}
                 aria-expanded={showAdvance}
-                className="flex w-full items-center gap-3 bg-surface-2/60 px-4 py-3 text-left text-sm transition hover:bg-surface-2 sm:px-6"
+                className="flex w-full items-center gap-3 bg-info-soft/30 px-4 py-3 text-left text-sm transition hover:bg-info-soft/60 sm:px-6"
               >
-                <CalendarClock className="h-4 w-4 shrink-0 text-subtle" />
+                <CalendarClock className="h-4 w-4 shrink-0 text-info" />
                 <span className="min-w-0 flex-1">
-                  <span className="font-medium text-fg">Pay in advance</span>
+                  <span className="font-medium text-info">Pay in advance</span>
                   <span className="block text-xs text-muted">
                     {monthShort(summary.advance[0].month)}
                     {summary.advance.length > 1 && ` – ${monthShort(summary.advance.at(-1)!.month)}`} · {rupees(summary.advance.reduce((n, g) => n + g.amount, 0))}
@@ -190,7 +210,7 @@ export function CollectForm({
               {showAdvance && (
                 <div className="divide-y divide-line border-t border-line">
                   {summary.advance.map((g) => (
-                    <MonthRow key={g.month} group={g} title={g.label} open={expanded.has(g.month)} onToggle={() => toggleOpen(g.month)} {...groupProps} />
+                    <MonthRow key={g.month} group={g} title={g.label} open={expanded.has(g.month)} onToggle={() => toggleOpen(g.month)} tone="advance" {...groupProps} />
                   ))}
                 </div>
               )}
@@ -337,11 +357,29 @@ function Part({ label, value, sign, tone = "text-fg" }: { label: string; value: 
 }
 
 /** A heading with its total (and late fee), over its rows. */
-function Section({ title, total, late, waiveLate, children }: { title: string; total: number; late: number; waiveLate: boolean; children: React.ReactNode }) {
+function Section({
+  tone,
+  title,
+  total,
+  late,
+  waiveLate,
+  children,
+}: {
+  tone: Tone;
+  title: string;
+  total: number;
+  late: number;
+  waiveLate: boolean;
+  children: React.ReactNode;
+}) {
+  const t = TONE[tone];
   return (
-    <section>
+    <section className={`border-l-4 ${t.bar}`}>
       <div className="flex items-baseline justify-between gap-3 px-4 pb-1 pt-4 sm:px-6">
-        <h3 className="text-eyebrow uppercase text-muted">{title}</h3>
+        <h3 className={`flex items-center gap-1.5 text-eyebrow uppercase ${t.text}`}>
+          <span className={`h-2 w-2 rounded-full ${t.dot}`} aria-hidden />
+          {title}
+        </h3>
         <span className="text-xs text-muted">
           <span className="font-semibold tabular-nums text-fg">{rupees(total)}</span>
           {late > 0 && <span className={waiveLate ? "line-through" : ""}> + {rupees(late)} late fee</span>}
@@ -364,6 +402,7 @@ function MonthRow({
   setAmount,
   waiveLate,
   lateOf,
+  tone,
 }: {
   group: MonthDues;
   title: string;
@@ -375,6 +414,7 @@ function MonthRow({
   setAmount: (d: DueItem, value: string) => void;
   waiveLate: boolean;
   lateOf: (d: DueItem) => number;
+  tone: Tone;
 }) {
   const keys = group.items.map(key);
   const late = group.items.reduce((n, d) => n + lateOf(d), 0);
@@ -387,7 +427,7 @@ function MonthRow({
   const status = group.items.some((d) => d.status === "OVERDUE") ? "Due" : group.items.some((d) => d.status === "PARTIAL") ? "Part paid" : "Upcoming";
 
   return (
-    <div className={count ? "bg-accent-soft/40" : ""}>
+    <div className={count ? TONE[tone].tint : ""}>
       <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
         <input ref={box} type="checkbox" checked={all} onChange={() => setMany(keys, !all)} className={checkboxClass} aria-label={`Pay ${title}`} />
         <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-3 text-left">

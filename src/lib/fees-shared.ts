@@ -134,6 +134,8 @@ export const dueKey = (headId: string, period: string) => `${headId}|${period}`;
  * - Heads without an amount for the student's class don't apply.
  * - Optional heads apply only if the student was added to them, from the month
  *   they were added (`optIns` maps head → first day charged, null = whole session).
+ *   A start month earlier than admission is honoured as chosen.
+ * - A one-time fee for a mid-session admission falls due on the admission date.
  * - One-time heads apply only to students admitted during this session.
  * - Instalments that ended before the student was admitted are skipped, unless
  *   fees staff chose to charge from an earlier month (`chargeFrom`), and then
@@ -177,6 +179,8 @@ export function studentDues({
     // Anything already paid still shows, even if the head no longer applies.
     const applies = amount != null && amount > 0 && (!head.optional || optIns.has(head.id));
     const optFrom = head.optional ? (optIns.get(head.id) ?? null) : null;
+    // An opt-in fee started before admission was set that way on purpose: it overrides the admission rule.
+    const optOverride = !!optFrom && optFrom < admissionDate;
     const backOk = !backHeadIds.length || backHeadIds.includes(head.id);
     for (const p of feePeriods(head, session.start, session.name)) {
       const k = dueKey(head.id, p.key);
@@ -186,9 +190,11 @@ export function studentDues({
       const charged =
         applies &&
         (head.frequency !== "ONE_TIME" || admissionDate >= session.start) &&
-        p.end >= start &&
-        (!beforeAdmission || backOk) &&
-        (!optFrom || p.end >= optFrom);
+        (optOverride
+          ? p.end >= optFrom!
+          : p.end >= start && (!beforeAdmission || backOk) && (!optFrom || p.end >= optFrom));
+      // A one-time fee (e.g. admission) falls due on the admission date for a mid-session admission.
+      const dueOn = head.frequency === "ONE_TIME" && admissionDate > p.due ? admissionDate : p.due;
       if (!charged && !paidSoFar && !discount) continue;
       const due = charged ? priced.get(k) || amount! : paidSoFar + discount;
       const balance = Math.max(0, due - paidSoFar - discount);
@@ -203,12 +209,12 @@ export function studentDues({
         frequency: head.frequency,
         period: p.key,
         label: p.label,
-        due: p.due,
+        due: dueOn,
         amount: due,
         paid: paidSoFar,
         discount,
         balance,
-        status: balance === 0 ? "PAID" : paidSoFar + discount > 0 ? "PARTIAL" : p.due <= today ? "OVERDUE" : "UPCOMING",
+        status: balance === 0 ? "PAID" : paidSoFar + discount > 0 ? "PARTIAL" : dueOn <= today ? "OVERDUE" : "UPCOMING",
         // Charged once per instalment, only after the due date has passed.
         lateFee: today > lateAfter ? lateFeeRate : 0,
         lateFeeRate,

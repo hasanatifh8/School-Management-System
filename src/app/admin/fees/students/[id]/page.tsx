@@ -159,7 +159,9 @@ export default async function StudentFeesPage({ params, searchParams }: PageProp
             </Card>
           ) : active ? (
             <CollectForm
-              key={targetMonth}
+              // Start afresh when the month or the dues change (e.g. an opt-in fee was added),
+              // so new instalments are ticked and filled in like the rest.
+              key={`${targetMonth}|${dues.map((d) => `${d.headId}:${d.period}:${d.balance}`).join(",")}`}
               dues={dues}
               today={today}
               minDate={session.startDate.toISOString().slice(0, 10)}
