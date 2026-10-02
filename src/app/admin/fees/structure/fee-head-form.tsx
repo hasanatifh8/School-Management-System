@@ -7,7 +7,7 @@ import { buttonVariants, checkboxClass, inputClass, selectClass } from "@/compon
 import type { ActionState } from "@/lib/action-state";
 import { FREQUENCIES, FREQUENCY_META, MONTH_NAMES, type Frequency } from "@/lib/fees-shared";
 
-type Head = { name: string; frequency: Frequency; optional: boolean; dueDay: number; dueMonth: number | null; amounts: Record<string, number> };
+type Head = { name: string; frequency: Frequency; optional: boolean; dueDay: number; dueMonth: number | null; lateFee: number; amounts: Record<string, number> };
 
 /** Add or edit a fee: name, how often, due day, and the amount for each class. */
 export function FeeHeadForm({
@@ -81,6 +81,9 @@ export function FeeHeadForm({
                 </Field>
               )}
               {frequency === "ONE_TIME" && <input type="hidden" name="dueDay" value={head?.dueDay ?? 10} />}
+              <Field label="Late fee (₹)" name="lateFee" errors={e} hint="Added once per instalment paid after its due date. Blank for none.">
+                <input name="lateFee" inputMode="numeric" defaultValue={head?.lateFee || ""} placeholder="e.g. 100" className={inputClass} />
+              </Field>
             </div>
 
             <label className="flex max-w-xl items-start gap-3 rounded-xl border border-line p-3 text-sm">

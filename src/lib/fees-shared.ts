@@ -93,6 +93,8 @@ export type FeeHeadInfo = {
   optional: boolean;
   dueDay: number;
   dueMonth: number | null;
+  /** Extra charge, once per instalment, when it is paid after its due date. */
+  lateFee: number;
   amounts: Record<string, number>; // classId → rupees
 };
 
@@ -111,49 +113,90 @@ export type DueItem = {
   discount: number;
   balance: number;
   status: DueStatus;
+  /** Late fee owed as of today: unpaid past `lateAfter`, and no late fee taken yet. */
+  lateFee: number;
+  /** The head's late fee, if one can still be charged on this instalment (0 if none or already paid). */
+  lateFeeRate: number;
+  /** Late if paid after this day: the due date, or the admission date for a student who joined later. */
+  lateAfter: string;
+  /** Late fee already collected on this instalment. */
+  lateFeePaid: number;
+  /** A month before the student's admission, charged because fees staff chose to. */
+  beforeAdmission: boolean;
+  /** Left unpaid from an earlier session (its name), carried into this one. */
+  arrears: string | null;
 };
 
 export const dueKey = (headId: string, period: string) => `${headId}|${period}`;
 
 /**
- * Everything a student is charged this session, instalment by instalment.
+ * Everything a student is charged in a session, instalment by instalment.
  * - Heads without an amount for the student's class don't apply.
- * - Optional heads apply only if the student was added to them.
+ * - Optional heads apply only if the student was added to them, from the month
+ *   they were added (`optIns` maps head → first day charged, null = whole session).
  * - One-time heads apply only to students admitted during this session.
- * - Instalments that ended before the student was admitted are skipped.
+ * - Instalments that ended before the student was admitted are skipped, unless
+ *   fees staff chose to charge from an earlier month (`chargeFrom`), and then
+ *   only for the fees they picked (`backHeadIds`, empty = every fee).
+ * - An instalment that already has a payment keeps the price it was paid at
+ *   (`priced`), so a later class change or fee change doesn't reprice it.
  */
 export function studentDues({
   heads,
   classId,
   admissionDate,
+  chargeFrom,
+  backHeadIds = [],
   optIns,
   paid,
   discounts = new Map(),
+  lateFeesPaid = new Map(),
+  priced = new Map(),
   session,
   today,
 }: {
   heads: FeeHeadInfo[];
   classId: string | null;
   admissionDate: string; // ISO date
-  optIns: Set<string>;
+  /** First day fees are charged from, when set earlier (or later) than admission. */
+  chargeFrom?: string | null;
+  /** Fees charged for the months before admission; empty = all of them. */
+  backHeadIds?: string[];
+  optIns: Map<string, string | null>;
   paid: Map<string, number>; // dueKey → rupees
   discounts?: Map<string, number>; // dueKey → rupees waived
+  lateFeesPaid?: Map<string, number>; // dueKey → late fee collected
+  priced?: Map<string, number>; // dueKey → instalment amount when it was paid
   session: { start: string; name: string };
   today: string;
 }): DueItem[] {
   const items: DueItem[] = [];
+  const start = chargeFrom ?? admissionDate;
   for (const head of heads) {
     const amount = classId ? head.amounts[classId] : undefined;
     // Anything already paid still shows, even if the head no longer applies.
     const applies = amount != null && amount > 0 && (!head.optional || optIns.has(head.id));
+    const optFrom = head.optional ? (optIns.get(head.id) ?? null) : null;
+    const backOk = !backHeadIds.length || backHeadIds.includes(head.id);
     for (const p of feePeriods(head, session.start, session.name)) {
-      const paidSoFar = paid.get(dueKey(head.id, p.key)) ?? 0;
-      const discount = discounts.get(dueKey(head.id, p.key)) ?? 0;
+      const k = dueKey(head.id, p.key);
+      const paidSoFar = paid.get(k) ?? 0;
+      const discount = discounts.get(k) ?? 0;
+      const beforeAdmission = p.end < admissionDate;
       const charged =
-        applies && (head.frequency !== "ONE_TIME" || admissionDate >= session.start) && p.end >= admissionDate;
+        applies &&
+        (head.frequency !== "ONE_TIME" || admissionDate >= session.start) &&
+        p.end >= start &&
+        (!beforeAdmission || backOk) &&
+        (!optFrom || p.end >= optFrom);
       if (!charged && !paidSoFar && !discount) continue;
-      const due = charged ? amount! : paidSoFar + discount;
+      const due = charged ? priced.get(k) || amount! : paidSoFar + discount;
       const balance = Math.max(0, due - paidSoFar - discount);
+      const lateFeePaid = lateFeesPaid.get(k) ?? 0;
+      // Nobody is late for a month before they joined (even when charged for it): those
+      // instalments fall late only after the first due day on or after admission.
+      const lateAfter = p.due >= admissionDate ? p.due : firstDueOnOrAfter(admissionDate, head.dueDay);
+      const lateFeeRate = charged && balance > 0 && head.lateFee > 0 && lateFeePaid === 0 ? head.lateFee : 0;
       items.push({
         headId: head.id,
         headName: head.name,
@@ -166,10 +209,24 @@ export function studentDues({
         discount,
         balance,
         status: balance === 0 ? "PAID" : paidSoFar + discount > 0 ? "PARTIAL" : p.due <= today ? "OVERDUE" : "UPCOMING",
+        // Charged once per instalment, only after the due date has passed.
+        lateFee: today > lateAfter ? lateFeeRate : 0,
+        lateFeeRate,
+        lateAfter,
+        lateFeePaid,
+        beforeAdmission: beforeAdmission && head.frequency !== "ONE_TIME",
+        arrears: null,
       });
     }
   }
   return items.sort((a, b) => a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName));
+}
+
+/** The first `dueDay` of a month falling on or after `date` ("2026-07-20", 10 → "2026-08-10"). */
+function firstDueOnOrAfter(date: string, dueDay: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  const inMonth = (yy: number, mm: number) => iso(yy, mm, Math.min(dueDay, lastDay(yy, mm)));
+  return d <= Math.min(dueDay, lastDay(y, m - 1)) ? inMonth(y, m - 1) : inMonth(m === 12 ? y + 1 : y, m === 12 ? 0 : m);
 }
 
 export function dueTotals(items: DueItem[], today: string) {
@@ -186,6 +243,86 @@ export function dueTotals(items: DueItem[], today: string) {
     else upcoming += i.balance;
   }
   return { total, paid, discount, dueNow, upcoming };
+}
+
+/* ───────────────────────── Dues for a target month ───────────────────────── */
+
+const longMonth = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+/** "2026-10" → "October 2026" */
+export const monthLabel = (month: string) => longMonth.format(new Date(`${month}-01T00:00:00Z`));
+
+export type MonthDues = { month: string; label: string; items: DueItem[]; amount: number; lateFee: number; subtotal: number };
+
+function groupMonths(items: DueItem[]): MonthDues[] {
+  const map = new Map<string, MonthDues>();
+  for (const d of items) {
+    const month = d.due.slice(0, 7);
+    const g = map.get(month) ?? { month, label: monthLabel(month), items: [], amount: 0, lateFee: 0, subtotal: 0 };
+    g.items.push(d);
+    g.amount += d.balance;
+    g.lateFee += d.lateFee;
+    g.subtotal += d.balance + d.lateFee;
+    map.set(month, g);
+  }
+  return [...map.values()].sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/**
+ * Splits a student's unpaid instalments around a target month ("2026-10"):
+ * the target month's demand (every fee falling due that month: monthly fees,
+ * a quarter or half-year starting then, a yearly fee set for it), earlier
+ * unpaid months, and later months that may be paid in advance.
+ */
+export function feeSummary(dues: DueItem[], targetMonth: string) {
+  const open = dues.filter((d) => d.balance > 0);
+  const current = open.filter((d) => d.due.slice(0, 7) === targetMonth);
+  const previous = groupMonths(open.filter((d) => d.due.slice(0, 7) < targetMonth));
+  const advance = groupMonths(open.filter((d) => d.due.slice(0, 7) > targetMonth));
+  const currentTotal = current.reduce((n, d) => n + d.balance, 0);
+  const currentLate = current.reduce((n, d) => n + d.lateFee, 0);
+  const previousTotal = previous.reduce((n, g) => n + g.amount, 0);
+  const previousLate = previous.reduce((n, g) => n + g.lateFee, 0);
+  return {
+    targetMonth,
+    label: monthLabel(targetMonth),
+    current,
+    currentTotal,
+    currentLate,
+    previous,
+    previousTotal,
+    previousLate,
+    advance,
+    lateFeeTotal: currentLate + previousLate,
+    totalOutstanding: currentTotal + previousTotal + currentLate + previousLate,
+  };
+}
+
+export type FeeSummary = ReturnType<typeof feeSummary>;
+
+/** The session's months ("2026-04" … "2027-03"), for choosing a target month. */
+export function sessionMonths(sessionStart: string) {
+  return Array.from({ length: 12 }, (_, i) => {
+    const [y, m] = sessionMonth(sessionStart, i);
+    return iso(y, m, 1).slice(0, 7);
+  });
+}
+
+/**
+ * Spreads a discount over the chosen instalments: this month's first, then
+ * earlier unpaid months (most recent first), then months paid in advance.
+ */
+export function allocateDiscount(chosen: { key: string; balance: number; month: string }[], discount: number, targetMonth: string) {
+  const rank = (m: string) => (m === targetMonth ? 0 : m < targetMonth ? 1 : 2);
+  const order = [...chosen].sort((a, b) => rank(a.month) - rank(b.month) || (rank(a.month) === 2 ? a.month.localeCompare(b.month) : b.month.localeCompare(a.month)));
+  const out = new Map<string, number>();
+  let left = discount;
+  for (const c of order) {
+    if (left <= 0) break;
+    const take = Math.min(left, c.balance);
+    if (take > 0) out.set(c.key, take);
+    left -= take;
+  }
+  return out;
 }
 
 /* ───────────────────────── Amount in words (Indian system) ───────────────────────── */

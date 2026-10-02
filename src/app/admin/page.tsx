@@ -196,7 +196,7 @@ export default async function DashboardPage() {
       tone: "emerald" as const,
       title: "Fee received",
       text: `${rupees(r.total)} from ${r.studentName} · ${r.number}`,
-      href: `/admin/fees/receipts/${r.id}`,
+      href: `/admin/fees/receipts/${r.id}?from=dashboard`,
     })),
     ...recentTeachers.map((t) => ({
       key: `t-${t.id}`,

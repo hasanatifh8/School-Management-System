@@ -101,6 +101,7 @@ export default async function FeeStructurePage() {
                       : h.frequency === "ONE_TIME"
                         ? "at admission"
                         : `due by the ${h.dueDay}${h.dueDay === 1 ? "st" : h.dueDay === 2 ? "nd" : h.dueDay === 3 ? "rd" : "th"}`}
+                    {h.lateFee > 0 && ` · late fee ${rupees(h.lateFee)}`}
                   </span>
                 </p>
                 {h.optional && (

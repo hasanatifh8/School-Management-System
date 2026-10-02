@@ -1,26 +1,47 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpenCheck, Bus, Receipt, School, TriangleAlert } from "lucide-react";
+import { BookOpenCheck, Bus, CalendarClock, Receipt, School, TriangleAlert } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Avatar, Badge, Breadcrumbs, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar } from "@/components/ui";
+import { Avatar, Badge, Breadcrumbs, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar, selectClass } from "@/components/ui";
 import { photoUrl } from "@/lib/photos";
 import { loadStudentAccount, getFeesAccess } from "@/lib/fees";
-import { FREQUENCY_META, MODE_LABELS, rupees } from "@/lib/fees-shared";
+import { FREQUENCY_META, MODE_LABELS, monthLabel, rupees, sessionMonths } from "@/lib/fees-shared";
+
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 import { fullName, sectionLabel } from "@/lib/queries";
-import { collectFee, setOptionalFee } from "../../actions";
+import { collectFee, setFeesFrom, setOptionalFee, setOptionalFeeFrom } from "../../actions";
 import { CollectForm } from "./collect-form";
+import { FeesFromForm } from "./fees-from-form";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /** A student's fees for the session: what's due, collecting a payment, and past receipts. */
-export default async function StudentFeesPage({ params }: PageProps<"/admin/fees/students/[id]">) {
+export default async function StudentFeesPage({ params, searchParams }: PageProps<"/admin/fees/students/[id]">) {
   const { id } = await params;
+  const { month: monthParam } = await searchParams;
   const { school, canManage } = await getFeesAccess();
   const account = await loadStudentAccount(school.id, id);
   if (!account) notFound();
   const { student, totals, dues, optionalHeads, receipts, today, session } = account;
   const name = fullName(student);
   const active = student.status === "ACTIVE";
+  // Fees that can be charged for months before admission: recurring ones this student pays.
+  const classId = student.section?.classId;
+  const backChoices = account.heads
+    .filter((h) => h.frequency !== "ONE_TIME" && classId && h.amounts[classId] && (!h.optional || optionalHeads.some((o) => o.id === h.id && o.added)))
+    .map((h) => ({ id: h.id, name: h.name }));
+  const admittedMidSession = isoDay(student.admissionDate).slice(0, 7) > isoDay(session.startDate).slice(0, 7);
+  // The billing month: ?month= if it is in the session, else this month (or the session's nearest end).
+  const months = sessionMonths(session.startDate.toISOString().slice(0, 10));
+  const thisMonth = today.slice(0, 7);
+  const targetMonth =
+    typeof monthParam === "string" && months.includes(monthParam)
+      ? monthParam
+      : months.includes(thisMonth)
+        ? thisMonth
+        : thisMonth < months[0]
+          ? months[0]
+          : months[11];
 
   return (
     <div className="space-y-6">
@@ -58,11 +79,44 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
           <Tile label="Paid" value={rupees(totals.paid)} tone="text-success" />
           <Tile label="Due now" value={rupees(totals.dueNow)} tone={totals.dueNow ? "text-danger" : "text-fg"} />
           <Tile label="Upcoming" value={rupees(totals.upcoming)} />
+          {account.arrearsTotal > 0 && <Tile label="Arrears (last session)" value={rupees(account.arrearsTotal)} tone="text-danger" />}
         </dl>
         {totals.total > 0 && (
           <ProgressBar value={(totals.paid / totals.total) * 100} tone="success" className="mt-3" label="Share of the session's fees paid" />
         )}
       </section>
+
+      {/* A student admitted mid-session is charged from the admission month, unless fees staff choose otherwise. */}
+      {active && (admittedMidSession || student.feesFrom) && (
+        <Callout icon={CalendarClock} tone="info">
+          <div className="space-y-3">
+            <p>
+              Admitted on <strong className="font-semibold">{shortDate.format(student.admissionDate)}</strong>.{" "}
+              {student.feesFrom ? (
+                <>
+                  Fees are charged from <strong className="font-semibold">{monthLabel(isoDay(student.feesFrom).slice(0, 7))}</strong>
+                  {student.feesFromHeadIds.length > 0 &&
+                    `, for ${backChoices
+                      .filter((h) => student.feesFromHeadIds.includes(h.id))
+                      .map((h) => h.name)
+                      .join(", ")} only before admission`}
+                  .
+                </>
+              ) : (
+                <>Fees are charged from the admission month; earlier months of the session aren&apos;t billed.</>
+              )}
+            </p>
+            <FeesFromForm
+              action={setFeesFrom.bind(null, student.id)}
+              months={months}
+              admissionMonth={isoDay(student.admissionDate).slice(0, 7)}
+              current={student.feesFrom ? isoDay(student.feesFrom).slice(0, 7) : ""}
+              heads={backChoices}
+              picked={student.feesFromHeadIds}
+            />
+          </div>
+        </Callout>
+      )}
 
       {/* Fees paid before the class was removed still list; say why nothing new is charged. */}
       {!student.section && active && dues.length > 0 && (
@@ -104,7 +158,15 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
               )}
             </Card>
           ) : active ? (
-            <CollectForm dues={dues} today={today} minDate={session.startDate.toISOString().slice(0, 10)} action={collectFee.bind(null, student.id)} canDiscount={canManage} />
+            <CollectForm
+              key={targetMonth}
+              dues={dues}
+              today={today}
+              minDate={session.startDate.toISOString().slice(0, 10)}
+              targetMonth={targetMonth}
+              months={months}
+              action={collectFee.bind(null, student.id)}
+            />
           ) : (
             <Card>
               <p className="text-sm text-fg-2">This student was removed, so no new payments can be taken. Past receipts are listed alongside.</p>
@@ -121,7 +183,7 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
             >
               <ul className="space-y-3">
                 {optionalHeads.map((h) => (
-                  <li key={h.id} className="flex items-center justify-between gap-3 text-sm">
+                  <li key={h.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
                     <span>
                       <span className="font-medium text-fg">{h.name}</span>
                       <span className="block text-xs text-muted">
@@ -133,6 +195,24 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
                         {h.added ? "Remove" : "Add"}
                       </SubmitButton>
                     </ActionForm>
+                    {h.added && (
+                      <ActionForm action={setOptionalFeeFrom.bind(null, student.id, h.id)} compact className="flex w-full flex-wrap items-center gap-2 text-xs">
+                        <label className="flex items-center gap-1.5 text-muted">
+                          From
+                          <select name="from" defaultValue={h.from ?? ""} className={`${selectClass} !w-40 !py-1 text-xs`}>
+                            <option value="">Whole session</option>
+                            {months.map((m) => (
+                              <option key={m} value={m}>
+                                {monthLabel(m)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <SubmitButton variant="ghost" size="sm">
+                          Save
+                        </SubmitButton>
+                      </ActionForm>
+                    )}
                   </li>
                 ))}
               </ul>

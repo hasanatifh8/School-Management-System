@@ -114,7 +114,7 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
                       {r.payments.length
                         ? r.payments.map((p) => (
                             <p key={p.id}>
-                              <Link href={`/admin/fees/receipts/${p.id}`} className="font-mono text-xs font-medium text-accent-text hover:underline">
+                              <Link href={`/admin/fees/receipts/${p.id}?from=ledger`} className="font-mono text-xs font-medium text-accent-text hover:underline">
                                 {p.number}
                               </Link>
                             </p>
@@ -164,7 +164,7 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
                   <tr key={h.id} className={h.cancelled ? "text-subtle" : "text-fg-2"}>
                     <td className={`${td} whitespace-nowrap`}>{fmt(h.date)}</td>
                     <td className={td}>
-                      <Link href={`/admin/fees/receipts/${h.id}`} className="font-mono text-xs font-medium text-accent-text hover:underline">
+                      <Link href={`/admin/fees/receipts/${h.id}?from=ledger`} className="font-mono text-xs font-medium text-accent-text hover:underline">
                         {h.number}
                       </Link>
                     </td>

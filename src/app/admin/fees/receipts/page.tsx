@@ -115,7 +115,7 @@ export default async function ReceiptsPage({ searchParams }: PageProps<"/admin/f
               {receipts.map((r) => (
                 <tr key={r.id} className={`${trClass} ${r.cancelledAt ? "text-subtle" : ""}`}>
                   <td className={tdClass}>
-                    <Link href={`/admin/fees/receipts/${r.id}`} className="font-mono text-xs font-medium text-accent-text hover:underline">
+                    <Link href={`/admin/fees/receipts/${r.id}?from=receipts`} className="font-mono text-xs font-medium text-accent-text hover:underline">
                       {r.number}
                     </Link>
                   </td>

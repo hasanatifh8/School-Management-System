@@ -9,7 +9,7 @@ const action =
 export function ReceiptActions({ id, number, className }: { id: string; number: string; className?: string }) {
   return (
     <div className={cx("flex items-center justify-end gap-0.5", className)}>
-      <Link href={`/admin/fees/receipts/${id}`} className={action} title={`View receipt ${number}`}>
+      <Link href={`/admin/fees/receipts/${id}?from=receipts`} className={action} title={`View receipt ${number}`}>
         <Eye aria-hidden />
         <span className="hidden xl:inline">View</span>
         <span className="sr-only xl:hidden">View receipt {number}</span>

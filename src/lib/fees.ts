@@ -49,25 +49,30 @@ export async function loadFeeHeads(sessionId: string): Promise<(FeeHeadInfo & { 
     optional: h.optional,
     dueDay: h.dueDay,
     dueMonth: h.dueMonth,
+    lateFee: h.lateFee,
     sortOrder: h.sortOrder,
     amounts: Object.fromEntries(h.amounts.map((a) => [a.classId, a.amount])),
   }));
 }
 
 /**
- * Rupees paid and discounted per instalment (dueKey) by each student this
- * session, ignoring cancelled receipts.
+ * Rupees paid, discounted and late fees per instalment (dueKey) by each student
+ * for the session's fees, ignoring cancelled receipts. A payment counts towards
+ * the session of the fee it paid, so arrears paid in a later session settle it.
  */
 async function paidByStudent(sessionId: string, studentIds?: string[]) {
   const items = await db.feeReceiptItem.findMany({
     where: {
-      headId: { not: null },
-      receipt: { sessionId, cancelledAt: null, ...(studentIds ? { studentId: { in: studentIds } } : { studentId: { not: null } }) },
+      head: { sessionId },
+      receipt: { cancelledAt: null, ...(studentIds ? { studentId: { in: studentIds } } : { studentId: { not: null } }) },
     },
-    select: { headId: true, period: true, amount: true, discount: true, receipt: { select: { studentId: true } } },
+    select: { headId: true, period: true, amount: true, discount: true, lateFee: true, charged: true, receipt: { select: { studentId: true } } },
   });
+  /** The price each instalment was paid at (the latest payment's), so it isn't repriced later. */
+  const priced = new Map<string, Map<string, number>>();
   const paid = new Map<string, Map<string, number>>();
   const discounts = new Map<string, Map<string, number>>();
+  const lateFees = new Map<string, Map<string, number>>();
   const add = (map: Map<string, Map<string, number>>, sid: string, k: string, n: number) => {
     if (!map.has(sid)) map.set(sid, new Map());
     map.get(sid)!.set(k, (map.get(sid)!.get(k) ?? 0) + n);
@@ -76,19 +81,25 @@ async function paidByStudent(sessionId: string, studentIds?: string[]) {
     const k = dueKey(i.headId!, i.period);
     add(paid, i.receipt.studentId!, k, i.amount);
     if (i.discount) add(discounts, i.receipt.studentId!, k, i.discount);
+    if (i.lateFee) add(lateFees, i.receipt.studentId!, k, i.lateFee);
+    if (i.charged) {
+      if (!priced.has(i.receipt.studentId!)) priced.set(i.receipt.studentId!, new Map());
+      priced.get(i.receipt.studentId!)!.set(k, i.charged);
+    }
   }
-  return { paid, discounts };
+  return { paid, discounts, lateFees, priced };
 }
 
 async function optInsByStudent(sessionId: string, studentIds?: string[]) {
   const rows = await db.studentFeeHead.findMany({
     where: { head: { sessionId }, ...(studentIds && { studentId: { in: studentIds } }) },
-    select: { studentId: true, headId: true },
+    select: { studentId: true, headId: true, fromDate: true },
   });
-  const map = new Map<string, Set<string>>();
+  // head → first day it is charged from (null = the whole session).
+  const map = new Map<string, Map<string, string | null>>();
   for (const r of rows) {
-    if (!map.has(r.studentId)) map.set(r.studentId, new Set());
-    map.get(r.studentId)!.add(r.headId);
+    if (!map.has(r.studentId)) map.set(r.studentId, new Map());
+    map.get(r.studentId)!.set(r.headId, r.fromDate ? isoDate(r.fromDate) : null);
   }
   return map;
 }
@@ -115,12 +126,18 @@ export async function loadStudentAccount(schoolId: string, studentId: string) {
     heads,
     classId: student.section?.classId ?? null,
     admissionDate: isoDate(student.admissionDate),
-    optIns: optIns.get(student.id) ?? new Set(),
+    chargeFrom: student.feesFrom ? isoDate(student.feesFrom) : null,
+    optIns: optIns.get(student.id) ?? new Map(),
     paid: paid.paid.get(student.id) ?? new Map(),
     discounts: paid.discounts.get(student.id),
+    lateFeesPaid: paid.lateFees.get(student.id),
+    priced: paid.priced.get(student.id),
+    backHeadIds: student.feesFromHeadIds,
     session: { start: isoDate(session.startDate), name: session.name },
     today,
   });
+  // Last session's unpaid fees, carried in as arrears (they come first, being oldest).
+  const arrears = await previousSessionArrears(student, session.startDate, today);
   const classId = student.section?.classId;
   const optionalHeads = heads
     .filter((h) => h.optional && classId && h.amounts[classId])
@@ -130,9 +147,65 @@ export async function loadStudentAccount(schoolId: string, studentId: string) {
       amount: h.amounts[classId!],
       frequency: h.frequency,
       added: optIns.get(student.id)?.has(h.id) ?? false,
+      /** First month charged ("2026-10"), or null for the whole session. */
+      from: optIns.get(student.id)?.get(h.id)?.slice(0, 7) ?? null,
       paid: dues.some((d) => d.headId === h.id && d.paid > 0),
     }));
-  return { student, session, today, heads, dues, totals: dueTotals(dues, today), optionalHeads, receipts };
+  return {
+    student,
+    session,
+    today,
+    heads,
+    dues: [...arrears, ...dues],
+    totals: dueTotals(dues, today),
+    arrearsTotal: arrears.reduce((n, d) => n + d.balance, 0),
+    optionalHeads,
+    receipts,
+  };
+}
+
+/**
+ * What a student left unpaid in the previous session, in the class they were in
+ * then. These instalments can be collected now; a payment settles the old fee.
+ */
+async function previousSessionArrears(
+  student: { id: string; schoolId: string; admissionDate: Date; feesFrom: Date | null; feesFromHeadIds: string[] },
+  currentStart: Date,
+  today: string,
+) {
+  const previous = await db.academicSession.findFirst({
+    where: { schoolId: student.schoolId, startDate: { lt: currentStart } },
+    orderBy: { startDate: "desc" },
+  });
+  if (!previous) return [];
+  const enrollment = await db.enrollment.findFirst({ where: { sessionId: previous.id, studentId: student.id }, include: { section: true } });
+  if (!enrollment) return [];
+  const [heads, paid, optIns] = await Promise.all([
+    loadFeeHeads(previous.id),
+    paidByStudent(previous.id, [student.id]),
+    optInsByStudent(previous.id, [student.id]),
+  ]);
+  if (!heads.length) return [];
+  const start = isoDate(previous.startDate);
+  const end = isoDate(previous.endDate);
+  // "Charge from" choices belong to the session they were made in.
+  const fromThen = student.feesFrom && isoDate(student.feesFrom) >= start && isoDate(student.feesFrom) <= end;
+  return studentDues({
+    heads,
+    classId: enrollment.section.classId,
+    admissionDate: isoDate(student.admissionDate),
+    chargeFrom: fromThen ? isoDate(student.feesFrom!) : null,
+    backHeadIds: fromThen ? student.feesFromHeadIds : [],
+    optIns: optIns.get(student.id) ?? new Map(),
+    paid: paid.paid.get(student.id) ?? new Map(),
+    discounts: paid.discounts.get(student.id),
+    lateFeesPaid: paid.lateFees.get(student.id),
+    priced: paid.priced.get(student.id),
+    session: { start, name: previous.name },
+    today,
+  })
+    .filter((d) => d.balance > 0)
+    .map((d) => ({ ...d, arrears: previous.name, label: `${d.label} · ${previous.name}` }));
 }
 
 /** Amount due now (instalments due up to today) for every active student with a class. */
@@ -140,7 +213,7 @@ export async function outstandingByStudent(schoolId: string, where: Prisma.Stude
   const { session, today } = await getFeesAccess();
   const students = await db.student.findMany({
     where: { ...where, schoolId, status: "ACTIVE", sectionId: { not: null } },
-    select: { id: true, admissionDate: true, section: { select: { classId: true } } },
+    select: { id: true, admissionDate: true, feesFrom: true, feesFromHeadIds: true, section: { select: { classId: true } } },
   });
   const ids = students.map((s) => s.id);
   const [heads, paid, optIns] = await Promise.all([
@@ -154,9 +227,13 @@ export async function outstandingByStudent(schoolId: string, where: Prisma.Stude
       heads,
       classId: s.section!.classId,
       admissionDate: isoDate(s.admissionDate),
-      optIns: optIns.get(s.id) ?? new Set(),
+      chargeFrom: s.feesFrom ? isoDate(s.feesFrom) : null,
+      optIns: optIns.get(s.id) ?? new Map(),
       paid: paid.paid.get(s.id) ?? new Map(),
       discounts: paid.discounts.get(s.id),
+      lateFeesPaid: paid.lateFees.get(s.id),
+      priced: paid.priced.get(s.id),
+      backHeadIds: s.feesFromHeadIds,
       session: { start: isoDate(session.startDate), name: session.name },
       today,
     });
@@ -176,7 +253,7 @@ export async function monthlyFeeTrend(schoolId: string) {
   const start = isoDate(session.startDate);
   const students = await db.student.findMany({
     where: { schoolId, status: "ACTIVE", sectionId: { not: null } },
-    select: { id: true, admissionDate: true, section: { select: { classId: true } } },
+    select: { id: true, admissionDate: true, feesFrom: true, feesFromHeadIds: true, section: { select: { classId: true } } },
   });
   const ids = students.map((s) => s.id);
   const [heads, paid, optIns, receipts] = await Promise.all([
@@ -192,9 +269,13 @@ export async function monthlyFeeTrend(schoolId: string) {
       heads,
       classId: s.section!.classId,
       admissionDate: isoDate(s.admissionDate),
-      optIns: optIns.get(s.id) ?? new Set(),
+      chargeFrom: s.feesFrom ? isoDate(s.feesFrom) : null,
+      optIns: optIns.get(s.id) ?? new Map(),
       paid: paid.paid.get(s.id) ?? new Map(),
       discounts: paid.discounts.get(s.id),
+      lateFeesPaid: paid.lateFees.get(s.id),
+      priced: paid.priced.get(s.id),
+      backHeadIds: s.feesFromHeadIds,
       session: { start, name: session.name },
       today,
     });
@@ -275,3 +356,14 @@ export async function loadLedger(schoolId: string, studentId: string) {
 }
 
 export type Ledger = NonNullable<Awaited<ReturnType<typeof loadLedger>>>;
+
+/** What the student paid this session before a receipt (valid receipts only), for the receipt's summary. */
+export async function earlierPayments(receipt: { studentId: string | null; sessionId: string; createdAt: Date }) {
+  if (!receipt.studentId) return { count: 0, total: 0 };
+  const r = await db.feeReceipt.aggregate({
+    where: { studentId: receipt.studentId, sessionId: receipt.sessionId, cancelledAt: null, createdAt: { lt: receipt.createdAt } },
+    _sum: { total: true },
+    _count: true,
+  });
+  return { count: r._count, total: r._sum.total ?? 0 };
+}

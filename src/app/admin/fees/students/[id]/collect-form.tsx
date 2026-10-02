@@ -1,186 +1,174 @@
 "use client";
 
 import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, Building2, CalendarClock, ChevronDown, CreditCard, FileCheck2, IndianRupee, Percent, QrCode, Wallet } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Banknote, Building2, CalendarClock, ChevronDown, CreditCard, FileCheck2, IndianRupee, QrCode, Wallet } from "lucide-react";
 import { Field, FormMessage } from "@/components/forms";
-import { Badge, Button, SegmentedControl, SuccessState, checkboxClass, inputClass } from "@/components/ui";
+import { Badge, Button, SegmentedControl, SuccessState, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { MODE_LABELS, PAYMENT_MODES, dueKey, rupees, type DueItem } from "@/lib/fees-shared";
+import { MODE_LABELS, PAYMENT_MODES, allocateDiscount, dueKey, feeSummary, monthLabel, rupees, type DueItem, type MonthDues } from "@/lib/fees-shared";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
-const monthName = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
-const shortMonth = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 const fmt = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
-const monthOf = (iso: string) => new Date(`${iso.slice(0, 7)}-01T00:00:00Z`);
+const shortMonth = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
+const monthShort = (m: string) => shortMonth.format(new Date(`${m}-01T00:00:00Z`));
 
 const MODE_ICONS = { CASH: Banknote, UPI: QrCode, CARD: CreditCard, CHEQUE: FileCheck2, BANK_TRANSFER: Building2, OTHER: Wallet };
 
-const STATUS = {
-  PAID: { tone: "green", label: "Paid" },
-  PARTIAL: { tone: "amber", label: "Part paid" },
-  OVERDUE: { tone: "red", label: "Due" },
-  UPCOMING: { tone: "slate", label: "Upcoming" },
-} as const;
-
-type Group = { month: string; items: DueItem[]; balance: number; due: string };
-
-/** Instalments grouped by the month they fall due, in date order. */
-function byMonth(items: DueItem[]): Group[] {
-  const groups = new Map<string, Group>();
-  for (const d of [...items].sort((a, b) => a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName))) {
-    const month = d.due.slice(0, 7);
-    const g = groups.get(month) ?? { month, items: [], balance: 0, due: d.due };
-    g.items.push(d);
-    g.balance += d.balance;
-    groups.set(month, g);
-  }
-  return [...groups.values()];
-}
+const key = (d: DueItem) => dueKey(d.headId, d.period);
 
 /**
- * Collect a payment. What's due up to today is listed month by month and ticked
- * to start with; later months stay folded under "Pay in advance" so the page
- * stays short. Amounts can be lowered for part payments; admins can give a
- * discount (with a reason).
+ * Collect a payment for a billing month: that month's fees as one total,
+ * earlier unpaid months (with any late fee) as one line each, later months
+ * folded under "Pay in advance". A late fee can be waived and a discount
+ * given for the whole payment; it is spread over the fees being paid.
  */
 export function CollectForm({
   dues,
   today,
   minDate,
+  targetMonth,
+  months,
   action,
-  canDiscount = false,
 }: {
   dues: DueItem[];
   today: string;
   minDate: string;
+  /** "2026-10": the billing month. */
+  targetMonth: string;
+  /** The session's months, for the month picker. */
+  months: string[];
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
-  /** Admins may waive part of an instalment (needs a reason). */
-  canDiscount?: boolean;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const summary = useMemo(() => feeSummary(dues, targetMonth), [dues, targetMonth]);
   const open = useMemo(() => dues.filter((d) => d.balance > 0), [dues]);
-  const dueNow = useMemo(() => byMonth(open.filter((d) => d.due <= today)), [open, today]);
-  const advance = useMemo(() => byMonth(open.filter((d) => d.due > today)), [open, today]);
-  const paid = useMemo(() => byMonth(dues.filter((d) => d.balance <= 0)), [dues]);
 
-  const allDueKeys = () => new Set(open.filter((d) => d.due <= today).map((d) => dueKey(d.headId, d.period)));
-  const [selected, setSelected] = useState(allDueKeys);
-  const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(open.map((d) => [dueKey(d.headId, d.period), String(d.balance)])));
-  const [discounts, setDiscounts] = useState<Record<string, string>>({});
-  const [discountOn, setDiscountOn] = useState(false);
+  // To start with: this month and every earlier unpaid month.
+  const [selected, setSelected] = useState(() => new Set([...summary.current, ...summary.previous.flatMap((g) => g.items)].map(key)));
+  const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(open.map((d) => [key(d), String(d.balance)])));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showAdvance, setShowAdvance] = useState(false);
   const [showPaid, setShowPaid] = useState(false);
-  // Months whose fees are listed one by one: those due now, to start with.
-  const [expanded, setExpanded] = useState(() => new Set(dueNow.length <= 3 ? dueNow.map((g) => g.month) : dueNow.slice(-2).map((g) => g.month)));
+  const paidItems = useMemo(() => dues.filter((d) => d.balance <= 0), [dues]);
+  const [waiveLate, setWaiveLate] = useState(false);
+  const [discountText, setDiscountText] = useState("");
   const [mode, setMode] = useState("CASH");
+  const [payDate, setPayDate] = useState(today);
   const [state, formAction, pending] = useActionState(action, {});
+  /** Late fee for an instalment if paid on the payment date entered (as the server works it out). */
+  const lateOf = (d: DueItem) => (payDate > d.lateAfter ? d.lateFeeRate : 0);
+  const lateIn = (items: DueItem[]) => items.reduce((n, d) => n + lateOf(d), 0);
 
-  const k = (d: DueItem) => dueKey(d.headId, d.period);
-  const chosen = open.filter((d) => selected.has(k(d)));
-  const total = chosen.reduce((n, d) => n + (Number(amounts[k(d)]) || 0), 0);
-  const discountTotal = discountOn ? chosen.reduce((n, d) => n + (Number(discounts[k(d)]) || 0), 0) : 0;
-  const advanceChosen = chosen.filter((d) => d.due > today).length;
+  const chosen = open.filter((d) => selected.has(key(d)));
+  const paying = (d: DueItem) => Math.min(d.balance, Number(amounts[key(d)]) || 0);
+  const sumOf = (items: DueItem[]) => items.filter((d) => selected.has(key(d))).reduce((n, d) => n + paying(d), 0);
+  const gross = chosen.reduce((n, d) => n + paying(d), 0);
+  const lateOwed = lateIn(chosen.filter((d) => paying(d) > 0));
+  const lateFee = waiveLate ? 0 : lateOwed;
+  const discount = Math.min(Number(discountText) || 0, gross);
+  const shares = useMemo(
+    () => allocateDiscount(chosen.map((d) => ({ key: key(d), balance: paying(d), month: d.due.slice(0, 7) })), discount, targetMonth),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputed from the values it reads
+    [discount, targetMonth, selected, amounts],
+  );
+  const net = gross - discount + lateFee;
+  const currentTotal = sumOf(summary.current);
+  const previousTotal = summary.previous.reduce((n, g) => n + sumOf(g.items), 0);
+  const advanceTotal = summary.advance.reduce((n, g) => n + sumOf(g.items), 0);
 
   const setMany = (keys: string[], on: boolean) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const key of keys) {
-        if (on) next.add(key);
-        else next.delete(key);
+      for (const k of keys) {
+        if (on) next.add(k);
+        else next.delete(k);
       }
       return next;
     });
-  const toggleMonth = (month: string) =>
+  const toggleOpen = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(month)) next.delete(month);
-      else next.add(month);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
-  /** A discount lowers what's left to pay on that instalment. */
-  const setDiscount = (d: DueItem, value: string) => {
-    const disc = Math.min(Number(value) || 0, d.balance);
-    setDiscounts((x) => ({ ...x, [k(d)]: value ? String(disc) : "" }));
-    setAmounts((a) => ({ ...a, [k(d)]: String(d.balance - disc) }));
-  };
-  const turnOffDiscount = () => {
-    setDiscountOn(false);
-    setDiscounts({});
-    setAmounts(Object.fromEntries(open.map((d) => [k(d), String(d.balance)])));
-  };
-
-  const dueNowTotal = dueNow.reduce((n, g) => n + g.balance, 0);
+  const groupProps = { selected, setMany, amounts, setAmount: (d: DueItem, v: string) => setAmounts((a) => ({ ...a, [key(d)]: v })), waiveLate, lateOf };
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
-        startTransition(() => formAction(fd));
+        startTransition(() => formAction(new FormData(e.currentTarget)));
       }}
       className="overflow-clip rounded-2xl border border-line bg-surface shadow-card"
     >
-      {/* What is sent: the ticked instalments only, wherever they are on screen. */}
-      {chosen.map((d) => (
-        <span key={k(d)} hidden>
-          <input type="hidden" name={`pay:${k(d)}`} value={amounts[k(d)] ?? ""} />
-          {discountOn && discounts[k(d)] && <input type="hidden" name={`disc:${k(d)}`} value={discounts[k(d)]} />}
-        </span>
-      ))}
+      {/* What is sent: each ticked fee's payment and its share of the discount. */}
+      {chosen.map((d) => {
+        const share = shares.get(key(d)) ?? 0;
+        return (
+          <span key={key(d)} hidden>
+            <input type="hidden" name={`pay:${key(d)}`} value={paying(d) - share} />
+            {share > 0 && <input type="hidden" name={`disc:${key(d)}`} value={share} />}
+          </span>
+        );
+      })}
+      {waiveLate && <input type="hidden" name="waiveLateFee" value="on" />}
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-6">
         <div>
           <h2 className="text-base font-semibold text-fg">Collect payment</h2>
-          <p className="text-xs text-muted">{dueNowTotal ? `${rupees(dueNowTotal)} due up to today` : "Nothing due right now"}</p>
+          <p className="text-xs text-muted">Outstanding up to {summary.label}: {rupees(summary.totalOutstanding)}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          {dueNow.length > 0 && (
-            <button type="button" onClick={() => setSelected(allDueKeys())} className="font-medium text-accent-text underline-offset-4 hover:underline">
-              Tick all due
-            </button>
-          )}
-          <button type="button" onClick={() => setSelected(new Set())} className="font-medium text-muted hover:text-fg">
-            Clear
-          </button>
-          {canDiscount && open.length > 0 && (
-            <button
-              type="button"
-              onClick={() => (discountOn ? turnOffDiscount() : setDiscountOn(true))}
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium ring-1 ring-inset transition ${discountOn ? "bg-success-soft text-success ring-success-line" : "text-muted ring-line hover:text-fg"}`}
-            >
-              <Percent className="h-3 w-3" />
-              {discountOn ? "Discount on" : "Give discount"}
-            </button>
-          )}
-        </div>
+        <label className="flex items-center gap-2 text-sm text-muted">
+          Billing month
+          <select
+            value={targetMonth}
+            onChange={(e) => router.replace(`${pathname}?month=${e.target.value}`, { scroll: false })}
+            className={`${selectClass} !w-44 !py-1.5`}
+          >
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m)}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {open.length === 0 ? (
         <SuccessState title="All paid up" description="Every fee for this session is paid." />
       ) : (
         <div className="divide-y divide-line">
-          {/* Due up to today */}
-          {dueNow.length === 0 ? (
-            <p className="px-4 py-5 text-sm text-muted sm:px-6">Nothing is due yet. Fees for coming months are under “Pay in advance” below.</p>
-          ) : (
-            dueNow.map((g) => (
-              <MonthGroup
-                key={g.month}
-                group={g}
-                open={expanded.has(g.month)}
-                onToggle={() => toggleMonth(g.month)}
-                selected={selected}
-                setMany={setMany}
-                amounts={amounts}
-                setAmount={(d, v) => setAmounts((a) => ({ ...a, [k(d)]: v }))}
-                discountOn={discountOn}
-                discounts={discounts}
-                setDiscount={setDiscount}
+          {/* This month, as one total */}
+          <Section title={`${summary.label} fees`} total={summary.currentTotal} late={lateIn(summary.current)} waiveLate={waiveLate}>
+            {summary.current.length === 0 ? (
+              <p className="px-4 pb-4 text-sm text-muted sm:px-6">No fee falls due in {summary.label}.</p>
+            ) : (
+              <MonthRow
+                group={{ month: targetMonth, label: "This month", items: summary.current, amount: summary.currentTotal, lateFee: summary.currentLate, subtotal: summary.currentTotal + summary.currentLate }}
+                title={summary.current.length === 1 ? summary.current[0].headName : `${summary.current.length} fees`}
+                open={expanded.has("current")}
+                onToggle={() => toggleOpen("current")}
+                {...groupProps}
               />
-            ))
+            )}
+          </Section>
+
+          {/* Earlier months still unpaid */}
+          {summary.previous.length > 0 && (
+            <Section title="Previous dues" total={summary.previousTotal} late={lateIn(summary.previous.flatMap((g) => g.items))} waiveLate={waiveLate}>
+              <div className="divide-y divide-line">
+                {summary.previous.map((g) => (
+                  <MonthRow key={g.month} group={g} title={g.label} open={expanded.has(g.month)} onToggle={() => toggleOpen(g.month)} {...groupProps} />
+                ))}
+              </div>
+            </Section>
           )}
 
-          {/* Months ahead, folded away until asked for */}
-          {advance.length > 0 && (
+          {/* Later months, folded away */}
+          {summary.advance.length > 0 && (
             <div>
               <button
                 type="button"
@@ -192,30 +180,17 @@ export function CollectForm({
                 <span className="min-w-0 flex-1">
                   <span className="font-medium text-fg">Pay in advance</span>
                   <span className="block text-xs text-muted">
-                    {shortMonth.format(monthOf(advance[0].due))}
-                    {advance.length > 1 && ` – ${shortMonth.format(monthOf(advance.at(-1)!.due))}`} · {advance.length} month{advance.length === 1 ? "" : "s"} ·{" "}
-                    {rupees(advance.reduce((n, g) => n + g.balance, 0))}
+                    {monthShort(summary.advance[0].month)}
+                    {summary.advance.length > 1 && ` – ${monthShort(summary.advance.at(-1)!.month)}`} · {rupees(summary.advance.reduce((n, g) => n + g.amount, 0))}
                   </span>
                 </span>
-                {advanceChosen > 0 && <Badge tone="indigo">{advanceChosen} ticked</Badge>}
+                {advanceTotal > 0 && <Badge tone="indigo">{rupees(advanceTotal)} ticked</Badge>}
                 <ChevronDown className={`h-4 w-4 shrink-0 text-subtle transition ${showAdvance ? "rotate-180" : ""}`} />
               </button>
               {showAdvance && (
                 <div className="divide-y divide-line border-t border-line">
-                  {advance.map((g) => (
-                    <MonthGroup
-                      key={g.month}
-                      group={g}
-                      open={expanded.has(g.month)}
-                      onToggle={() => toggleMonth(g.month)}
-                      selected={selected}
-                      setMany={setMany}
-                      amounts={amounts}
-                      setAmount={(d, v) => setAmounts((a) => ({ ...a, [k(d)]: v }))}
-                      discountOn={discountOn}
-                      discounts={discounts}
-                      setDiscount={setDiscount}
-                    />
+                  {summary.advance.map((g) => (
+                    <MonthRow key={g.month} group={g} title={g.label} open={expanded.has(g.month)} onToggle={() => toggleOpen(g.month)} {...groupProps} />
                   ))}
                 </div>
               )}
@@ -224,185 +199,243 @@ export function CollectForm({
         </div>
       )}
 
-      {paid.length > 0 && (
+      {paidItems.length > 0 && (
         <div className="border-t border-line">
           <button type="button" onClick={() => setShowPaid((v) => !v)} className="w-full px-4 py-2.5 text-left text-xs font-medium text-muted hover:text-fg sm:px-6">
-            {showPaid ? "Hide paid fees" : `Show paid fees (${paid.reduce((n, g) => n + g.items.length, 0)})`}
+            {showPaid ? "Hide paid fees" : `Show paid fees (${paidItems.length})`}
           </button>
           {showPaid && (
             <ul className="divide-y divide-line border-t border-line text-sm">
-              {paid.flatMap((g) =>
-                g.items.map((d) => (
-                  <li key={k(d)} className="flex items-center gap-3 px-4 py-2 text-subtle sm:px-6">
-                    <span className="min-w-0 flex-1 truncate">
-                      {d.headName} <span className="text-xs">· {d.label}</span>
-                    </span>
-                    <span className="tabular-nums">{rupees(d.amount)}</span>
-                    <Badge tone="green">Paid</Badge>
-                  </li>
-                )),
-              )}
+              {paidItems.map((d) => (
+                <li key={key(d)} className="flex items-center gap-3 px-4 py-2 text-subtle sm:px-6">
+                  <span className="min-w-0 flex-1 truncate">
+                    {d.headName} <span className="text-xs">· {d.label}</span>
+                  </span>
+                  <span className="tabular-nums">{rupees(d.paid)}</span>
+                  {d.discount > 0 && <span className="text-xs text-success">−{rupees(d.discount)}</span>}
+                  <Badge tone="green">Paid</Badge>
+                </li>
+              ))}
             </ul>
           )}
         </div>
       )}
 
       {open.length > 0 && (
-        <div className="space-y-4 border-t border-line px-4 py-5 sm:px-6">
-          <fieldset>
-            <legend className="mb-1.5 block text-sm font-medium text-fg-2">
-              Paid by<span className="ml-0.5 text-danger" aria-hidden>*</span>
-            </legend>
-            <SegmentedControl
-              name="mode"
-              label="Payment mode"
-              value={mode}
-              onChange={setMode}
-              className="flex-wrap"
-              options={PAYMENT_MODES.map((m) => ({ value: m, label: MODE_LABELS[m], icon: MODE_ICONS[m] }))}
-            />
-          </fieldset>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Payment date" name="date" errors={state.fieldErrors} required>
-              <input type="date" name="date" defaultValue={today} min={minDate} max={today} required className={inputClass} />
-            </Field>
-            <Field
-              label={mode === "CHEQUE" ? "Cheque number" : mode === "UPI" ? "UPI reference" : mode === "CASH" ? "Reference (optional)" : "Transaction number"}
-              name="reference"
-              errors={state.fieldErrors}
-              required={mode === "CHEQUE" || mode === "UPI" || mode === "BANK_TRANSFER"}
-            >
-              <input name="reference" maxLength={60} className={inputClass} />
-            </Field>
-            <Field label="Remarks" name="remarks" errors={state.fieldErrors}>
-              <input name="remarks" maxLength={200} className={inputClass} />
-            </Field>
-            {discountTotal > 0 && (
-              <Field label="Reason for discount" name="discountNote" errors={state.fieldErrors} required className="sm:col-span-3">
-                <input name="discountNote" required maxLength={200} placeholder="e.g. Sibling discount, staff ward, scholarship" className={inputClass} />
-              </Field>
-            )}
+        <>
+          {/* Late fee and discount */}
+          <div className="grid gap-4 border-t border-line px-4 py-4 sm:grid-cols-2 sm:px-6">
+            <div className="rounded-xl border border-line p-3">
+              <p className="flex items-center justify-between text-sm">
+                <span className="font-medium text-fg">Late fee</span>
+                <span className={`tabular-nums ${waiveLate ? "text-subtle line-through" : "font-semibold text-fg"}`}>{rupees(lateOwed)}</span>
+              </p>
+              <label className={`mt-2 flex items-center gap-2 text-sm ${lateOwed ? "text-fg-2" : "text-subtle"}`}>
+                <input type="checkbox" checked={waiveLate} disabled={!lateOwed} onChange={(e) => setWaiveLate(e.target.checked)} className={checkboxClass} />
+                Waive late fee
+              </label>
+            </div>
+            <div className="rounded-xl border border-line p-3">
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-fg">Discount (₹)</span>
+                <input
+                  inputMode="numeric"
+                  value={discountText}
+                  onChange={(e) => setDiscountText(e.target.value.replace(/[^\d]/g, "").slice(0, 7))}
+                  placeholder="0"
+                  aria-label="Discount in rupees"
+                  className="h-9 w-28 rounded-lg border border-line-strong bg-surface px-2 text-right text-sm tabular-nums text-success focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+                />
+              </label>
+              <p className="mt-1 text-xs text-muted">
+                {Number(discountText) > gross ? `Capped at ${rupees(gross)}, the fees being paid.` : "Recorded on this receipt only; the fee structure is unchanged."}
+              </p>
+            </div>
           </div>
-          <FormMessage state={state} />
-        </div>
-      )}
 
-      {open.length > 0 && (
-        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-between gap-4 rounded-b-2xl border-t border-line bg-glass px-4 py-4 backdrop-blur-xl sm:px-6 md:bottom-0">
-          <div>
-            <p className="text-eyebrow uppercase text-muted">
-              Total · {chosen.length} fee{chosen.length === 1 ? "" : "s"}
-            </p>
-            <p className="text-display-sm font-semibold tabular-nums text-fg">{rupees(total)}</p>
-            {discountTotal > 0 && <p className="text-xs font-medium text-success">+ {rupees(discountTotal)} discount</p>}
+          {/* Payment details */}
+          <div className="space-y-4 border-t border-line px-4 py-5 sm:px-6">
+            <fieldset>
+              <legend className="mb-1.5 block text-sm font-medium text-fg-2">
+                Paid by<span className="ml-0.5 text-danger" aria-hidden>*</span>
+              </legend>
+              <SegmentedControl
+                name="mode"
+                label="Payment mode"
+                value={mode}
+                onChange={setMode}
+                className="flex-wrap"
+                options={PAYMENT_MODES.map((m) => ({ value: m, label: MODE_LABELS[m], icon: MODE_ICONS[m] }))}
+              />
+            </fieldset>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Payment date" name="date" errors={state.fieldErrors} required>
+                <input
+                  type="date"
+                  name="date"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value || today)}
+                  min={minDate}
+                  max={today}
+                  required
+                  className={inputClass}
+                />
+              </Field>
+              <Field
+                label={mode === "CHEQUE" ? "Cheque number" : mode === "UPI" ? "UPI reference" : mode === "CASH" ? "Reference (optional)" : "Transaction number"}
+                name="reference"
+                errors={state.fieldErrors}
+                required={mode === "CHEQUE" || mode === "UPI" || mode === "BANK_TRANSFER"}
+              >
+                <input name="reference" maxLength={60} className={inputClass} />
+              </Field>
+              <Field label="Remarks" name="remarks" errors={state.fieldErrors}>
+                <input name="remarks" maxLength={200} className={inputClass} />
+              </Field>
+              {discount > 0 && (
+                <Field label="Reason for discount" name="discountNote" errors={state.fieldErrors} required className="sm:col-span-3">
+                  <input name="discountNote" required maxLength={200} placeholder="e.g. Sibling discount, staff ward, scholarship" className={inputClass} />
+                </Field>
+              )}
+            </div>
+            <FormMessage state={state} />
           </div>
-          <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={total + discountTotal <= 0}>
-            Collect & make receipt
-          </Button>
-        </div>
+
+          {/* Net payable */}
+          <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-between gap-4 rounded-b-2xl border-t border-line bg-glass px-4 py-4 backdrop-blur-xl sm:px-6 md:bottom-0">
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-0.5 text-xs text-muted sm:flex sm:flex-wrap sm:items-baseline">
+              {previousTotal > 0 && <Part label="Previous dues" value={previousTotal} />}
+              <Part label={summary.label} value={currentTotal} />
+              {advanceTotal > 0 && <Part label="Advance" value={advanceTotal} />}
+              {lateFee > 0 && <Part label="Late fee" value={lateFee} sign="+" />}
+              {discount > 0 && <Part label="Discount" value={discount} sign="−" tone="text-success" />}
+              <div className="col-span-2 sm:ml-2">
+                <dt className="text-eyebrow uppercase text-muted">Net payable</dt>
+                <dd className="text-display-sm font-semibold tabular-nums text-fg">{rupees(net)}</dd>
+              </div>
+            </dl>
+            <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={gross <= 0}>
+              Collect & make receipt
+            </Button>
+          </div>
+        </>
       )}
     </form>
   );
 }
 
-/** One month: a tickable summary line, and (when opened) its fees with amounts to pay. */
-function MonthGroup({
+function Part({ label, value, sign, tone = "text-fg" }: { label: string; value: number; sign?: string; tone?: string }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd className={`text-sm font-semibold tabular-nums ${tone}`}>
+        {sign && `${sign} `}
+        {rupees(value)}
+      </dd>
+    </div>
+  );
+}
+
+/** A heading with its total (and late fee), over its rows. */
+function Section({ title, total, late, waiveLate, children }: { title: string; total: number; late: number; waiveLate: boolean; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between gap-3 px-4 pb-1 pt-4 sm:px-6">
+        <h3 className="text-eyebrow uppercase text-muted">{title}</h3>
+        <span className="text-xs text-muted">
+          <span className="font-semibold tabular-nums text-fg">{rupees(total)}</span>
+          {late > 0 && <span className={waiveLate ? "line-through" : ""}> + {rupees(late)} late fee</span>}
+        </span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** One month (or this month's demand): a tickable total line, and its fees when opened. */
+function MonthRow({
   group,
+  title,
   open,
   onToggle,
   selected,
   setMany,
   amounts,
   setAmount,
-  discountOn,
-  discounts,
-  setDiscount,
+  waiveLate,
+  lateOf,
 }: {
-  group: Group;
+  group: MonthDues;
+  title: string;
   open: boolean;
   onToggle: () => void;
   selected: Set<string>;
   setMany: (keys: string[], on: boolean) => void;
   amounts: Record<string, string>;
   setAmount: (d: DueItem, value: string) => void;
-  discountOn: boolean;
-  discounts: Record<string, string>;
-  setDiscount: (d: DueItem, value: string) => void;
+  waiveLate: boolean;
+  lateOf: (d: DueItem) => number;
 }) {
-  const keys = group.items.map((d) => dueKey(d.headId, d.period));
-  const count = keys.filter((key) => selected.has(key)).length;
+  const keys = group.items.map(key);
+  const late = group.items.reduce((n, d) => n + lateOf(d), 0);
+  const count = keys.filter((k) => selected.has(k)).length;
   const all = count === keys.length;
   const box = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (box.current) box.current.indeterminate = count > 0 && !all;
   }, [count, all]);
-  const status = group.items.some((d) => d.status === "OVERDUE") ? "OVERDUE" : group.items.some((d) => d.status === "PARTIAL") ? "PARTIAL" : "UPCOMING";
-  const paying = group.items.reduce((n, d) => (selected.has(dueKey(d.headId, d.period)) ? n + (Number(amounts[dueKey(d.headId, d.period)]) || 0) : n), 0);
+  const status = group.items.some((d) => d.status === "OVERDUE") ? "Due" : group.items.some((d) => d.status === "PARTIAL") ? "Part paid" : "Upcoming";
 
   return (
     <div className={count ? "bg-accent-soft/40" : ""}>
       <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
-        <input
-          ref={box}
-          type="checkbox"
-          checked={all}
-          onChange={() => setMany(keys, !all)}
-          className={checkboxClass}
-          aria-label={`Pay all of ${monthName.format(monthOf(group.due))}`}
-        />
+        <input ref={box} type="checkbox" checked={all} onChange={() => setMany(keys, !all)} className={checkboxClass} aria-label={`Pay ${title}`} />
         <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-3 text-left">
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-fg">{monthName.format(monthOf(group.due))}</span>
-              <Badge tone={STATUS[status].tone}>{STATUS[status].label}</Badge>
+              <span className="font-medium text-fg">{title}</span>
+              <Badge tone={status === "Due" ? "red" : status === "Part paid" ? "amber" : "slate"}>{status}</Badge>
+              {group.items[0].arrears && <Badge tone="red">Arrears {group.items[0].arrears}</Badge>}
+              {group.items.some((d) => d.beforeAdmission) && <Badge>Before admission</Badge>}
             </span>
             <span className="block truncate text-xs text-muted">
-              {group.items.length === 1 ? group.items[0].headName : `${group.items.length} fees: ${group.items.map((d) => d.headName).join(", ")}`} · due {fmt(group.due)}
+              {group.items.map((d) => d.headName).join(", ")} · due {fmt(group.items[0].due)}
             </span>
           </span>
           <span className="text-right tabular-nums">
-            <span className="block font-semibold text-fg">{rupees(count ? paying : group.balance)}</span>
-            {count > 0 && count < keys.length && <span className="block text-[11px] text-muted">{count} of {keys.length} ticked</span>}
+            <span className="block font-semibold text-fg">{rupees(group.amount)}</span>
+            {late > 0 && <span className={`block text-[11px] text-danger ${waiveLate ? "line-through opacity-60" : ""}`}>+ {rupees(late)} late</span>}
+            {count > 0 && !all && (
+              <span className="block text-[11px] text-muted">
+                {count} of {keys.length} ticked
+              </span>
+            )}
           </span>
+          <span className="text-xs font-medium text-accent-text">{open ? "Hide" : "Breakdown"}</span>
           <ChevronDown className={`h-4 w-4 shrink-0 text-subtle transition ${open ? "rotate-180" : ""}`} />
         </button>
       </div>
-
       {open && (
         <ul className="pb-2">
           {group.items.map((d) => {
-            const key = dueKey(d.headId, d.period);
-            const on = selected.has(key);
+            const k = key(d);
+            const on = selected.has(k);
             return (
-              <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-1.5 pl-11 pr-4 text-sm sm:pl-14 sm:pr-6">
-                <input type="checkbox" checked={on} onChange={() => setMany([key], !on)} className={checkboxClass} aria-label={`Pay ${d.headName} ${d.label}`} />
+              <li key={k} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 pl-11 pr-4 text-sm sm:pl-14 sm:pr-6">
+                <input type="checkbox" checked={on} onChange={() => setMany([k], !on)} className={checkboxClass} aria-label={`Pay ${d.headName} ${d.label}`} />
                 <span className="min-w-0 flex-1">
                   <span className="text-fg-2">{d.headName}</span>
                   <span className="text-xs text-muted">
                     {" "}
                     · {d.label}
                     {d.paid > 0 && ` · ${rupees(d.paid)} paid`}
-                    {d.discount > 0 && ` · ${rupees(d.discount)} waived`}
+                    {lateOf(d) > 0 && ` · late fee ${rupees(lateOf(d))}`}
                   </span>
                 </span>
-                {discountOn && (
-                  <label className="flex items-center gap-1 text-xs text-success">
-                    −
-                    <input
-                      disabled={!on}
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={discounts[key] ?? ""}
-                      onChange={(e) => setDiscount(d, e.target.value.replace(/[^\d]/g, ""))}
-                      aria-label={`Discount for ${d.headName} ${d.label}`}
-                      className="h-8 w-20 rounded-lg border border-line-strong bg-surface px-2 text-right text-sm tabular-nums text-success focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 disabled:bg-surface-2 disabled:text-subtle"
-                    />
-                  </label>
-                )}
                 <input
                   disabled={!on}
                   inputMode="numeric"
-                  value={on ? (amounts[key] ?? "") : String(d.balance)}
+                  value={on ? (amounts[k] ?? "") : String(d.balance)}
                   onChange={(e) => setAmount(d, e.target.value.replace(/[^\d]/g, ""))}
                   aria-label={`Amount for ${d.headName} ${d.label}`}
                   className="h-8 w-24 rounded-lg border border-line-strong bg-surface px-2 text-right text-sm tabular-nums focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 disabled:border-transparent disabled:bg-transparent disabled:text-muted"

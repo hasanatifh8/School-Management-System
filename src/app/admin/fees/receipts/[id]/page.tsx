@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Download, GraduationCap, HandCoins, XCircle } from "lucide-react";
+import { ArrowLeft, Download, GraduationCap, HandCoins, XCircle } from "lucide-react";
 import { AutoPrint } from "@/components/fees/auto-print";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { ButtonLink, Card, SuccessState, buttonVariants, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
-import { getFeesAccess } from "@/lib/fees";
+import { earlierPayments, getFeesAccess } from "@/lib/fees";
 import { MODE_LABELS, amountInWords, rupees } from "@/lib/fees-shared";
 import { schoolLogoUrl } from "@/lib/school";
 import { cancelReceipt } from "../../actions";
@@ -15,16 +15,29 @@ const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short
 const stamp = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 
 /** A printable fee receipt: parent and office copies on one A4 sheet (or one copy). */
+/** Back links for ?from=. Without it, Back goes to the student's fees. */
+const BACK = {
+  receipts: { label: "Back to receipts", href: () => "/admin/fees/receipts" },
+  fees: { label: "Back to fees", href: () => "/admin/fees" },
+  dashboard: { label: "Back to dashboard", href: () => "/admin" },
+  ledger: { label: "Back to ledger", href: (studentId: string | null) => (studentId ? `/admin/fees/students/${studentId}/ledger` : "/admin/fees/receipts") },
+} as const;
+
 export default async function ReceiptPage({ params, searchParams }: PageProps<"/admin/fees/receipts/[id]">) {
   const { id } = await params;
   const sp = await searchParams;
+  // Where the receipt was opened from (?from=); a student's fees page by default.
+  const from = typeof sp.from === "string" && sp.from in BACK ? (sp.from as keyof typeof BACK) : null;
   const { school, canManage } = await getFeesAccess();
   const receipt = await db.feeReceipt.findFirst({
     where: { id, schoolId: school.id },
     include: { items: { orderBy: { id: "asc" } }, session: { select: { name: true } }, student: { select: { fatherName: true, rollNumber: true } } },
   });
   if (!receipt) notFound();
-  const logo = await db.schoolLogo.findUnique({ where: { schoolId: school.id }, select: { updatedAt: true } });
+  const [logo, earlier] = await Promise.all([
+    db.schoolLogo.findUnique({ where: { schoolId: school.id }, select: { updatedAt: true } }),
+    earlierPayments(receipt),
+  ]);
   const logoUrl = schoolLogoUrl({ id: school.id, logo });
   // Consecutive instalments of the same fee become one line: "Tuition fee · Apr 2026 – Sep 2026 (6)".
   const lines: { key: string; name: string; period: string; amount: number; discount: number }[] = [];
@@ -43,6 +56,8 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
     }
   }
   const discount = lines.reduce((n, l) => n + l.discount, 0);
+  const lateFee = receipt.items.reduce((n, i) => n + i.lateFee, 0);
+  const lateCount = receipt.items.filter((i) => i.lateFee > 0).length;
   // Two copies share an A4 page; a long receipt prints as one copy instead.
   const fitsTwo = lines.length <= 7;
   const copies = sp.copies === "1" || (!fitsTwo && sp.copies !== "2") ? ["Receipt"] : ["Parent copy", "Office copy"];
@@ -112,6 +127,17 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               <td className="py-[1mm] pr-1 text-right tabular-nums">{rupees(item.amount)}</td>
             </tr>
           ))}
+          {lateFee > 0 && (
+            <tr className="border-b border-slate-200">
+              <td className="py-[1mm] pl-1 text-slate-500">{lines.length + 1}</td>
+              <td className="py-[1mm]">Late fee</td>
+              <td className="py-[1mm]">
+                {lateCount} late instalment{lateCount === 1 ? "" : "s"}
+              </td>
+              {discount > 0 && <td className="py-[1mm] text-right">—</td>}
+              <td className="py-[1mm] pr-1 text-right tabular-nums">{rupees(lateFee)}</td>
+            </tr>
+          )}
         </tbody>
         <tfoot>
           <tr className="border-b-2 border-slate-400">
@@ -124,6 +150,13 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
         </tfoot>
       </table>
       <p className="mt-[2mm] text-[8.5pt] italic">{amountInWords(receipt.total)}</p>
+      {earlier.count > 0 && (
+        <p className="mt-[1.5mm] text-[8.5pt]">
+          <span className="text-slate-500">Paid earlier this session:</span> {rupees(earlier.total)} ({earlier.count} receipt{earlier.count === 1 ? "" : "s"}) ·{" "}
+          <span className="text-slate-500">Total paid so far:</span> <b>{rupees(earlier.total + (receipt.cancelledAt ? 0 : receipt.total))}</b>
+        </p>
+      )}
+      {receipt.feeNote && <p className="mt-[1mm] text-[8.5pt] text-slate-600">{receipt.feeNote}</p>}
 
       <div className="mt-auto flex items-end justify-between gap-4 pt-[3mm] text-[8.5pt]">
         <div className="space-y-[0.5mm]">
@@ -187,14 +220,28 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
             Download PDF
           </a>
           {(fitsTwo || copies.length === 2) && (
-            <Link href={`?copies=${copies.length === 2 ? "1" : "2"}${sp.new === "1" ? "&new=1" : ""}`} className={buttonVariants.secondary}>
+            <Link
+              replace
+              href={`?copies=${copies.length === 2 ? "1" : "2"}${sp.new === "1" ? "&new=1" : ""}${from ? `&from=${from}` : ""}`}
+              className={buttonVariants.secondary}
+            >
               {copies.length === 2 ? "Print one copy instead" : "Print parent + office copies"}
             </Link>
           )}
-          {receipt.studentId && (
-            <Link href={`/admin/fees/students/${receipt.studentId}`} className={buttonVariants.ghost}>
-              Back to {receipt.studentName.split(" ")[0]}&apos;s fees
+          {/* Back goes where the receipt was opened from, replacing this page in the
+              history so the browser's Back button doesn't bounce between the two. */}
+          {from ? (
+            <Link replace href={BACK[from].href(receipt.studentId)} className={buttonVariants.ghost}>
+              <ArrowLeft className="h-4 w-4" />
+              {BACK[from].label}
             </Link>
+          ) : (
+            receipt.studentId && (
+              <Link replace href={`/admin/fees/students/${receipt.studentId}`} className={buttonVariants.ghost}>
+                <ArrowLeft className="h-4 w-4" />
+                Back to {receipt.studentName.split(" ")[0]}&apos;s fees
+              </Link>
+            )
           )}
         </div>
       </div>

@@ -310,6 +310,8 @@ model Student {
   houseId               String?
   transportRouteId      String? // school bus / van route, if the student uses one
   transportStop         String? // one of the route's stops
+  feesFrom              DateTime?        @db.Date // charge fees from this month instead of the admission month (set by fees staff)
+  feesFromHeadIds       String[]         @default([]) // fees charged for months before admission; empty = all
   photoId               String?          @unique
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
@@ -735,6 +737,7 @@ model FeeHead {
   optional  Boolean      @default(false)
   dueDay    Int          @default(10) // day of the month the fee is due
   dueMonth  Int? // YEARLY only: 1–12
+  lateFee   Int          @default(0) // extra charge, once per instalment, when paid after the due day
   sortOrder Int          @default(0)
   createdAt DateTime     @default(now())
 
@@ -763,7 +766,8 @@ model FeeAmount {
 model StudentFeeHead {
   studentId String
   headId    String
-  createdAt DateTime @default(now())
+  fromDate  DateTime? @db.Date // charged from this month (the month the student was added); null = whole session
+  createdAt DateTime  @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   head    FeeHead @relation(fields: [headId], references: [id], onDelete: Cascade)
@@ -794,6 +798,7 @@ model FeeReceipt {
   cancelledBy  String?
   cancelReason String?
   discountNote String? // why a discount was given (required when any line has one)
+  feeNote      String? // how fees before a mid-session admission were handled, as at this payment
 
   school  School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   session AcademicSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -814,6 +819,8 @@ model FeeReceiptItem {
   periodLabel String
   amount      Int // paid
   discount    Int     @default(0) // waived off this instalment; it counts as settled
+  lateFee     Int     @default(0) // late fee collected with this instalment (on top of `amount`)
+  charged     Int     @default(0) // the instalment's full amount when this was paid; it keeps that price later (0 = not recorded)
 
   receipt FeeReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   head    FeeHead?   @relation(fields: [headId], references: [id], onDelete: SetNull)

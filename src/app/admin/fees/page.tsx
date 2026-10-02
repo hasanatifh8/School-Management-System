@@ -71,7 +71,7 @@ export default async function FeesOverviewPage() {
                 {recent.map((r) => (
                   <tr key={r.id} className={trClass}>
                     <td className={tdClass}>
-                      <Link href={`/admin/fees/receipts/${r.id}`} className="font-mono text-xs font-medium text-accent-text hover:underline">
+                      <Link href={`/admin/fees/receipts/${r.id}?from=fees`} className="font-mono text-xs font-medium text-accent-text hover:underline">
                         {r.number}
                       </Link>
                       <p className="text-xs text-muted">{shortDate.format(r.date)}</p>
