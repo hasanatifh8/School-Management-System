@@ -47,7 +47,7 @@ export async function MarksPageContent({
         <MarksGrid
           data={{
             section: { label: sheet.section.label },
-            papers: sheet.papers.map(({ id, name, date, maxMarks, editable }) => ({ id, name, date, maxMarks, editable })),
+            papers: sheet.papers.map(({ id, name, date, maxMarks, optional, passMarks, editable }) => ({ id, name, date, maxMarks, optional, passMarks, editable })),
             ungraded: sheet.ungraded,
             students: sheet.students.map(({ id, name, rollNumber, studentCode, eligible }) => ({ id, name, rollNumber, studentCode, eligible })),
             marks: sheet.marks,
@@ -73,14 +73,17 @@ export async function ResultsPageContent({
   params,
   marksHref,
   baseHref,
+  back,
 }: {
   actor: ExamActor;
   exam: LoadedExam;
   sectionId: string;
-  /** The page's search params: ?view=sheet|all-cards or ?student=<id>. */
+  /** The page's search params: ?view=sheet|all-cards or ?student=<id>[&do=print|pdf]. */
   params: Record<string, string | string[] | undefined>;
   marksHref: string;
   baseHref: string;
+  /** "Back" from the student list; defaults to the marks page. */
+  back?: { href: string; label: string };
 }) {
   const sheet = await loadSheet(actor, exam, sectionId);
   if (!sheet) notFound();
@@ -97,11 +100,20 @@ export async function ResultsPageContent({
   }
   const mode: ResultsMode =
     typeof params.student === "string"
-      ? { view: "card", studentId: params.student }
+      ? { view: "card", studentId: params.student, run: typeof params.do === "string" ? params.do : undefined }
       : params.view === "sheet"
         ? { view: "sheet" }
         : params.view === "all-cards"
           ? { view: "all-cards" }
           : { view: "list" };
-  return <ResultsView sheet={sheet} school={await schoolHeader(exam.schoolId)} mode={mode} backHref={marksHref} baseHref={baseHref} />;
+  return (
+    <ResultsView
+      sheet={sheet}
+      school={await schoolHeader(exam.schoolId)}
+      mode={mode}
+      back={back ?? { href: marksHref, label: "Back to marks" }}
+      marksHref={marksHref}
+      baseHref={baseHref}
+    />
+  );
 }

@@ -4,13 +4,13 @@ import Link from "next/link";
 import { startTransition, useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { CircleCheck, EyeOff, FileBarChart, Loader2, Lock, Save, Send } from "lucide-react";
 import { FormMessage } from "@/components/forms";
-import { Badge, buttonVariants, useConfirm, useToast } from "@/components/ui";
+import { Badge, buttonVariants, checkboxClass, useConfirm, useToast } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { PASS_PERCENT, formatExamDate, formatMarks, gradeFor, parseMark } from "@/lib/exams-shared";
+import { PASS_PERCENT, formatExamDate, formatMarks, gradeFor, parseMark, passes } from "@/lib/exams-shared";
 
 export type GridData = {
   section: { label: string };
-  papers: { id: string; name: string; date: string; maxMarks: number; editable: boolean }[];
+  papers: { id: string; name: string; date: string; maxMarks: number; optional: boolean; passMarks: number | null; editable: boolean }[];
   ungraded: number;
   students: { id: string; name: string; rollNumber: number | null; studentCode: string; eligible: string[] }[];
   marks: Record<string, { marks: number | null; absent: boolean }>;
@@ -21,7 +21,11 @@ export type GridData = {
 
 const stamp = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 
-/** Spreadsheet for typing marks: Enter / arrow keys move between cells; "AB" marks absent. */
+/**
+ * Spreadsheet for typing marks: Enter / arrow keys move between cells; "AB" marks
+ * one paper absent, and the row's Absent box marks the student absent for every
+ * paper you enter (locking those cells).
+ */
 export function MarksGrid({
   data,
   save,
@@ -103,23 +107,49 @@ export function MarksGrid({
     startTransition(() => formAction(fd));
   };
 
-  // Totals from what is typed now (invalid cells count as missing).
+  // The papers of a student this user enters; the Absent box applies to these.
+  const mineFor = (s: (typeof students)[number]) => papers.filter((p) => p.editable && s.eligible.includes(p.id));
+  const isAbsent = (s: (typeof students)[number]) => {
+    const mine = mineFor(s);
+    return mine.length > 0 && mine.every((p) => values[key(p.id, s.id)] === "AB");
+  };
+  const setAbsent = (s: (typeof students)[number], absent: boolean) => {
+    const mine = mineFor(s);
+    setValues((prev) => {
+      const next = { ...prev };
+      for (const p of mine) next[key(p.id, s.id)] = absent ? "AB" : "";
+      return next;
+    });
+    setErrors((prev) => {
+      const next = { ...prev };
+      for (const p of mine) delete next[`m.${p.id}.${s.id}`];
+      return next;
+    });
+  };
+  const showAbsent = !locked && papers.some((p) => p.editable);
+
+  // Totals from what is typed now (invalid cells count as missing). Optional papers aren't totalled.
   const totals = students.map((s) => {
     let got = 0;
     let max = 0;
     let complete = true;
     let failed = false;
+    let taken = 0;
+    let absences = 0;
     for (const p of papers) {
       if (!s.eligible.includes(p.id)) continue;
-      max += p.maxMarks;
+      taken++;
       const parsed = parseMark(values[key(p.id, s.id)] ?? "", p.maxMarks);
+      if ("absent" in parsed) absences++;
+      if (p.optional) continue;
+      max += p.maxMarks;
       if ("marks" in parsed) {
         got += parsed.marks;
-        if ((parsed.marks / p.maxMarks) * 100 < PASS_PERCENT) failed = true;
+        if (!passes(parsed.marks, p)) failed = true;
       } else if ("absent" in parsed) failed = true;
       else complete = false;
     }
-    return { got, max, complete, failed, percent: max ? (got / max) * 100 : 0 };
+    return { got, max, complete, failed, absent: taken > 0 && absences === taken, percent: max ? (got / max) * 100 : 0 };
   });
 
   let required = 0;
@@ -184,11 +214,13 @@ export function MarksGrid({
             <thead className="border-b border-line bg-surface-2/80">
               <tr>
                 <th className={`${th} sticky left-0 z-10 bg-surface-2 pl-6`}>Student</th>
+                {showAbsent && <th className={`${th} text-center`}>Absent</th>}
                 {papers.map((p) => (
                   <th key={p.id} className={`${th} text-center normal-case tracking-normal`}>
                     <span className={`block text-xs font-semibold ${p.editable && !locked ? "text-fg" : "text-muted"}`}>{p.name}</span>
                     <span className="block text-[11px] font-normal text-muted">
                       {formatExamDate(p.date)} · MM {p.maxMarks}
+                      {p.optional && ` · optional, pass ${p.passMarks}`}
                     </span>
                   </th>
                 ))}
@@ -199,12 +231,27 @@ export function MarksGrid({
             <tbody className="divide-y divide-line">
               {students.map((s, row) => {
                 const t = totals[row];
+                const absent = isAbsent(s);
                 return (
-                  <tr key={s.id} className="hover:bg-surface-2/60">
+                  <tr key={s.id} className={absent ? "bg-surface-2/70" : "hover:bg-surface-2/60"}>
                     <td className="sticky left-0 z-10 whitespace-nowrap bg-surface px-3 py-2 pl-6">
                       <span className="mr-2 inline-block w-6 text-right text-xs tabular-nums text-subtle">{s.rollNumber ?? "—"}</span>
-                      <span className="font-medium text-fg">{s.name}</span>
+                      <span className={`font-medium ${absent ? "text-muted line-through decoration-1" : "text-fg"}`}>{s.name}</span>
                     </td>
+                    {showAbsent && (
+                      <td className="px-3 py-2 text-center">
+                        {mineFor(s).length > 0 && (
+                          <input
+                            type="checkbox"
+                            checked={absent}
+                            onChange={(e) => setAbsent(s, e.target.checked)}
+                            aria-label={`${s.name} absent`}
+                            title={absent ? "Untick to enter marks" : "Mark absent for every paper you enter"}
+                            className={checkboxClass}
+                          />
+                        )}
+                      </td>
+                    )}
                     {papers.map((p, col) => {
                       const k = key(p.id, s.id);
                       const err = errors[`m.${p.id}.${s.id}`]?.[0];
@@ -217,8 +264,8 @@ export function MarksGrid({
                       }
                       const v = values[k] ?? "";
                       const parsed = parseMark(v, p.maxMarks);
-                      const low = "marks" in parsed && (parsed.marks / p.maxMarks) * 100 < PASS_PERCENT;
-                      if (!p.editable || locked) {
+                      const low = "marks" in parsed && !passes(parsed.marks, p);
+                      if (!p.editable || locked || absent) {
                         return (
                           <td key={p.id} className={`px-3 py-2 text-center tabular-nums ${v === "AB" ? "font-medium text-danger" : low ? "text-danger" : "text-fg-2"}`}>
                             {v || <span className="text-subtle">—</span>}
@@ -258,7 +305,9 @@ export function MarksGrid({
                       );
                     })}
                     <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-fg-2">
-                      {t.max ? (
+                      {t.absent ? (
+                        <span className="font-medium text-danger">Absent</span>
+                      ) : t.max ? (
                         <>
                           <span className="font-semibold text-fg">{formatMarks(t.got)}</span>
                           <span className="text-subtle">/{t.max}</span>
@@ -268,7 +317,7 @@ export function MarksGrid({
                       )}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 pr-6 text-right tabular-nums">
-                      {t.complete && t.max ? (
+                      {t.complete && t.max && !t.absent ? (
                         <span className={t.failed ? "text-danger" : "text-fg"}>
                           {t.percent.toFixed(1)} <span className="text-xs text-subtle">{gradeFor(t.percent)}</span>
                         </span>
@@ -290,7 +339,10 @@ export function MarksGrid({
           <FormMessage state={state.error ? state : {}} />
           <FormMessage state={publishState} />
           {!locked && papers.some((p) => p.editable) && (
-            <p className="text-xs text-muted">Type marks, or AB for absent. Enter moves down. Marks below {PASS_PERCENT}% show in red.</p>
+            <p className="text-xs text-muted">
+              Type marks, or AB for absent in one paper. Tick Absent to mark a student absent for all your papers. Enter moves down. Marks below {PASS_PERCENT}% (or an
+              optional paper&apos;s pass marks) show in red.
+            </p>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">

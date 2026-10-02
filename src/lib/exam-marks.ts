@@ -11,7 +11,7 @@ import "server-only";
 import type { ActionState } from "@/lib/action-state";
 import { isoDate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { PASS_PERCENT, formatMarks, gradeFor, paperName, parseMark } from "@/lib/exams-shared";
+import { formatMarks, gradeFor, paperName, parseMark, passes } from "@/lib/exams-shared";
 import type { ExamActor, LoadedExam } from "@/lib/exams";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -84,6 +84,8 @@ export async function loadSheet(actor: ExamActor, exam: LoadedExam, sectionId: s
       subjectId: p.subjectId,
       date: isoDate(p.date),
       maxMarks: p.maxMarks!,
+      optional: p.optional,
+      passMarks: p.optional ? p.passMarks : null,
       editable: canEnterPaper(access, p),
     })),
     ungraded: forClass.length - graded.length,
@@ -130,47 +132,65 @@ export function completion(sheet: Sheet) {
 
 /* ───────────────────────── Results ───────────────────────── */
 
-/** Totals, percentage, grade, pass/fail and rank for every student of the sheet. */
+/**
+ * Totals, percentage, grade, pass/fail and rank for every student of the sheet.
+ * Optional papers are graded on their own pass marks but left out of the total
+ * and the result. A student absent from every paper is "Absent": no rank, and
+ * left out of class statistics.
+ */
 export function computeResults(sheet: Sheet) {
   const rows = sheet.students.map((s) => {
     let obtained = 0;
     let max = 0;
     let complete = true;
+    let taken = 0;
+    let absences = 0;
     const failed: string[] = [];
     const cells = sheet.papers.map((p) => {
       if (!s.eligible.includes(p.id)) return { paperId: p.id, kind: "na" as const };
-      max += p.maxMarks;
+      taken++;
+      if (!p.optional) max += p.maxMarks;
       const cell = sheet.marks[`${p.id}:${s.id}`];
       if (!cell) {
         complete = false;
         return { paperId: p.id, kind: "missing" as const };
       }
       if (cell.absent) {
-        failed.push(p.name);
+        absences++;
+        if (!p.optional) failed.push(p.name);
         return { paperId: p.id, kind: "absent" as const };
       }
       const m = cell.marks ?? 0;
-      obtained += m;
-      const percent = (m / p.maxMarks) * 100;
-      if (percent < PASS_PERCENT) failed.push(p.name);
-      return { paperId: p.id, kind: "marks" as const, marks: m, grade: gradeFor(percent) };
+      const pass = passes(m, p);
+      if (!p.optional) {
+        obtained += m;
+        if (!pass) failed.push(p.name);
+      }
+      return { paperId: p.id, kind: "marks" as const, marks: m, grade: gradeFor((m / p.maxMarks) * 100), pass };
     });
     const percent = max ? (obtained / max) * 100 : 0;
+    const absent = taken > 0 && absences === taken;
     return {
       student: s,
       cells,
       obtained,
       max,
       percent,
-      grade: max ? gradeFor(percent) : "—",
+      grade: max && !absent ? gradeFor(percent) : "—",
       complete,
-      failed,
-      result: !complete ? ("Incomplete" as const) : failed.length ? ("Fail" as const) : ("Pass" as const),
+      failed: absent ? [] : failed,
+      result: absent
+        ? ("Absent" as const)
+        : !complete
+          ? ("Incomplete" as const)
+          : failed.length
+            ? ("Fail" as const)
+            : ("Pass" as const),
       rank: null as number | null,
     };
   });
   // Rank complete results by percentage; equal percentages share a rank (1, 1, 3).
-  const ranked = rows.filter((r) => r.complete && r.max).sort((a, b) => b.percent - a.percent);
+  const ranked = rows.filter((r) => r.complete && r.max && r.result !== "Absent").sort((a, b) => b.percent - a.percent);
   ranked.forEach((r, i) => {
     r.rank = i > 0 && Math.abs(ranked[i - 1].percent - r.percent) < 1e-9 ? ranked[i - 1].rank : i + 1;
   });
@@ -280,6 +300,9 @@ export async function marksOverview(actor: ExamActor, exam: LoadedExam) {
     out.push({
       sectionId: section.id,
       label: sheet.section.label,
+      classId: section.classId,
+      className: section.class.name,
+      sectionName: section.name,
       students: sheet.students.length,
       papers: sheet.papers.length,
       required: c.required,

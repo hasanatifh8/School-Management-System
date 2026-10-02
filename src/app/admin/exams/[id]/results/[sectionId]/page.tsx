@@ -1,21 +1,9 @@
-import { notFound } from "next/navigation";
-import { ResultsPageContent } from "@/components/exams/marks-page";
-import { loadExam } from "@/lib/exams";
-import { getCurrentSchool } from "@/lib/school";
+import { redirect } from "next/navigation";
 
+/** Results moved to the Marks & results module (search params such as ?student= are kept). */
 export default async function ExamResultsPage({ params, searchParams }: PageProps<"/admin/exams/[id]/results/[sectionId]">) {
   const { id, sectionId } = await params;
-  const school = await getCurrentSchool();
-  const exam = await loadExam(school.id, id);
-  if (!exam) notFound();
-  return (
-    <ResultsPageContent
-      actor={{ kind: "admin", schoolId: school.id, who: "" }}
-      exam={exam}
-      sectionId={sectionId}
-      params={await searchParams}
-      marksHref={`/admin/exams/${exam.id}/marks/${sectionId}`}
-      baseHref={`/admin/exams/${exam.id}/results/${sectionId}`}
-    />
-  );
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(await searchParams)) if (typeof v === "string") query.set(k, v);
+  redirect(`/admin/results/${id}/${sectionId}${query.size ? `?${query}` : ""}`);
 }

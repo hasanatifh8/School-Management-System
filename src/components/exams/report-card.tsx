@@ -2,6 +2,9 @@ import { GraduationCap } from "lucide-react";
 import type { ResultRow, Sheet } from "@/lib/exam-marks";
 import { GRADES, PASS_PERCENT, formatExamDate, formatMarks } from "@/lib/exams-shared";
 
+/** A cell below its paper's pass mark (or absent). */
+const isLow = (c: Cell) => c.kind === "absent" || (c.kind === "marks" && !c.pass);
+
 export type SchoolHeader = { name: string; address: string | null; contact: string; logoUrl: string | null };
 
 const stamp = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
@@ -46,7 +49,7 @@ function Watermark({ show }: { show: boolean }) {
 function GradeKey() {
   return (
     <p className="mt-[3mm] text-[7.5pt] text-slate-600">
-      Grades: {GRADES.map((g, i) => `${g.grade} ${g.min}${i ? `–${GRADES[i - 1].min - 1}` : "–100"}%`).join(" · ")}. Pass mark {PASS_PERCENT}% in each subject. AB = absent.
+      Grades: {GRADES.map((g, i) => `${g.grade} ${g.min}${i ? `–${GRADES[i - 1].min - 1}` : "–100"}%`).join(" · ")}. Pass mark {PASS_PERCENT}% in each subject. Optional papers use their own pass marks and are not counted in the total. AB = absent.
     </p>
   );
 }
@@ -68,6 +71,7 @@ export function ReportCard({ sheet, school, row, total, className = "" }: { shee
   const r = row;
   return (
     <article
+      data-pdf-page
       className={`relative overflow-hidden bg-white p-[12mm] text-[9.5pt] text-slate-900 shadow-md ring-1 ring-slate-200 print:p-0 print:shadow-none print:ring-0 ${className}`}
     >
       <Watermark show={!sheet.published} />
@@ -107,10 +111,13 @@ export function ReportCard({ sheet, school, row, total, className = "" }: { shee
             .map((c) => {
               const p = sheet.papers.find((x) => x.id === c.paperId)!;
               return (
-                <tr key={c.paperId}>
-                  <td className={`${cell} font-medium`}>{p.name}</td>
+                <tr key={c.paperId} className={p.optional ? "text-slate-600" : ""}>
+                  <td className={`${cell} font-medium`}>
+                    {p.name}
+                    {p.optional && <span className="ml-[1.5mm] text-[7.5pt] font-normal text-slate-500">Optional · pass {p.passMarks}</span>}
+                  </td>
                   <td className={`${cell} text-center tabular-nums`}>{p.maxMarks}</td>
-                  <td className={`${cell} text-center tabular-nums ${c.kind === "absent" ? "font-semibold text-rose-700" : ""}`}>{markText(c) || "—"}</td>
+                  <td className={`${cell} text-center tabular-nums ${isLow(c) ? "font-semibold text-rose-700" : ""}`}>{markText(c) || "—"}</td>
                   <td className={`${cell} text-center font-semibold`}>{c.kind === "marks" ? c.grade : c.kind === "absent" ? "E" : "—"}</td>
                 </tr>
               );
@@ -127,14 +134,14 @@ export function ReportCard({ sheet, school, row, total, className = "" }: { shee
       </table>
       <div className="mt-[4mm] grid grid-cols-4 gap-[3mm] text-center">
         {[
-          ["Percentage", r.complete && r.max ? `${r.percent.toFixed(1)}%` : "—"],
+          ["Percentage", r.complete && r.max && r.result !== "Absent" ? `${r.percent.toFixed(1)}%` : "—"],
           ["Grade", r.complete ? r.grade : "—"],
           ["Rank", r.rank ? `${r.rank} of ${total}` : "—"],
           ["Result", r.result],
         ].map(([label, value]) => (
           <div key={label} className="rounded border border-slate-300 py-[2mm]">
             <p className="text-[7.5pt] uppercase tracking-wider text-slate-500">{label}</p>
-            <p className={`text-[12pt] font-bold ${value === "Fail" ? "text-rose-700" : ""}`}>{value}</p>
+            <p className={`text-[12pt] font-bold ${value === "Fail" || value === "Absent" ? "text-rose-700" : ""}`}>{value}</p>
           </div>
         ))}
       </div>
@@ -153,10 +160,10 @@ export function ReportCard({ sheet, school, row, total, className = "" }: { shee
 /** The whole section's results as one printable table. */
 export function ResultSheet({ sheet, school, rows }: { sheet: Sheet; school: SchoolHeader; rows: ResultRow[] }) {
   const passed = rows.filter((r) => r.result === "Pass").length;
-  const complete = rows.filter((r) => r.complete);
+  const complete = rows.filter((r) => r.complete && r.max && r.result !== "Absent");
   const avg = complete.length ? complete.reduce((n, r) => n + r.percent, 0) / complete.length : 0;
   return (
-    <article className="relative mx-auto overflow-hidden bg-white p-[10mm] text-[8.5pt] text-slate-900 shadow-md ring-1 ring-slate-200 print:p-0 print:shadow-none print:ring-0">
+    <article data-pdf-page className="relative mx-auto overflow-hidden bg-white p-[10mm] text-[8.5pt] text-slate-900 shadow-md ring-1 ring-slate-200 print:p-0 print:shadow-none print:ring-0">
       <Watermark show={!sheet.published} />
       <SheetHeader school={school} exam={sheet.exam.name} subtitle={`Result sheet · ${sheet.section.label} · Session ${sheet.exam.session}`} />
       <div className="mb-[3mm] flex flex-wrap justify-center gap-x-[8mm] text-[9pt]">
@@ -180,7 +187,10 @@ export function ResultSheet({ sheet, school, rows }: { sheet: Sheet; school: Sch
               {sheet.papers.map((p) => (
                 <th key={p.id} className={`${cell} text-center`}>
                   {p.name}
-                  <span className="block text-[7pt] font-normal">/{p.maxMarks}</span>
+                  <span className="block text-[7pt] font-normal">
+                    /{p.maxMarks}
+                    {p.optional && " · optional"}
+                  </span>
                 </th>
               ))}
               <th className={`${cell} text-center`}>Total</th>
@@ -196,10 +206,8 @@ export function ResultSheet({ sheet, school, rows }: { sheet: Sheet; school: Sch
                 <td className={`${cell} text-center`}>{r.student.rollNumber ?? "—"}</td>
                 <td className={`${cell} whitespace-nowrap font-medium`}>{r.student.name}</td>
                 {r.cells.map((c) => {
-                  const p = sheet.papers.find((x) => x.id === c.paperId)!;
-                  const low = c.kind === "absent" || (c.kind === "marks" && (c.marks / p.maxMarks) * 100 < PASS_PERCENT);
                   return (
-                    <td key={c.paperId} className={`${cell} text-center tabular-nums ${low ? "font-semibold text-rose-700" : ""}`}>
+                    <td key={c.paperId} className={`${cell} text-center tabular-nums ${isLow(c) ? "font-semibold text-rose-700" : ""}`}>
                       {markText(c)}
                     </td>
                   );
@@ -207,10 +215,10 @@ export function ResultSheet({ sheet, school, rows }: { sheet: Sheet; school: Sch
                 <td className={`${cell} text-center font-semibold tabular-nums`}>
                   {formatMarks(r.obtained)}/{r.max}
                 </td>
-                <td className={`${cell} text-center tabular-nums`}>{r.complete && r.max ? r.percent.toFixed(1) : "—"}</td>
+                <td className={`${cell} text-center tabular-nums`}>{r.complete && r.max && r.result !== "Absent" ? r.percent.toFixed(1) : "—"}</td>
                 <td className={`${cell} text-center font-semibold`}>{r.complete ? r.grade : "—"}</td>
                 <td className={`${cell} text-center tabular-nums`}>{r.rank ?? "—"}</td>
-                <td className={`${cell} text-center font-semibold ${r.result === "Fail" ? "text-rose-700" : r.result === "Incomplete" ? "text-slate-400" : ""}`}>
+                <td className={`${cell} text-center font-semibold ${r.result === "Fail" || r.result === "Absent" ? "text-rose-700" : r.result === "Incomplete" ? "text-slate-400" : ""}`}>
                   {r.result}
                 </td>
               </tr>

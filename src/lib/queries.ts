@@ -34,3 +34,9 @@ export function fullName(p: { firstName: string; middleName?: string | null; las
 export function sectionLabel(s: { name: string; class: { name: string } }) {
   return `${s.class.name} – ${s.name}`;
 }
+
+/** Short tile label under a class heading: "Class 1" + "A" → "1A", "Nursery" + "A" → "Nursery A". */
+export function shortSectionLabel(className: string, sectionName: string) {
+  const c = className.replace(/^class\s+/i, "");
+  return /\d$/.test(c) ? `${c}${sectionName}` : `${c} ${sectionName}`;
+}

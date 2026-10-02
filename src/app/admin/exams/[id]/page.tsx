@@ -1,10 +1,9 @@
 import { notFound } from "next/navigation";
-import { EyeOff, Send, Trash2 } from "lucide-react";
+import { ArrowRight, EyeOff, FileBarChart, Send, Trash2 } from "lucide-react";
 import { ExamWorkspace } from "@/components/exams/exam-workspace";
-import { MarksOverview } from "@/components/exams/marks-overview";
-import { marksOverview } from "@/lib/exam-marks";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { PageHeader } from "@/components/ui";
+import { ButtonLink, Card, PageHeader } from "@/components/ui";
+import { db } from "@/lib/db";
 import { loadExam } from "@/lib/exams";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 import { deleteExam, saveExamTimetable, setExamPublished, updateExamDetails } from "../actions";
@@ -16,8 +15,8 @@ export default async function ExamPage({ params }: PageProps<"/admin/exams/[id]"
   if (!exam) notFound();
   const viewer = await getViewer();
   const isExam = exam.kind === "EXAM";
+  const published = await db.examResult.count({ where: { examId: exam.id } });
   const actor = { kind: "admin" as const, schoolId: school.id, who: viewer?.kind === "admin" ? viewer.admin.name : "Power Admin" };
-  const overview = await marksOverview(actor, exam);
 
   return (
     <>
@@ -60,7 +59,18 @@ export default async function ExamPage({ params }: PageProps<"/admin/exams/[id]"
           </>
         }
       >
-        <MarksOverview rows={overview} base={`/admin/exams/${exam.id}`} />
+        <Card
+          title="Marks & results"
+          icon={FileBarChart}
+          description="Marks entry, results and report cards for this exam are in the Marks & results module, class by class."
+          action={
+            <ButtonLink href={`/admin/results/${exam.id}`} icon={ArrowRight} variant="secondary">
+              Open marks & results
+            </ButtonLink>
+          }
+        >
+          <p className="text-sm text-muted">{published ? `Results are published for ${published} of ${exam.sections.length} section(s).` : "No results published yet."}</p>
+        </Card>
       </ExamWorkspace>
     </>
   );

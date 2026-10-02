@@ -304,11 +304,33 @@ export function TimetableEditor(props: Props) {
                         inputMode="numeric"
                         value={r.maxMarks}
                         onChange={(e) => update(i, { maxMarks: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                        placeholder="e.g. 80"
+                        placeholder={r.optional ? "Max" : "e.g. 80"}
                         aria-label={`Row ${i + 1} maximum marks`}
                         className={`${small} w-24 ${bad(cellError(i, "maxMarks"))}`}
                       />
                       {err(cellError(i, "maxMarks"))}
+                      <label className="mt-1.5 flex items-center gap-1.5 whitespace-nowrap text-xs text-muted">
+                        <input
+                          type="checkbox"
+                          checked={r.optional}
+                          onChange={(e) => update(i, { optional: e.target.checked, passMarks: e.target.checked ? r.passMarks : "" })}
+                          className={checkboxClass}
+                        />
+                        Optional paper
+                      </label>
+                      {r.optional && (
+                        <>
+                          <input
+                            inputMode="numeric"
+                            value={r.passMarks}
+                            onChange={(e) => update(i, { passMarks: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                            placeholder="Pass marks"
+                            aria-label={`Row ${i + 1} passing marks`}
+                            className={`${small} mt-1.5 w-24 ${bad(cellError(i, "passMarks"))}`}
+                          />
+                          {err(cellError(i, "passMarks"))}
+                        </>
+                      )}
                     </td>
                     <td className={cell}>
                       <input

@@ -209,14 +209,14 @@ const publishedDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: 
 /** Results published most recently, one row per exam and section, each linking to its result sheet. */
 export function RecentResultsCard({ results, empty }: { results: PublishedResult[]; empty: ReactNode }) {
   return (
-    <Card title="Recent results" icon={Award} description="Published result sheets" padded={false} action={<TextLink href="/admin/exams">All exams</TextLink>}>
+    <Card title="Recent results" icon={Award} description="Published result sheets" padded={false} action={<TextLink href="/admin/results">All results</TextLink>}>
       {results.length === 0 ? (
         empty
       ) : (
         <ul className="divide-y divide-line">
           {results.map((r) => (
             <li key={`${r.examId}:${r.sectionId}`}>
-              <Link href={`/admin/exams/${r.examId}/results/${r.sectionId}`} className="group flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2 sm:px-6">
+              <Link href={`/admin/results/${r.examId}/${r.sectionId}`} className="group flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2 sm:px-6">
                 <IconTile icon={Award} tone={r.kind === "EXAM" ? "violet" : "sky"} size="sm" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-fg">{r.examName}</span>

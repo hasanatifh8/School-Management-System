@@ -72,8 +72,10 @@ export function paperViews(exam: LoadedExam): PaperView[] {
     startTime: p.startTime,
     endTime: p.endTime,
     classId: p.classId,
-    subject: paperName(p.subject?.name, p.title),
+    subject: paperName(p.subject?.name, p.title) + (p.optional ? " (Optional)" : ""),
     maxMarks: p.maxMarks,
+    optional: p.optional,
+    passMarks: p.passMarks,
     room: p.room,
     notes: p.notes,
   }));
@@ -89,6 +91,8 @@ export function paperInputs(exam: LoadedExam): PaperInput[] {
     subjectId: p.subjectId ?? "",
     title: p.title ?? "",
     maxMarks: p.maxMarks == null ? "" : String(p.maxMarks),
+    optional: p.optional,
+    passMarks: p.passMarks == null ? "" : String(p.passMarks),
     room: p.room ?? "",
     notes: p.notes ?? "",
   }));
@@ -286,6 +290,8 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
       subjectId: String(r?.subjectId ?? ""),
       title: String(r?.title ?? "").trim(),
       maxMarks: String(r?.maxMarks ?? "").trim(),
+      optional: r?.optional === true,
+      passMarks: r?.optional === true ? String(r?.passMarks ?? "").trim() : "",
       room: String(r?.room ?? "").trim(),
       notes: String(r?.notes ?? "").trim(),
     }));
@@ -324,6 +330,11 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     if (r.title.length > 60) fail(i, "title", "Keep it under 60 characters");
     if (r.maxMarks && !(/^\d{1,4}$/.test(r.maxMarks) && Number(r.maxMarks) >= 1 && Number(r.maxMarks) <= 1000)) {
       fail(i, "maxMarks", "1 to 1000");
+    }
+    if (r.optional) {
+      if (!r.maxMarks) fail(i, "maxMarks", "An optional paper needs max marks");
+      if (!/^\d{1,4}$/.test(r.passMarks)) fail(i, "passMarks", "Enter the pass marks");
+      else if (r.maxMarks && Number(r.passMarks) > Number(r.maxMarks)) fail(i, "passMarks", "Can't be more than the max marks");
     }
     if (r.room.length > 40) fail(i, "room", "Keep it under 40 characters");
     if (r.notes.length > 120) fail(i, "notes", "Keep it under 120 characters");
@@ -372,6 +383,9 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
       if (published) fail(i, "maxMarks", "Results are published; unpublish them to change max marks");
       else if (max == null || max < m.max) fail(i, "maxMarks", `Marks up to ${m.max} are entered; can't go below that`);
     }
+    if (published && (r.optional !== before.optional || (r.passMarks ? Number(r.passMarks) : null) !== before.passMarks)) {
+      fail(i, "passMarks", "Results are published; unpublish them to change optional or pass marks");
+    }
   });
   const removed = exam.papers.filter((p) => !kept.has(p.id));
   const blocked = removed.filter((p) => marked.has(p.id));
@@ -393,6 +407,8 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     subjectId: r.subjectId || null,
     title: r.title || null,
     maxMarks: r.maxMarks ? Number(r.maxMarks) : null,
+    optional: r.optional,
+    passMarks: r.optional && r.passMarks ? Number(r.passMarks) : null,
     room: r.room || null,
     notes: r.notes || null,
   });
@@ -422,6 +438,7 @@ export async function listSummaries(where: Prisma.ExamWhereInput, paging?: { ski
       sections: { include: { section: { include: { class: true } } } },
       papers: { select: { date: true } },
       teacher: { select: { firstName: true, lastName: true } },
+      _count: { select: { results: true } },
     },
   });
   return exams.map((e) => {
@@ -434,6 +451,7 @@ export async function listSummaries(where: Prisma.ExamWhereInput, paging?: { ski
       createdBy: e.createdBy,
       teacherId: e.teacherId,
       papers: e.papers.length,
+      resultsPublished: e._count.results,
       dates,
       sections: e.sections
         .map((s) => s.section)

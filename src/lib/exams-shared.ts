@@ -12,6 +12,9 @@ export type PaperInput = {
   subjectId: string; // "" = use the title only
   title: string;
   maxMarks: string;
+  /** An optional paper: needs max and pass marks, and stays out of the total. */
+  optional: boolean;
+  passMarks: string;
   room: string;
   notes: string;
 };
@@ -27,6 +30,8 @@ export const emptyPaper = (): PaperInput => ({
   subjectId: "",
   title: "",
   maxMarks: "",
+  optional: false,
+  passMarks: "",
   room: "",
   notes: "",
 });
@@ -128,6 +133,8 @@ export type PaperView = {
   classId: string | null;
   subject: string; // subject name and/or title
   maxMarks: number | null;
+  optional: boolean;
+  passMarks: number | null;
   room: string | null;
   notes: string | null;
 };
@@ -142,6 +149,10 @@ export function paperName(subjectName: string | null | undefined, title: string 
 
 /** Minimum percentage to pass a paper. */
 export const PASS_PERCENT = 33;
+
+/** Whether marks pass a paper: its own pass marks if it has them (optional papers), else PASS_PERCENT. */
+export const passes = (marks: number, paper: { maxMarks: number; passMarks: number | null }) =>
+  paper.passMarks != null ? marks >= paper.passMarks : (marks / paper.maxMarks) * 100 >= PASS_PERCENT;
 
 /** CBSE-style 8-point grades by percentage. */
 export const GRADES = [

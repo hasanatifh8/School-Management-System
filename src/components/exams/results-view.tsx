@@ -1,15 +1,17 @@
 import Link from "next/link";
-import { ArrowLeft, ChevronLeft, ChevronRight, FileBarChart, Lock, Printer, TableProperties, Users } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, FileBarChart, Lock, PenLine, Printer, TableProperties, Users } from "lucide-react";
 import { CardKeys } from "@/components/exams/card-keys";
 import { ReportCard, ResultSheet, type SchoolHeader } from "@/components/exams/report-card";
 import { ResultsStudentList } from "@/components/exams/results-student-list";
+import { AutoRun, PdfDownloadButton } from "@/components/pdf-download";
 import { PrintButton } from "@/components/print-button";
 import { Badge, buttonVariants, Card, StatCard } from "@/components/ui";
 import { computeResults, type Sheet } from "@/lib/exam-marks";
 import { formatMarks } from "@/lib/exams-shared";
 
 export type { SchoolHeader };
-export type ResultsMode = { view: "list" } | { view: "sheet" } | { view: "all-cards" } | { view: "card"; studentId: string };
+/** `run`: print or download the card as soon as it opens (from the list's row buttons). */
+export type ResultsMode = { view: "list" } | { view: "sheet" } | { view: "all-cards" } | { view: "card"; studentId: string; run?: string };
 
 const stamp = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 
@@ -22,13 +24,16 @@ export function ResultsView({
   sheet,
   school,
   mode,
-  backHref,
+  back,
+  marksHref,
   baseHref,
 }: {
   sheet: Sheet;
   school: SchoolHeader;
   mode: ResultsMode;
-  backHref: string;
+  /** Where "Back" goes from the student list: one level up. */
+  back: { href: string; label: string };
+  marksHref: string;
   baseHref: string;
 }) {
   const rows = computeResults(sheet);
@@ -38,6 +43,7 @@ export function ResultsView({
   const cardHref = (id: string) => `${baseHref}?student=${id}`;
   const printPortrait = `@page { size: A4 portrait; margin: 10mm; }`;
   const pageStyle = (page: string) => <style>{`${page} @media print { html, body { background: #fff !important; } }`}</style>;
+  const fileBase = (name: string) => `${name} - ${sheet.exam.name} - ${sheet.section.label}`.replace(/[\\/:*?"<>|]+/g, " ");
 
   /* ── One report card, with previous / next ── */
   if (mode.view === "card") {
@@ -82,11 +88,13 @@ export function ResultsView({
                   <ChevronRight className="h-4 w-4" />
                 </span>
               )}
+              <PdfDownloadButton root="report-card" fileName={fileBase(row.student.name)} />
               <PrintButton label="Print this card" />
             </div>
           </div>
+          <AutoRun key={row.student.id} action={mode.run} root="report-card" fileName={fileBase(row.student.name)} />
           <p className="text-center text-xs text-subtle print:hidden">Tip: use ← and → to move between students, Esc to go back to the list.</p>
-          <div className="mx-auto max-w-[210mm] print:max-w-none">
+          <div data-pdf-root="report-card" className="mx-auto max-w-[210mm] print:max-w-none">
             <ReportCard sheet={sheet} school={school} row={row} total={rows.length} />
           </div>
         </div>
@@ -107,9 +115,10 @@ export function ResultsView({
           <Link href={baseHref} className={buttonVariants.ghost}>
             Back to students
           </Link>
+          <PdfDownloadButton root="all-cards" fileName={fileBase("Report cards")} label={`Download ${byRoll.length} as PDF`} />
           <PrintButton label={`Print ${byRoll.length} cards`} />
         </div>
-        <div className="mx-auto max-w-[210mm] space-y-6 print:max-w-none print:space-y-0">
+        <div data-pdf-root="all-cards" className="mx-auto max-w-[210mm] space-y-6 print:max-w-none print:space-y-0">
           {byRoll.map((row, i) => (
             <ReportCard key={row.student.id} sheet={sheet} school={school} row={row} total={rows.length} className={i > 0 ? "print:break-before-page" : ""} />
           ))}
@@ -119,7 +128,7 @@ export function ResultsView({
   }
 
   /* ── List and result sheet share a header with tabs ── */
-  const complete = rows.filter((r) => r.complete && r.max);
+  const complete = rows.filter((r) => r.complete && r.max && r.result !== "Absent");
   const passed = rows.filter((r) => r.result === "Pass").length;
   const failed = rows.filter((r) => r.result === "Fail").length;
   const avg = complete.length ? complete.reduce((n, r) => n + r.percent, 0) / complete.length : null;
@@ -135,9 +144,9 @@ export function ResultsView({
       <div className="space-y-6 print:hidden">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Link href={backHref} className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-accent-text">
+            <Link href={back.href} className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-accent-text">
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back to marks
+              {back.label}
             </Link>
             <h1 className="text-2xl font-semibold tracking-tight text-fg">Results · {sheet.section.label}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
@@ -155,8 +164,15 @@ export function ResultsView({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href={marksHref} className={buttonVariants.ghost}>
+              <PenLine className="h-4 w-4" />
+              {sheet.published ? "View marks" : "Enter marks"}
+            </Link>
             {isSheet ? (
-              <PrintButton label="Print result sheet" />
+              <>
+                <PdfDownloadButton root="result-sheet" fileName={fileBase("Result sheet")} />
+                <PrintButton label="Print result sheet" />
+              </>
             ) : (
               <Link href={`${baseHref}?view=all-cards`} className={buttonVariants.secondary}>
                 <Printer className="h-4 w-4" />
@@ -187,7 +203,9 @@ export function ResultsView({
       </div>
 
       {isSheet ? (
-        <ResultSheet sheet={sheet} school={school} rows={byRoll} />
+        <div data-pdf-root="result-sheet">
+          <ResultSheet sheet={sheet} school={school} rows={byRoll} />
+        </div>
       ) : (
         <Card padded={false}>
           <ResultsStudentList

@@ -949,6 +949,8 @@ model ExamPaper {
   subjectId String?
   title     String? // custom paper name, e.g. "Practical" or "Drawing"
   maxMarks  Int?
+  optional  Boolean  @default(false) // an optional paper: graded on its own pass marks, left out of the total
+  passMarks Int? // optional papers only
   room      String?
   notes     String?
 
