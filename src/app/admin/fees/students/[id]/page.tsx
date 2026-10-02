@@ -24,9 +24,9 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+      <section className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
         <div className="flex flex-wrap items-center gap-4">
-          <Avatar name={name} src={photoUrl(student.photoId)} size="lg" />
+          <Avatar name={name} src={photoUrl(student.photoId)} size="md" />
           <div className="min-w-0 flex-1">
             <Breadcrumbs
               items={[
@@ -35,7 +35,7 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
                 { label: name },
               ]}
             />
-            <h2 className="text-h2 font-semibold text-fg">
+            <h2 className="text-lg font-semibold text-fg">
               <Link href={`/admin/students/${student.id}`} className="rounded transition hover:text-accent-text">
                 {name}
               </Link>
@@ -53,14 +53,14 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
             Fee ledger
           </ButtonLink>
         </div>
-        <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-line pt-6 sm:grid-cols-4">
+        <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-4">
           <Tile label={`Fees for ${session.name}`} value={rupees(totals.total)} />
           <Tile label="Paid" value={rupees(totals.paid)} tone="text-success" />
           <Tile label="Due now" value={rupees(totals.dueNow)} tone={totals.dueNow ? "text-danger" : "text-fg"} />
           <Tile label="Upcoming" value={rupees(totals.upcoming)} />
         </dl>
         {totals.total > 0 && (
-          <ProgressBar value={(totals.paid / totals.total) * 100} tone="success" className="mt-4" label="Share of the session's fees paid" />
+          <ProgressBar value={(totals.paid / totals.total) * 100} tone="success" className="mt-3" label="Share of the session's fees paid" />
         )}
       </section>
 
@@ -117,7 +117,7 @@ export default async function StudentFeesPage({ params }: PageProps<"/admin/fees
             <Card
               title="Optional fees"
               icon={Bus}
-              description="Charged only if the student uses them. To add a fee for many students at once, use its link in the fee structure."
+              description="Charged only if the student uses them."
             >
               <ul className="space-y-3">
                 {optionalHeads.map((h) => (
@@ -171,7 +171,7 @@ function Tile({ label, value, tone = "text-fg" }: { label: string; value: string
   return (
     <div>
       <dt className="text-eyebrow uppercase text-muted">{label}</dt>
-      <dd className={`mt-1 text-xl font-semibold tabular-nums sm:text-2xl ${tone}`}>{value}</dd>
+      <dd className={`mt-0.5 text-lg font-semibold tabular-nums ${tone}`}>{value}</dd>
     </div>
   );
 }
