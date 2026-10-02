@@ -15,6 +15,7 @@ import { MAX_TEACHER_AGE as MAX_AGE, MIN_TEACHER_AGE as MIN_AGE, ageBounds, shif
 export { MAX_AGE as MAX_STAFF_AGE, MIN_AGE as MIN_STAFF_AGE };
 
 /** Common jobs, offered as suggestions. */
+export const STAFF_DEPARTMENTS = ["Administration", "Accounts", "Front office", "Library", "Laboratory", "Transport", "Maintenance", "Housekeeping", "Security", "Kitchen", "Medical"];
 export const STAFF_JOBS = ["Cashier", "Accountant", "Office assistant", "Receptionist", "Librarian", "Lab assistant", "Security guard", "Peon", "Helper", "Cleaner", "Driver", "Conductor", "Gardener", "Cook", "Nurse", "Electrician"];
 
 /** Optional whole number within a range; accepts "12,000" and "₹12000". */
@@ -37,6 +38,7 @@ export const staffSchema = z
   .object({
     name: requiredName("Full name").refine((v) => v.length >= 2, "Enter the full name"),
     designation: z.string().trim().min(2, "Enter the job, e.g. Security guard").max(60, "Job is too long"),
+    department: z.string().trim().max(60, "Department is too long").optional().transform((v) => v || null),
     gender: optionalGender,
     bloodGroup: optionalBloodGroup,
     dateOfBirth: optionalDate.superRefine((d, ctx) => {

@@ -8,6 +8,8 @@ import { isoDate, parseISODate } from "@/lib/attendance-shared";
 import { MAX_HOLIDAY_DAYS, syncEventHolidays } from "@/lib/calendar";
 import { EVENT_TYPES } from "@/lib/calendar-shared";
 import { db } from "@/lib/db";
+import { readDocumentUpload } from "@/lib/documents";
+import { ATTACHMENT_TYPES } from "@/lib/notices-shared";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 
@@ -30,6 +32,17 @@ const eventSchema = z
     }
     return { ...v, endDate };
   });
+
+/** The optional attachment: a PDF, PNG or JPG up to 4 MB. Null when none was chosen. */
+async function readAttachment(formData: FormData) {
+  const f = formData.get("attachment");
+  if (!(f instanceof File) || f.size === 0) return { file: null };
+  const upload = await readDocumentUpload(formData, "attachment");
+  const bad = (message: string): ActionState & { error: string } => ({ error: message, fieldErrors: { attachment: [message] } });
+  if ("error" in upload) return bad(upload.error.startsWith("Only ") ? "Attach a PDF, PNG or JPG file." : upload.error);
+  if (!ATTACHMENT_TYPES.has(upload.file.mimeType)) return bad("Attach a PDF, PNG or JPG file.");
+  return { file: upload.file };
+}
 
 /** Adds (id null) or changes a calendar entry. New entries are drafts until published. */
 export async function saveCalendarEvent(id: string | null, _: ActionState, formData: FormData): Promise<ActionState> {
@@ -58,15 +71,30 @@ export async function saveCalendarEvent(id: string | null, _: ActionState, formD
     return { error: "A holiday is for the whole school. For one class, mark it off on that class's attendance page.", fieldErrors: { classIds: ["Whole school only"] } };
   }
 
+  const attachment = await readAttachment(formData);
+  if ("error" in attachment) return attachment;
+  const file = attachment.file && { fileName: attachment.file.fileName, mimeType: attachment.file.mimeType, size: attachment.file.size, data: attachment.file.data };
+
   const data = { type, title, startDate: parseISODate(startDate)!, endDate: parseISODate(endDate)!, description, classIds };
   if (id) {
     const existing = await db.calendarEvent.findFirst({ where: { id, schoolId: school.id } });
     if (!existing) return { error: "Entry not found." };
+    const removeFile = formData.get("removeAttachment") === "on";
     // A published entry stays published; its holiday days follow the change.
-    await db.$transaction(async (tx) => syncEventHolidays(tx, await tx.calendarEvent.update({ where: { id }, data })));
+    await db.$transaction(async (tx) => {
+      await syncEventHolidays(tx, await tx.calendarEvent.update({ where: { id }, data }));
+      if (file) await tx.calendarAttachment.upsert({ where: { eventId: id }, create: { eventId: id, ...file }, update: { ...file, createdAt: new Date() } });
+      else if (removeFile) await tx.calendarAttachment.deleteMany({ where: { eventId: id } });
+    });
   } else {
     await db.calendarEvent.create({
-      data: { ...data, schoolId: school.id, sessionId: session.id, createdBy: viewer?.kind === "admin" ? viewer.admin.name : "Power Admin" },
+      data: {
+        ...data,
+        schoolId: school.id,
+        sessionId: session.id,
+        createdBy: viewer?.kind === "admin" ? viewer.admin.name : "Power Admin",
+        ...(file && { attachment: { create: file } }),
+      },
     });
   }
   revalidatePath("/", "layout");

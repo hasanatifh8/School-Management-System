@@ -12,11 +12,12 @@ import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { ageBounds, normalizeIndianMobile, shiftYears } from "@/lib/student-options";
 import { todayISO } from "@/lib/attendance-shared";
-import { MAX_STAFF_AGE, MIN_STAFF_AGE, STAFF_JOBS } from "./schema";
+import { MAX_STAFF_AGE, MIN_STAFF_AGE, STAFF_DEPARTMENTS, STAFF_JOBS } from "./schema";
 
 type StaffValues = {
   name: string;
   designation: string;
+  department: string | null;
   gender: string | null;
   bloodGroup: string | null;
   dateOfBirth: Date | null;
@@ -112,6 +113,14 @@ export function StaffForm({
               <datalist id="staff-jobs">
                 {STAFF_JOBS.map((j) => (
                   <option key={j} value={j} />
+                ))}
+              </datalist>
+              <Field label="Department" name="department" errors={e} hint="Shown on the staff ID card.">
+                <input name="department" list="staff-departments" maxLength={60} defaultValue={staff?.department ?? ""} placeholder="e.g. Administration" className={inputClass} />
+              </Field>
+              <datalist id="staff-departments">
+                {STAFF_DEPARTMENTS.map((d) => (
+                  <option key={d} value={d} />
                 ))}
               </datalist>
               <Field label="Qualification / degree" name="qualification" errors={e}>

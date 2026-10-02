@@ -6,6 +6,7 @@ import {
   CalendarOff,
   CalendarRange,
   ChevronRight,
+  IdCard,
   KeyRound,
   ListTree,
   MessageCircle,
@@ -31,6 +32,7 @@ const groups: { title: string; items: Item[] }[] = [
       { href: "/admin/timetable/periods", icon: Bell, tone: "amber", title: "Bell schedule", text: "Periods, breaks and school days" },
       { href: "/admin/subjects", icon: BookOpen, tone: "sky", title: "Subjects", text: "Subjects offered across the school" },
       { href: "/admin/houses", icon: Shield, tone: "rose", title: "Houses", text: "Red, Green… and their members" },
+      { href: "/admin/id-cards/settings", icon: IdCard, tone: "indigo", title: "ID card back", text: "Emergency contacts and guidelines on every card" },
     ],
   },
   {

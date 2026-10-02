@@ -16,6 +16,7 @@ import {
   type AttendanceStatusKey,
   type RegisterPeriod,
 } from "@/lib/attendance-shared";
+import { onLeave } from "@/lib/leave";
 import { photoUrl } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
 import { getCurrentSession } from "@/lib/sessions";
@@ -155,7 +156,7 @@ export async function loadAttendanceSheet(schoolId: string, sectionId: string, d
 
 /** Props for <AttendanceSheet> (everything except the bound actions). */
 export async function attendanceSheetProps(schoolId: string, sectionId: string, date: string) {
-  const { students, day, holiday } = await loadAttendanceSheet(schoolId, sectionId, date);
+  const [{ students, day, holiday }, leave] = await Promise.all([loadAttendanceSheet(schoolId, sectionId, date), onLeave(schoolId, parseISODate(date)!)]);
   const marked = day && !day.holiday && day.records.length > 0;
   return {
     students: students.map((s) => ({
@@ -168,6 +169,8 @@ export async function attendanceSheetProps(schoolId: string, sectionId: string, 
     initial: marked
       ? Object.fromEntries(day.records.map((r) => [r.studentId, { status: r.status, remark: r.remark ?? "" }]))
       : null,
+    /** Students on approved leave this day: they start as Leave on an unmarked day. */
+    onLeave: students.filter((s) => leave.has(s.id)).map((s) => s.id),
     markedBy: day?.markedBy ?? null,
     schoolHoliday: holiday?.name ?? null,
     classHoliday: day?.holiday ?? null,

@@ -177,12 +177,22 @@ export async function NoticeList({
  * Active notices addressed to teachers or to staff, for their notice board:
  * published, not expired, newest first.
  */
+/**
+ * Active notices for a portal. "teachers" also shows staff notices and
+ * school-wide ones (sent to every family), so teachers know what parents heard.
+ */
 export async function NoticeBoard({ schoolId, audience, title, empty }: { schoolId: string; audience: "teachers" | "staff"; title: string; empty?: string }) {
   const now = new Date();
   const today = todayISO();
   const notices = (
     await db.notice.findMany({
-      where: { schoolId, publishAt: { lte: now }, ...(audience === "teachers" ? { forTeachers: true } : { forStaff: true }) },
+      where: {
+        schoolId,
+        publishAt: { lte: now },
+        ...(audience === "teachers"
+          ? { OR: [{ forTeachers: true }, { forStaff: true }, { audience: { startsWith: "Whole school" } }] }
+          : { forStaff: true }),
+      },
       orderBy: { publishAt: "desc" },
       take: 30,
       include: { attachment: { select: { token: true, fileName: true } } },

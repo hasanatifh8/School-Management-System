@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, CircleCheck, Undo2, Users } from "lucide-react";
+import { Banknote, CircleCheck, Presentation, Undo2, Users } from "lucide-react";
 import { MonthPicker } from "@/components/expenses/month-picker";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, EmptyState, inputClass, PagedList, selectClass } from "@/components/ui";
@@ -10,7 +10,7 @@ import { payAllSalaries, paySalary, undoSalary } from "../actions";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
-/** One month's payroll: teaching and non-teaching staff, paid or not. */
+/** One month's payroll, one category at a time: teaching or non-teaching staff (?group=). */
 export default async function SalariesPage({ searchParams }: PageProps<"/admin/expenses/salaries">) {
   const sp = await searchParams;
   const { school, month: current } = await requireExpensesAccess();
@@ -112,40 +112,82 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
     );
   };
 
+  const groups = [
+    { type: "TEACHER" as const, key: "teaching", title: "Teaching staff", icon: Presentation },
+    { type: "STAFF" as const, key: "non-teaching", title: "Non-teaching staff", icon: Users },
+  ];
+  const active = groups.find((g) => g.key === sp.group) ?? groups[0];
+  const dueIn = unpaid.filter((r) => r.type === active.type);
+  const href = (key: string) => `/admin/expenses/salaries?month=${month}&group=${key}`;
+
   return (
     <div className="space-y-6">
-      <MonthPicker basePath="/admin/expenses/salaries" month={month} max={addMonths(current, 1)} current={current} />
+      <MonthPicker basePath={`/admin/expenses/salaries?group=${active.key}`} month={month} max={addMonths(current, 1)} current={current} />
+
+      {/* One card per category; the chosen one is managed below. */}
+      <div className="grid gap-4 md:grid-cols-2" role="tablist" aria-label="Staff category">
+        {groups.map((g) => {
+          const people = rows.filter((r) => r.type === g.type);
+          const total = sum(people);
+          const done = sum(paid, g.type);
+          const pct = total ? Math.round((done / total) * 100) : 0;
+          const on = g.key === active.key;
+          return (
+            <Link
+              key={g.key}
+              href={href(g.key)}
+              role="tab"
+              aria-selected={on}
+              scroll={false}
+              className={`group rounded-2xl border p-5 shadow-card transition hover:-translate-y-px ${
+                on ? "border-accent-line bg-accent-soft ring-2 ring-accent/30" : "border-line bg-surface hover:border-accent-line"
+              }`}
+            >
+              <span className="flex items-center gap-3">
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${on ? "bg-accent text-white" : "bg-surface-3 text-fg-2"}`}>
+                  <g.icon className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-fg">{g.title}</span>
+                  <span className="block text-xs text-muted">
+                    {people.length} {people.length === 1 ? "person" : "people"} · payroll {rupees(total)}
+                  </span>
+                </span>
+                {on && <Badge tone="indigo">Selected</Badge>}
+              </span>
+              <span className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <span>
+                  <span className="block text-xs text-muted">Paid</span>
+                  <span className="font-semibold tabular-nums text-success">{rupees(done)}</span>
+                </span>
+                <span>
+                  <span className="block text-xs text-muted">Still to pay</span>
+                  <span className={`font-semibold tabular-nums ${sum(unpaid, g.type) ? "text-warning" : "text-fg"}`}>{rupees(sum(unpaid, g.type))}</span>
+                </span>
+              </span>
+              <span className="mt-3 block h-1.5 overflow-hidden rounded-full bg-surface-3">
+                <span className={`block h-full rounded-full ${pct === 100 ? "bg-success-solid" : "bg-accent"}`} style={{ width: `${pct}%` }} />
+              </span>
+            </Link>
+          );
+        })}
+      </div>
 
       <section className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
-        <dl className="grid grid-cols-2 gap-x-10 gap-y-3 sm:grid-cols-4">
-          <div>
-            <dt className="text-xs font-medium text-muted">Payroll for {monthName}</dt>
-            <dd className="text-xl font-semibold tabular-nums text-fg">{rupees(sum(rows))}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted">Paid</dt>
-            <dd className="text-xl font-semibold tabular-nums text-success">{rupees(sum(paid))}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted">Teaching / non-teaching paid</dt>
-            <dd className="text-sm font-medium tabular-nums text-fg">
-              {rupees(sum(paid, "TEACHER"))} / {rupees(sum(paid, "STAFF"))}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted">Still to pay</dt>
-            <dd className={`text-xl font-semibold tabular-nums ${unpaid.length ? "text-warning" : "text-fg"}`}>
-              {rupees(sum(unpaid))} <span className="text-xs font-normal text-muted">({unpaid.length})</span>
-            </dd>
-          </div>
-        </dl>
-        {unpaid.length === 0 && paid.length > 0 && (
-          <p className="flex items-center gap-2 text-sm font-medium text-success">
-            <CircleCheck className="h-4 w-4" /> Everyone with a salary is paid for {monthName}.
+        <div>
+          <p className="text-sm font-semibold text-fg">
+            {active.title} · {monthName}
           </p>
-        )}
-        {unpaid.length > 0 && (
-          <ActionForm action={payAllSalaries.bind(null, month)} className="flex flex-wrap items-end gap-2">
+          <p className="text-xs text-muted">
+            Whole school: {rupees(sum(paid))} paid of {rupees(sum(rows))}
+          </p>
+        </div>
+        {dueIn.length === 0 ? (
+          <p className="flex items-center gap-2 text-sm font-medium text-success">
+            <CircleCheck className="h-4 w-4" /> Everyone in {active.title.toLowerCase()} with a salary is paid for {monthName}.
+          </p>
+        ) : (
+          <ActionForm action={payAllSalaries.bind(null, month, active.type)} className="flex flex-wrap items-end gap-2">
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-fg-2">Paid on</span>
               <input type="date" name="paidOn" defaultValue={today} max={today} required className={`${inputClass} !py-2`} />
@@ -160,15 +202,17 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
                 ))}
               </select>
             </label>
-            <SubmitButton icon={<Banknote className="h-4 w-4" />} confirm={`Pay ${unpaid.length} people their full monthly salary (${rupees(sum(unpaid))}) for ${monthName}?`}>
-              Pay all {unpaid.length}
+            <SubmitButton
+              icon={<Banknote className="h-4 w-4" />}
+              confirm={`Pay ${dueIn.length} ${active.title.toLowerCase()} their full monthly salary (${rupees(sum(dueIn))}) for ${monthName}?`}
+            >
+              Pay all {dueIn.length}
             </SubmitButton>
           </ActionForm>
         )}
       </section>
 
-      {section("TEACHER", "Teaching staff")}
-      {section("STAFF", "Non-teaching staff")}
+      {section(active.type, active.title)}
     </div>
   );
 }

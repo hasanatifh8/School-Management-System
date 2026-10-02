@@ -20,6 +20,7 @@ export type SheetStudent = { id: string; name: string; roll: number | null; phot
 export function AttendanceSheet({
   students,
   initial,
+  onLeave = [],
   markedBy,
   schoolHoliday,
   classHoliday,
@@ -32,6 +33,8 @@ export function AttendanceSheet({
   students: SheetStudent[];
   /** Saved marks, or null when this day hasn't been marked yet. */
   initial: Record<string, Mark> | null;
+  /** On approved leave this day; they start as Leave when the day isn't marked yet. */
+  onLeave?: string[];
   markedBy: string | null;
   schoolHoliday: string | null;
   classHoliday: string | null;
@@ -43,8 +46,14 @@ export function AttendanceSheet({
   next?: { href: string; label: string } | null;
 }) {
   const start = useMemo(
-    () => Object.fromEntries(students.map((s) => [s.id, initial?.[s.id] ?? { status: "PRESENT" as const, remark: "" }])),
-    [students, initial],
+    () =>
+      Object.fromEntries(
+        students.map((s) => [
+          s.id,
+          initial?.[s.id] ?? (onLeave.includes(s.id) ? { status: "LEAVE" as const, remark: "Approved leave" } : { status: "PRESENT" as const, remark: "" }),
+        ]),
+      ),
+    [students, initial, onLeave],
   );
   const [marks, setMarks] = useState<Record<string, Mark>>(start);
   const [savedMarks, setSavedMarks] = useState(start);
@@ -242,7 +251,9 @@ export function AttendanceSheet({
             ) : initial ? (
               <span className="text-xs text-muted">Saved{markedBy ? ` by ${markedBy}` : ""}</span>
             ) : (
-              <span className="text-xs text-muted">Not marked yet. Everyone starts as present.</span>
+              <span className="text-xs text-muted">
+                Not marked yet. Everyone starts as present{onLeave.length ? `, except ${onLeave.length} on approved leave` : ""}.
+              </span>
             )}
           </div>
           {saved && next ? (

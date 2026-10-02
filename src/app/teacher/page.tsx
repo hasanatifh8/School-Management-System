@@ -12,6 +12,7 @@ import {
   IdCard,
   Megaphone,
   PenLine,
+  Plane,
   School,
   Sun,
   UserPlus,
@@ -35,7 +36,9 @@ import {
   upcomingBirthdays,
   type Activity,
 } from "@/components/dashboard/widgets";
+import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, ButtonLink, Callout, Card, EmptyState, IconTile, PageHeader, TextLink } from "@/components/ui";
+import { selfCheckIn } from "./actions";
 import { attendanceWindow } from "@/lib/attendance";
 import { attendancePercent, emptyCounts, isSunday, isoDate, parseISODate } from "@/lib/attendance-shared";
 import { loadCalendar } from "@/lib/calendar";
@@ -78,6 +81,10 @@ export default async function TeacherDashboard() {
     myTests,
     results,
     admissions,
+    myAttendance,
+    myLeave,
+    studentLeavePending,
+    markExams,
   ] = await Promise.all([
     db.student.groupBy({ by: ["sectionId"], where: { sectionId: { in: sectionIds }, status: "ACTIVE" }, _count: true }),
     cls ? db.student.findMany({ where: { sectionId: cls.id, status: "ACTIVE" }, select: { rollNumber: true } }) : [],
@@ -120,6 +127,33 @@ export default async function TeacherDashboard() {
     cls
       ? db.student.findMany({ where: { sectionId: cls.id, status: "ACTIVE" }, orderBy: { createdAt: "desc" }, take: 3 })
       : [],
+    db.staffAttendance.findMany({
+      where: { teacherId: ctx.teacher.id, date: { gte: parseISODate(`${win.today.slice(0, 7)}-01`)!, lte: todayDate } },
+      select: { date: true, status: true, markedBy: true },
+    }),
+    db.leaveRequest.findMany({ where: { teacherId: ctx.teacher.id }, orderBy: { createdAt: "desc" }, take: 3 }),
+    cls ? db.leaveRequest.count({ where: { applicant: "STUDENT", status: "PENDING", student: { sectionId: cls.id } } }) : 0,
+    db.exam.findMany({
+      where: {
+        schoolId: ctx.school.id,
+        sessionId: session.id,
+        papers: { some: { maxMarks: { not: null } } },
+        OR: [
+          { kind: "TEST", teacherId: ctx.teacher.id },
+          { sections: { some: { sectionId: { in: sectionIds } } }, OR: [{ kind: "EXAM", published: true }, { kind: "TEST" }] },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        name: true,
+        kind: true,
+        papers: { select: { date: true } },
+        sections: { where: { sectionId: { in: sectionIds } }, select: { sectionId: true } },
+        results: { where: { sectionId: { in: sectionIds } }, select: { sectionId: true } },
+      },
+    }),
   ]);
 
   /* ── Numbers ── */
@@ -182,6 +216,11 @@ export default async function TeacherDashboard() {
 
   const noClasses = !cls && ctx.subjectSections.length === 0;
 
+  /* ── Self attendance ── */
+  const todayMark = myAttendance.find((a) => isoDate(a.date) === win.today);
+  const monthMarks = { PRESENT: 0, ABSENT: 0, HALF_DAY: 0, ON_LEAVE: 0 };
+  for (const a of myAttendance) monthMarks[a.status]++;
+
   return (
     <>
       <PageHeader
@@ -206,7 +245,7 @@ export default async function TeacherDashboard() {
       />
 
       <div className="mb-6 empty:hidden">
-        <NoticeBoard schoolId={ctx.school.id} audience="teachers" title="Notices for teachers" />
+        <NoticeBoard schoolId={ctx.school.id} audience="teachers" title="Notices" />
       </div>
 
       {noClasses ? (
@@ -344,6 +383,18 @@ export default async function TeacherDashboard() {
             </Card>
           </div>
 
+          {/* Me: attendance, leave, classes, marks */}
+          <div className="mt-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
+            <SelfAttendanceCard
+              today={todayMark ? { status: todayMark.status, by: todayMark.markedBy } : null}
+              month={monthMarks}
+              canCheckIn={!todayMark && attendanceDue && !todayHoliday}
+            />
+            <LeaveCard requests={myLeave} studentPending={studentLeavePending} />
+            <ClassesSubjectsCard ctx={ctx} counts={new Map(counts.map((c) => [c.sectionId, c._count]))} />
+            <MarksCard exams={markExams} today={win.today} />
+          </div>
+
           {/* Lists */}
           <div className="mt-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
             <BirthdaysCard birthdays={birthdays} emptyText="Birthdays of the students you teach show here." />
@@ -365,6 +416,8 @@ export default async function TeacherDashboard() {
               <QuickAction href="/teacher/timetable" icon={CalendarClock} tone="amber" title="My timetable" text="Your periods this week" />
               <QuickAction href="/teacher/calendar" icon={CalendarDays} tone="emerald" title="School calendar" text="Exams, events and holidays" />
               {cls && <QuickAction href="/teacher/class" icon={Users} tone="indigo" title="My class" text="Students, roll numbers and details" />}
+              <QuickAction href="/teacher/students" icon={GraduationCap} tone="emerald" title="Students" text="Everyone in the classes you teach" />
+              <QuickAction href="/teacher/leave/new" icon={Plane} tone="violet" title="Apply for leave" text="Request days off and track approval" />
               {cls && <QuickAction href="/teacher/id-cards" icon={IdCard} tone="slate" title="ID cards" text="Print your class's ID cards" />}
             </div>
           </Card>
@@ -423,6 +476,163 @@ function ClassesCard({ ctx, counts }: { ctx: Awaited<ReturnType<typeof requireTe
           </li>
         ))}
       </ul>
+    </Card>
+  );
+}
+
+const SELF_STATUS = {
+  PRESENT: { label: "Present", tone: "green" },
+  ABSENT: { label: "Absent", tone: "red" },
+  HALF_DAY: { label: "Half day", tone: "sky" },
+  ON_LEAVE: { label: "On leave", tone: "slate" },
+} as const;
+
+/** The teacher's own attendance: today (with check-in) and this month. */
+function SelfAttendanceCard({
+  today,
+  month,
+  canCheckIn,
+}: {
+  today: { status: keyof typeof SELF_STATUS; by: string | null } | null;
+  month: Record<keyof typeof SELF_STATUS, number>;
+  canCheckIn: boolean;
+}) {
+  return (
+    <Card title="My attendance" icon={UserRoundCheck} description="Marked by the office, or check in yourself">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-muted">Today</span>
+        {today ? (
+          <span title={today.by ? `Marked by ${today.by}` : undefined}>
+            <Badge tone={SELF_STATUS[today.status].tone} dot>
+              {SELF_STATUS[today.status].label}
+            </Badge>
+          </span>
+        ) : (
+          <Badge tone="amber" dot>
+            Not marked
+          </Badge>
+        )}
+      </div>
+      {canCheckIn && (
+        <ActionForm action={selfCheckIn} compact className="mt-3 flex flex-row-reverse items-center justify-end gap-2">
+          <SubmitButton size="sm" icon={<UserRoundCheck className="h-4 w-4" />}>
+            Check in
+          </SubmitButton>
+        </ActionForm>
+      )}
+      <dl className="mt-4 grid grid-cols-4 gap-2 border-t border-line pt-3 text-center">
+        {(Object.keys(SELF_STATUS) as (keyof typeof SELF_STATUS)[]).map((k) => (
+          <div key={k}>
+            <dt className="text-[11px] text-muted">{SELF_STATUS[k].label}</dt>
+            <dd className="text-lg font-semibold tabular-nums text-fg">{month[k]}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-1 text-center text-[11px] text-subtle">This month</p>
+    </Card>
+  );
+}
+
+const LEAVE_TONE = { PENDING: "amber", APPROVED: "green", REJECTED: "red" } as const;
+const shortDay = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+
+/** The teacher's latest leave requests, and students' requests waiting on them. */
+function LeaveCard({ requests, studentPending }: { requests: { id: string; fromDate: Date; toDate: Date; status: keyof typeof LEAVE_TONE }[]; studentPending: number }) {
+  return (
+    <Card title="My leave" icon={Plane} action={<TextLink href="/teacher/leave/new">Apply</TextLink>}>
+      {studentPending > 0 && (
+        <Link href="/teacher/leave?who=student" className="mb-3 block rounded-lg bg-warning-soft px-3 py-2 text-sm font-medium text-fg ring-1 ring-inset ring-warning-line">
+          {studentPending} student leave request{studentPending === 1 ? "" : "s"} to decide
+        </Link>
+      )}
+      {requests.length === 0 ? (
+        <p className="text-sm text-muted">No leave requests yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {requests.map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-2 text-sm">
+              <span className="text-fg-2">
+                {shortDay.format(r.fromDate)}
+                {r.toDate.getTime() !== r.fromDate.getTime() && ` – ${shortDay.format(r.toDate)}`}
+              </span>
+              <Badge tone={LEAVE_TONE[r.status]} dot>
+                {r.status === "PENDING" ? "Pending" : r.status === "APPROVED" ? "Approved" : "Rejected"}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+      <TextLink href="/teacher/leave?who=mine" className="mt-3 inline-block">
+        All my leave
+      </TextLink>
+    </Card>
+  );
+}
+
+/** The teacher's class and the subjects they teach in each section. */
+function ClassesSubjectsCard({ ctx, counts }: { ctx: Awaited<ReturnType<typeof requireTeacher>>; counts: Map<string | null, number> }) {
+  const rows = [
+    ...(ctx.classSection ? [{ id: ctx.classSection.id, label: sectionLabel(ctx.classSection), text: "Class teacher", href: "/teacher/class" }] : []),
+    ...ctx.subjectSections.map((s) => ({ id: s.section.id, label: sectionLabel(s.section), text: s.subjects.join(", "), href: `/teacher/sections/${s.section.id}` })),
+  ];
+  return (
+    <Card title="Classes & subjects" icon={BookOpen} padded={false}>
+      {rows.length === 0 ? (
+        <p className="px-6 py-5 text-sm text-muted">No classes assigned yet.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {rows.map((r, i) => (
+            <li key={`${r.id}-${i}`}>
+              <Link href={r.href} className="flex items-center gap-3 px-5 py-2.5 transition hover:bg-surface-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-fg">{r.label}</span>
+                  <span className="block truncate text-xs text-muted">{r.text}</span>
+                </span>
+                <Badge>{counts.get(r.id) ?? 0}</Badge>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/** Recent exams and tests of the teacher's classes: enter or review marks. */
+function MarksCard({
+  exams,
+  today,
+}: {
+  exams: { id: string; name: string; kind: "EXAM" | "TEST"; papers: { date: Date }[]; sections: { sectionId: string }[]; results: { sectionId: string }[] }[];
+  today: string;
+}) {
+  return (
+    <Card title="Exams & marks" icon={PenLine} action={<TextLink href="/teacher/tests">All</TextLink>} padded={false}>
+      {exams.length === 0 ? (
+        <p className="px-6 py-5 text-sm text-muted">No graded exams or tests yet.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {exams.map((e) => {
+            const started = e.papers.some((p) => isoDate(p.date) <= today);
+            const done = e.results.length;
+            return (
+              <li key={e.id}>
+                <Link href={`/teacher/tests/${e.id}`} className="flex items-center gap-3 px-5 py-2.5 transition hover:bg-surface-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-fg">{e.name}</span>
+                    <span className="block text-xs text-muted">
+                      {e.kind === "EXAM" ? "Exam" : "Test"} · results {done}/{e.sections.length}
+                    </span>
+                  </span>
+                  <Badge tone={done === e.sections.length && done > 0 ? "green" : started ? "amber" : "slate"}>
+                    {done === e.sections.length && done > 0 ? "Published" : started ? "Enter marks" : "Upcoming"}
+                  </Badge>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Card>
   );
 }

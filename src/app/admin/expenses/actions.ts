@@ -74,13 +74,14 @@ export async function paySalary(key: string, month: string, _: ActionState, form
 }
 
 /** Pays everyone not yet paid this month their monthly salary, on one date. */
-export async function payAllSalaries(month: string, _: ActionState, formData: FormData): Promise<ActionState> {
+/** Pays everyone unpaid in one category ("TEACHER" = teaching, "STAFF" = non-teaching) their full salary. */
+export async function payAllSalaries(month: string, type: "TEACHER" | "STAFF", _: ActionState, formData: FormData): Promise<ActionState> {
   const { school, today, month: current, who } = await requireExpensesAccess();
   if (!checkMonth(month, current)) return { error: "Choose a month up to next month." };
   const parsed = z.object({ paidOn: dateField("Paid on", today), mode: z.enum(PAYMENT_MODES) }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationError(parsed.error);
-  const due = (await loadPayroll(school.id, month)).filter((r) => !r.payment && r.salary);
-  if (!due.length) return { error: "Everyone with a salary is already paid for this month." };
+  const due = (await loadPayroll(school.id, month)).filter((r) => r.type === type && !r.payment && r.salary);
+  if (!due.length) return { error: "Everyone in this group with a salary is already paid for this month." };
   await db.salaryPayment.createMany({
     data: due.map((r) => ({
       schoolId: school.id,
@@ -98,7 +99,7 @@ export async function payAllSalaries(month: string, _: ActionState, formData: Fo
     skipDuplicates: true,
   });
   revalidate();
-  return { ok: true, message: `Paid ${due.length} salar${due.length === 1 ? "y" : "ies"}.` };
+  return { ok: true, message: `Paid ${due.length} ${type === "TEACHER" ? "teaching" : "non-teaching"} salar${due.length === 1 ? "y" : "ies"}.` };
 }
 
 export async function undoSalary(paymentId: string): Promise<ActionState> {

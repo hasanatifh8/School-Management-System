@@ -1,6 +1,5 @@
-import type { IdCardSchool, IdCardStudent } from "@/lib/id-cards";
+import type { ReactNode } from "react";
 import { ID_CARD_LAYOUTS, type IdCardLayout } from "./layouts";
-import { IdCardBack, IdCardFront } from "./student-id-card";
 
 function chunk<T>(items: T[], size: number) {
   return Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
@@ -13,20 +12,20 @@ function chunk<T>(items: T[], size: number) {
  * landscape pages, for single-sided printers.
  */
 export function IdCardSheets({
-  school,
-  cards,
-  validTill,
+  fronts,
+  backCard,
   layout,
 }: {
-  school: IdCardSchool;
-  cards: IdCardStudent[];
-  validTill: string;
+  /** Each card's front, keyed by the card's id. */
+  fronts: { id: string; node: ReactNode }[];
+  /** The back, the same for every card. */
+  backCard: ReactNode;
   layout: IdCardLayout;
 }) {
   const landscape = layout === "pair";
-  const pages = chunk(cards, ID_CARD_LAYOUTS[layout].perPage);
-  const front = (c: IdCardStudent) => <IdCardFront key={`f${c.id}`} school={school} student={c} validTill={validTill} />;
-  const back = (key: string) => <IdCardBack key={key} school={school} />;
+  const pages = chunk(fronts, ID_CARD_LAYOUTS[layout].perPage);
+  const front = (c: (typeof fronts)[number]) => <div key={`f${c.id}`}>{c.node}</div>;
+  const back = (key: string) => <div key={key}>{backCard}</div>;
   const blank = (key: string) => <div key={key} className="h-[85.6mm] w-[54mm]" />;
 
   const sheets: { key: string; content: React.ReactNode[] }[] = [];

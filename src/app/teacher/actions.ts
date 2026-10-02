@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { type ActionState, optionalEmail, optionalMobile, optionalText, validationError } from "@/lib/action-state";
+import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
+import { onLeave } from "@/lib/leave";
 import { autoAssignRollNumbers, findRollNumberClash, syncCurrentEnrollment } from "@/lib/enrollments";
 import { readPhotoUpload, resolvePhotoChange } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
@@ -91,4 +93,19 @@ export async function assignMyClassRollNumbers(mode: "all" | "missing"): Promise
   revalidatePath("/", "layout");
   if (!count) return { ok: true, message: "Everyone already has a roll number." };
   return { ok: true, message: mode === "all" ? `Numbered ${count} students from 1 (A–Z).` : `Numbered ${count} student(s).` };
+}
+
+/** A teacher marks themselves present for today, unless the office has already marked them or they are on approved leave. */
+export async function selfCheckIn(): Promise<ActionState> {
+  const ctx = await requireTeacher();
+  const today = todayISO();
+  const date = parseISODate(today)!;
+  const existing = await db.staffAttendance.findUnique({ where: { teacherId_date: { teacherId: ctx.teacher.id, date } } });
+  if (existing) return { error: "Today's attendance is already marked." };
+  if ((await onLeave(ctx.school.id, date)).has(ctx.teacher.id)) return { error: "You are on approved leave today." };
+  await db.staffAttendance.create({
+    data: { schoolId: ctx.school.id, date, teacherId: ctx.teacher.id, status: "PRESENT", markedBy: `${fullName(ctx.teacher)} (self check-in)` },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Checked in. Have a good day!" };
 }

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
-import type { loadIdCards } from "@/lib/id-cards";
+import type { IdCardStaff, loadIdCards, loadStaffIdCards } from "@/lib/id-cards";
 import { IdCardGenerator } from "./id-card-generator";
 import { IdCardSheets } from "./id-card-sheets";
 import type { IdCardLayout } from "./layouts";
-import { IdCardBack, IdCardFront } from "./student-id-card";
+import { IdCardBack, IdCardFront, StaffIdCardFront } from "./student-id-card";
 
 const slug = (s: string) =>
   s
@@ -60,7 +60,13 @@ export function GeneratedCards({
           front: <IdCardFront school={school} student={c} validTill={validTill} />,
         }))}
         back={<IdCardBack school={school} />}
-        printSheets={<IdCardSheets school={school} cards={cards} validTill={validTill} layout={layout} />}
+        printSheets={
+          <IdCardSheets
+            fronts={cards.map((c) => ({ id: c.id, node: <IdCardFront school={school} student={c} validTill={validTill} /> }))}
+            backCard={<IdCardBack school={school} />}
+            layout={layout}
+          />
+        }
         layout={layout}
         zipName={zipName}
       />
@@ -68,3 +74,59 @@ export function GeneratedCards({
   );
 }
 
+
+/** Staff cards: warnings about missing details, then the generator. */
+export function GeneratedStaffCards({
+  data,
+  layout,
+  zipName,
+  profileHref,
+}: {
+  data: Awaited<ReturnType<typeof loadStaffIdCards>>;
+  layout: IdCardLayout;
+  zipName: string;
+  profileHref: (card: IdCardStaff) => string;
+}) {
+  const { cards, school, validTill } = data;
+  const incomplete = cards.filter((c) => c.missing.length);
+  return (
+    <div className="space-y-6">
+      {incomplete.length > 0 && (
+        <div className="rounded-2xl border border-warning-line bg-warning-soft/70 px-5 py-4 text-sm text-fg print:hidden">
+          <p className="flex items-center gap-2 font-semibold">
+            <TriangleAlert className="h-4 w-4 text-warning" />
+            Some details are missing. Those spaces are left blank on the card.
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {incomplete.map((c) => (
+              <li key={c.key}>
+                <Link href={profileHref(c)} className="font-medium underline">
+                  {c.name}
+                </Link>{" "}
+                <span className="text-warning/80">no {c.missing.join(", ")}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <IdCardGenerator
+        items={cards.map((c) => ({
+          id: c.key.replace(":", "-"),
+          name: c.name,
+          fileBase: slug(`${c.employeeCode} ${c.name}`),
+          front: <StaffIdCardFront school={school} staff={c} validTill={validTill} />,
+        }))}
+        back={<IdCardBack school={school} />}
+        printSheets={
+          <IdCardSheets
+            fronts={cards.map((c) => ({ id: c.key, node: <StaffIdCardFront school={school} staff={c} validTill={validTill} /> }))}
+            backCard={<IdCardBack school={school} />}
+            layout={layout}
+          />
+        }
+        layout={layout}
+        zipName={zipName}
+      />
+    </div>
+  );
+}

@@ -103,6 +103,33 @@ enum AttendanceStatus {
   LEAVE
 }
 
+enum StaffAttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  ON_LEAVE
+}
+
+enum LeaveApplicant {
+  STUDENT
+  TEACHER
+  STAFF
+}
+
+enum LeaveCategory {
+  SICK
+  CASUAL
+  FAMILY
+  EMERGENCY
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum DocumentType {
   AADHAAR
   PAN
@@ -124,21 +151,23 @@ enum SchoolStatus {
 }
 
 model School {
-  id              String       @id @default(cuid())
-  name            String
-  code            String       @unique
-  status          SchoolStatus @default(ACTIVE)
-  board           String?
-  principalName   String?
-  establishedYear Int?
-  motto           String?
-  address         String?
-  phone           String?
-  email           String?
-  website         String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @default(now()) @updatedAt
-  timetableDays   Int[]        @default([1, 2, 3, 4, 5, 6]) // school days in the timetable, 1 = Monday … 7 = Sunday
+  id               String       @id @default(cuid())
+  name             String
+  code             String       @unique
+  status           SchoolStatus @default(ACTIVE)
+  board            String?
+  principalName    String?
+  establishedYear  Int?
+  motto            String?
+  address          String?
+  phone            String?
+  email            String?
+  website          String?
+  idCardEmergency  String? // back of every ID card: one contact per line, e.g. "Ambulance: 108"
+  idCardGuidelines String? // back of every ID card: one guideline per line
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @default(now()) @updatedAt
+  timetableDays    Int[]        @default([1, 2, 3, 4, 5, 6]) // school days in the timetable, 1 = Monday … 7 = Sunday
 
   logo   SchoolLogo?
   admins SchoolAdmin[]
@@ -153,19 +182,22 @@ model School {
   houses    House[]
   sessions  AcademicSession[]
 
-  attendanceDays AttendanceDay[]
-  holidays       Holiday[]
-  feeHeads       FeeHead[]
-  feeReceipts    FeeReceipt[]
-  staffMembers   StaffMember[]
-  salaryPayments SalaryPayment[]
-  expenseCats    ExpenseCategory[]
-  expenses       Expense[]
-  messaging      MessagingSettings?
-  notices        Notice[]
-  exams          Exam[]
-  periods        Period[]
-  calendarEvents CalendarEvent[]
+  attendanceDays  AttendanceDay[]
+  holidays        Holiday[]
+  staffAttendance StaffAttendance[]
+  transportRoutes TransportRoute[]
+  leaveRequests   LeaveRequest[]
+  feeHeads        FeeHead[]
+  feeReceipts     FeeReceipt[]
+  staffMembers    StaffMember[]
+  salaryPayments  SalaryPayment[]
+  expenseCats     ExpenseCategory[]
+  expenses        Expense[]
+  messaging       MessagingSettings?
+  notices         Notice[]
+  exams           Exam[]
+  periods         Period[]
+  calendarEvents  CalendarEvent[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -276,6 +308,8 @@ model Student {
   sectionId             String?
   rollNumber            Int? // in the current session
   houseId               String?
+  transportRouteId      String? // school bus / van route, if the student uses one
+  transportStop         String? // one of the route's stops
   photoId               String?          @unique
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
@@ -283,11 +317,13 @@ model Student {
   school           School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   section          Section?           @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   house            House?             @relation(fields: [houseId], references: [id], onDelete: SetNull)
+  transportRoute   TransportRoute?    @relation(fields: [transportRouteId], references: [id], onDelete: SetNull)
   enrollments      Enrollment[]
   photo            Photo?             @relation(fields: [photoId], references: [id], onDelete: SetNull)
   subjects         StudentSubject[]
   documents        Document[]
   attendance       AttendanceRecord[]
+  leaveRequests    LeaveRequest[]
   feeHeads         StudentFeeHead[]
   feeReceipts      FeeReceipt[]
   noticeRecipients NoticeRecipient[]
@@ -339,6 +375,8 @@ model Teacher {
   timetableSlots TimetableSlot[]
   canTeach       TeacherSubject[]
   noticeMessages NoticeRecipient[]
+  attendance     StaffAttendance[]
+  leaveRequests  LeaveRequest[]
 
   @@unique([schoolId, employeeCode])
 }
@@ -595,6 +633,81 @@ model AttendanceRecord {
   @@index([studentId])
 }
 
+// A teacher's or staff member's attendance for one day (exactly one of teacherId / staffId).
+model StaffAttendance {
+  id        String                @id @default(cuid())
+  schoolId  String
+  date      DateTime              @db.Date
+  teacherId String?
+  staffId   String?
+  status    StaffAttendanceStatus
+  remark    String?
+  markedBy  String?
+  updatedAt DateTime              @updatedAt
+
+  school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staff   StaffMember? @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, date])
+  @@unique([staffId, date])
+  @@index([schoolId, date])
+}
+
+// A leave application by (or for) a student, teacher or staff member. Exactly
+// one of studentId / teacherId / staffId is set, matching `applicant`.
+model LeaveRequest {
+  id           String         @id @default(cuid())
+  schoolId     String
+  applicant    LeaveApplicant
+  studentId    String?
+  teacherId    String?
+  staffId      String?
+  fromDate     DateTime       @db.Date
+  toDate       DateTime       @db.Date
+  category     LeaveCategory
+  description  String?
+  status       LeaveStatus    @default(PENDING)
+  requestedBy  String // who entered it, e.g. "Kavya Menon (class teacher)"
+  decidedBy    String?
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student Student?     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staff   StaffMember? @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, status])
+  @@index([studentId])
+  @@index([teacherId])
+  @@index([staffId])
+}
+
+// A school bus or van route: the vehicle, its driver and its stops in order.
+model TransportRoute {
+  id             String   @id @default(cuid())
+  schoolId       String
+  routeNumber    String // e.g. "R-3"
+  name           String? // e.g. "Civil Lines – Station Road"
+  vehicleNumber  String // registration, e.g. "UP32 AB 1234"
+  vehicleType    String? // e.g. "Bus (40 seats)", "Van"
+  driverName     String?
+  driverPhone    String?
+  attendantName  String?
+  attendantPhone String?
+  stops          String[] // in order, e.g. "Hazratganj (7:10 am)"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students Student[]
+
+  @@unique([schoolId, routeNumber])
+}
+
 // A school-wide holiday: no class takes attendance that day.
 model Holiday {
   id        String   @id @default(cuid())
@@ -718,6 +831,7 @@ model StaffMember {
   employeeCode    String // unique, human-readable staff ID, e.g. STF-0001
   name            String
   designation     String // e.g. "Security guard"
+  department      String? // e.g. "Administration", "Transport"
   gender          Gender?
   bloodGroup      BloodGroup?
   dateOfBirth     DateTime?
@@ -740,6 +854,8 @@ model StaffMember {
   salaryPayments SalaryPayment[]
   cashierAccount SchoolAdmin?
   noticeMessages NoticeRecipient[]
+  attendance     StaffAttendance[]
+  leaveRequests  LeaveRequest[]
 
   @@unique([schoolId, employeeCode])
   @@index([schoolId])
@@ -1074,9 +1190,22 @@ model CalendarEvent {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
-  school   School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  session  AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  holidays Holiday[]
+  school     School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session    AcademicSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  holidays   Holiday[]
+  attachment CalendarAttachment?
 
   @@index([schoolId, startDate])
+}
+
+// A calendar entry's file (circular, schedule, poster): a PDF, PNG or JPG up to 4 MB.
+model CalendarAttachment {
+  eventId   String   @id
+  fileName  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }

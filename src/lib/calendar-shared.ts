@@ -31,4 +31,6 @@ export type CalendarItem = {
   /** Where the entry comes from: the plan, the Exams module or the holidays list. */
   source: "plan" | "exam" | "holiday";
   href?: string;
+  /** A file attached to a planned entry. */
+  attachment?: { name: string; href: string };
 };

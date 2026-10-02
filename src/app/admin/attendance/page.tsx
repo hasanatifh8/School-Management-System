@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, CalendarOff, Megaphone, PartyPopper, Phone, Sun, Table2, UserRoundX, Users } from "lucide-react";
+import { ArrowRight, CalendarCheck, CalendarOff, Megaphone, PartyPopper, Phone, School, Sun, Table2, UserRoundX, Users } from "lucide-react";
 import { DateNav } from "@/components/attendance/date-nav";
 import { UpcomingHolidays } from "@/components/attendance/upcoming-holidays";
 import {
@@ -15,17 +15,10 @@ import {
   PersonCell,
   StatCard,
   StatGrid,
-  Table,
-  tbodyClass,
-  tdClass,
-  thClass,
-  theadClass,
-  trClass,
 } from "@/components/ui";
 import { attendanceWindow, pickDate } from "@/lib/attendance";
 import {
   ATTENDANCE_STATUSES,
-  STATUS_META,
   attendancePercent,
   emptyCounts,
   formatISO,
@@ -34,8 +27,9 @@ import {
 } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { photoUrl } from "@/lib/photos";
-import { fullName, sectionLabel } from "@/lib/queries";
+import { fullName, sectionLabel, shortSectionLabel } from "@/lib/queries";
 import { getCurrentSchool } from "@/lib/school";
+import { AttendanceTabs } from "./attendance-tabs";
 
 /** Every class's attendance for one day, with the list of absent students. */
 export default async function AttendanceOverviewPage({ searchParams }: PageProps<"/admin/attendance">) {
@@ -128,6 +122,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
           </>
         }
       />
+      <AttendanceTabs active="students" date={date} />
       <div className="mb-6">
         <DateNav basePath="/admin/attendance" date={date} min={win.min} max={win.max} />
       </div>
@@ -152,85 +147,91 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
       </StatGrid>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Card title="Classes" padded={false} className="xl:col-span-2">
-          {sections.length === 0 ? (
-            <EmptyState icon={Users} title="No classes yet" description="Create classes and sections to take attendance." />
+        <div className="space-y-4 xl:col-span-2">
+          {classes.length === 0 ? (
+            <Card>
+              <EmptyState icon={Users} title="No classes yet" description="Create classes and sections to take attendance." />
+            </Card>
           ) : (
-            <Table>
-              <thead className={theadClass}>
-                <tr>
-                  <th className={thClass}>Class</th>
-                  <th className={thClass}>Status</th>
-                  {ATTENDANCE_STATUSES.map((s) => (
-                    <th key={s} title={STATUS_META[s].label} className={`${thClass} hidden !px-2 text-center md:table-cell ${STATUS_META[s].text}`}>
-                      {STATUS_META[s].short}
-                    </th>
-                  ))}
-                  <th className={`${thClass} text-right`}>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className={tbodyClass}>
-                {rows.map(({ section: s, day, counts, marked }) => (
-                  <tr key={s.id} className={trClass}>
-                    <td className={tdClass}>
-                      <p className="font-medium text-fg">{sectionLabel(s)}</p>
-                      <p className="text-xs text-muted">
-                        {s._count.students} students · {s.classTeacher ? fullName(s.classTeacher) : "No class teacher"}
-                      </p>
-                    </td>
-                    <td className={tdClass}>
-                      {holiday ? (
-                        <Badge tone="indigo">School holiday</Badge>
-                      ) : day?.holiday ? (
-                        <span title={day.holiday}>
-                          <Badge tone="indigo">Off: {day.holiday}</Badge>
-                        </span>
-                      ) : marked ? (
-                        <span title={day?.markedBy ? `Marked by ${day.markedBy}` : undefined}>
-                          <Badge tone="green" dot>
-                            Marked
-                          </Badge>
-                        </span>
-                      ) : s._count.students === 0 ? (
-                        <Badge>No students</Badge>
-                      ) : (
-                        <Badge tone="amber" dot>
-                          Not marked
-                        </Badge>
-                      )}
-                    </td>
-                    {ATTENDANCE_STATUSES.map((st) => (
-                      <td key={st} className={`${tdClass} hidden !px-2 text-center tabular-nums md:table-cell`}>
-                        {marked ? counts[st] : <span className="text-subtle">–</span>}
-                      </td>
-                    ))}
-                    <td className={`${tdClass} whitespace-nowrap text-right`}>
-                      <div className="flex items-center justify-end gap-1">
-                        <ButtonLink
-                          href={`/admin/attendance/${s.id}?date=${date}`}
-                          size="sm"
-                          variant={marked || holiday || day?.holiday || !s._count.students ? "ghost" : "primary"}
-                        >
-                          {marked ? "Edit" : holiday || day?.holiday || !s._count.students ? "View" : "Take"}
-                        </ButtonLink>
-                        <Link
-                          href={`/admin/attendance/register?section=${s.id}&period=month&month=${date.slice(0, 7)}`}
-                          title="Monthly register"
-                          aria-label={`Monthly register for ${sectionLabel(s)}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-subtle transition hover:bg-surface-3 hover:text-fg"
-                        >
-                          <Table2 className="h-4 w-4" />
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+            classes.map((c) => {
+              const tiles = rows.filter((r) => r.section.classId === c.id);
+              const done = tiles.filter((r) => r.marked || r.day?.holiday).length;
+              return (
+                <Card
+                  key={c.id}
+                  title={c.name}
+                  icon={School}
+                  description={tiles.length ? `${done} of ${tiles.length} section${tiles.length === 1 ? "" : "s"} done` : "No sections"}
+                >
+                  {tiles.length === 0 ? (
+                    <p className="text-sm text-muted">Add a section to this class to take attendance.</p>
+                  ) : (
+                    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {tiles.map(({ section: s, day, counts, marked }) => {
+                        const open = !holiday && !day?.holiday && s._count.students > 0;
+                        return (
+                          <li key={s.id} className="relative">
+                            <Link
+                              href={`/admin/attendance/${s.id}?date=${date}`}
+                              className={`group block rounded-xl border p-4 transition hover:-translate-y-px hover:border-accent-line hover:bg-accent-soft ${
+                                open && !marked ? "border-warning-line" : "border-line"
+                              }`}
+                            >
+                              <span className="flex items-center justify-between gap-2 pr-8">
+                                <span className="text-lg font-semibold text-fg">{shortSectionLabel(c.name, s.name)}</span>
+                              </span>
+                              <span className="mt-1 block">
+                                {holiday ? (
+                                  <Badge tone="indigo">School holiday</Badge>
+                                ) : day?.holiday ? (
+                                  <span title={day.holiday}>
+                                    <Badge tone="indigo">Off: {day.holiday}</Badge>
+                                  </span>
+                                ) : marked ? (
+                                  <span title={day?.markedBy ? `Marked by ${day.markedBy}` : undefined}>
+                                    <Badge tone="green" dot>
+                                      Marked
+                                    </Badge>
+                                  </span>
+                                ) : s._count.students === 0 ? (
+                                  <Badge>No students</Badge>
+                                ) : (
+                                  <Badge tone="amber" dot>
+                                    Not marked
+                                  </Badge>
+                                )}
+                              </span>
+                              <span className="mt-2 block text-xs text-muted">
+                                {marked
+                                  ? `${counts.PRESENT + counts.LATE + counts.HALF_DAY} of ${s._count.students} attending${counts.ABSENT ? ` · ${counts.ABSENT} absent` : ""}${counts.LEAVE ? ` · ${counts.LEAVE} on leave` : ""}`
+                                  : `${s._count.students} students`}
+                              </span>
+                              <span className="block truncate text-xs text-subtle">{s.classTeacher ? fullName(s.classTeacher) : "No class teacher"}</span>
+                              <span
+                                className={`mt-3 inline-flex items-center gap-1 text-sm font-medium ${open && !marked ? "text-accent-text" : "text-muted group-hover:text-accent-text"}`}
+                              >
+                                {marked ? "Edit attendance" : open ? "Take attendance" : "View"}
+                                <ArrowRight className="h-4 w-4" />
+                              </span>
+                            </Link>
+                            <Link
+                              href={`/admin/attendance/register?section=${s.id}&period=month&month=${date.slice(0, 7)}`}
+                              title="Monthly register"
+                              aria-label={`Monthly register for ${sectionLabel(s)}`}
+                              className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-lg text-subtle transition hover:bg-surface-3 hover:text-fg"
+                            >
+                              <Table2 className="h-4 w-4" />
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </Card>
+              );
+            })
           )}
-        </Card>
+        </div>
 
         <div className="space-y-6 self-start">
           <Card

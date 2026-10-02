@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Paperclip } from "lucide-react";
 import { Badge, Card, EmptyState, IconTile } from "@/components/ui";
 import { addDays } from "@/lib/attendance-shared";
 import { EVENT_META, EVENT_TYPES, type CalendarItem } from "@/lib/calendar-shared";
@@ -86,13 +86,25 @@ export function SessionCalendar({
                 </>
               );
               return (
-                <li key={it.key}>
+                <li key={it.key} className="flex items-center gap-2 pr-4 transition hover:bg-surface-2 sm:pr-6">
                   {it.href ? (
-                    <Link href={it.href} className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2 sm:px-6">
+                    <Link href={it.href} className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 sm:pl-6">
                       {body}
                     </Link>
                   ) : (
-                    <div className="flex items-center gap-3 px-4 py-3 sm:px-6">{body}</div>
+                    <div className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 sm:pl-6">{body}</div>
+                  )}
+                  {it.attachment && (
+                    <a
+                      href={it.attachment.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`Open ${it.attachment.name}`}
+                      className="inline-flex max-w-44 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-fg-2 transition hover:border-accent-line hover:text-accent-text"
+                    >
+                      <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{it.attachment.name}</span>
+                    </a>
                   )}
                 </li>
               );
@@ -155,7 +167,7 @@ function MiniMonth({
           return (
             <span
               key={day}
-              title={on.length ? on.map((i) => `${EVENT_META[i.type].label}: ${i.title}`).join("\n") : undefined}
+              title={on.length ? on.map((i) => `${EVENT_META[i.type].label}: ${i.title}${i.attachment ? " (attachment)" : ""}`).join("\n") : undefined}
               className={`flex aspect-square items-center justify-center rounded-md text-[11px] tabular-nums ${
                 top ? `${EVENT_META[top].day} font-semibold` : outside ? "text-subtle/50" : sunday ? "text-danger/70" : "text-fg-2"
               } ${day === today ? "ring-2 ring-accent" : ""}`}

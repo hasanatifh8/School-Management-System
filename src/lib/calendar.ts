@@ -19,6 +19,7 @@ export async function loadCalendar(schoolId: string, session: Session, { forTeac
     db.calendarEvent.findMany({
       where: { schoolId, sessionId: session.id, ...(forTeacher && { published: true }) },
       orderBy: [{ startDate: "asc" }, { title: "asc" }],
+      include: { attachment: { select: { fileName: true } } },
     }),
     db.schoolClass.findMany({ where: { schoolId }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     db.exam.findMany({
@@ -55,6 +56,7 @@ export async function loadCalendar(schoolId: string, session: Session, { forTeac
       draft: !e.published,
       source: "plan" as const,
       href: links === "admin" ? `/admin/calendar/${e.id}` : undefined,
+      attachment: e.attachment ? { name: e.attachment.fileName, href: `/api/calendar/${e.id}/attachment` } : undefined,
     })),
     ...exams.map((x) => {
       const dates = x.papers.map((p) => isoDate(p.date)).sort();

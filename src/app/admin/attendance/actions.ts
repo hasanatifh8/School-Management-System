@@ -17,6 +17,8 @@ import {
 import { db } from "@/lib/db";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { getCurrentSchool, getViewer } from "@/lib/school";
+import { saveStaffSheet } from "@/lib/staff-attendance";
+import type { StaffGroup } from "@/lib/staff-attendance-shared";
 
 /**
  * Checks the signed-in user may take attendance for this section on this date:
@@ -186,4 +188,16 @@ export async function deleteSchoolHolidays(ids: string[]): Promise<ActionState> 
   if (!count) return { error: "Holiday not found." };
   revalidatePath("/", "layout");
   return { ok: true, message: "Holiday removed." };
+}
+
+/* ───────────────────────── Staff attendance (admins only) ───────────────────────── */
+
+export async function saveStaffAttendance(group: StaffGroup, date: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const win = await attendanceWindow(school.id);
+  if (!parseISODate(date) || date < win.min || date > win.max) return { error: `Choose a date in session ${win.session.name}, up to today.` };
+  const viewer = await getViewer();
+  const result = await saveStaffSheet(school.id, group, date, formData, viewer?.kind === "admin" ? `${viewer.admin.name} (admin)` : "Power Admin");
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
 }

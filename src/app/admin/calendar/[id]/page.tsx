@@ -12,7 +12,10 @@ import { EventForm } from "../event-form";
 export default async function EditCalendarEventPage({ params }: PageProps<"/admin/calendar/[id]">) {
   const { id } = await params;
   const school = await getCurrentSchool();
-  const event = await db.calendarEvent.findFirst({ where: { id, schoolId: school.id }, include: { session: true } });
+  const event = await db.calendarEvent.findFirst({
+    where: { id, schoolId: school.id },
+    include: { session: true, attachment: { select: { fileName: true } } },
+  });
   if (!event) notFound();
   const classes = await db.schoolClass.findMany({ where: { schoolId: school.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
 
@@ -41,6 +44,7 @@ export default async function EditCalendarEventPage({ params }: PageProps<"/admi
               endDate: isoDate(event.endDate),
               description: event.description ?? "",
               classIds: event.classIds,
+              attachment: event.attachment ? { name: event.attachment.fileName, href: `/api/calendar/${event.id}/attachment` } : null,
             }}
             minDate={isoDate(event.session.startDate)}
             maxDate={isoDate(event.session.endDate)}

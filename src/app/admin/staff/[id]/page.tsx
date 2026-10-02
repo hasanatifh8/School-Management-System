@@ -277,6 +277,7 @@ export default async function StaffMemberPage({ params, searchParams }: PageProp
                     <span className="font-mono">{staff.employeeCode}</span>
                   </Detail>
                   <Detail label="Job">{staff.designation}</Detail>
+                  <Detail label="Department">{staff.department}</Detail>
                   <Detail label="Qualification / degree">{staff.qualification}</Detail>
                   <Detail label="Experience">{staff.experienceYears != null && `${staff.experienceYears} year${staff.experienceYears === 1 ? "" : "s"}`}</Detail>
                   <Detail label="Joining date">{staff.joiningDate && dateFormat.format(staff.joiningDate)}</Detail>

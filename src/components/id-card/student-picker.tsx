@@ -5,7 +5,18 @@ import { useMemo, useState } from "react";
 import { ArrowRight, IdCard, Search } from "lucide-react";
 import { Avatar, Badge, PagedList, buttonVariants, checkboxClass, inputClass } from "@/components/ui";
 
-type Student = { id: string; name: string; code: string; roll: number | null; photoUrl: string | null; missing: string[] };
+type Student = {
+  id: string;
+  name: string;
+  code: string;
+  roll: number | null;
+  photoUrl: string | null;
+  missing: string[];
+  /** Shown after the code, e.g. "Teaching". */
+  sub?: string;
+  /** Profile path under the portal, when not `${profilePath}/${id}`. */
+  profile?: string;
+};
 
 /** Step 2: tick the students whose cards to make, then generate. */
 export function StudentPicker({
@@ -13,12 +24,15 @@ export function StudentPicker({
   generatePath,
   profilePath,
   max,
+  noun = "students",
 }: {
   students: Student[];
   /** e.g. "/admin/id-cards/generate" — selected ids are added as ?ids=. */
   generatePath: string;
   profilePath: string;
   max: number;
+  /** "students" or "staff". */
+  noun?: string;
 }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -61,7 +75,7 @@ export function StudentPicker({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name, ID or roll"
-            aria-label="Search students"
+            aria-label={`Search ${noun}`}
             className={`${inputClass} pl-9`}
           />
         </div>
@@ -69,12 +83,12 @@ export function StudentPicker({
 
       {withoutPhoto > 0 && (
         <p className="border-b border-line bg-warning-soft/60 px-4 py-2 text-xs text-warning sm:px-6">
-          {withoutPhoto} student{withoutPhoto === 1 ? " has" : "s have"} no photo. Their card shows a placeholder until a photo is added.
+          {withoutPhoto} {noun === "students" ? `student${withoutPhoto === 1 ? "" : "s"}` : "of them"} {withoutPhoto === 1 ? "has" : "have"} no photo. Their card shows a placeholder until a photo is added.
         </p>
       )}
 
-      {shown.length === 0 && <p className="px-6 py-10 text-center text-sm text-muted">No students match “{query}”.</p>}
-      <PagedList key={query} pageSize={20} noun="students">
+      {shown.length === 0 && <p className="px-6 py-10 text-center text-sm text-muted">No {noun} match “{query}”.</p>}
+      <PagedList key={query} pageSize={20} noun={noun}>
         {shown.map((s) => (
           <li key={s.id} className={`flex items-center gap-3 px-4 py-2.5 sm:px-6 transition-colors ${selected.has(s.id) ? "bg-accent-soft" : ""}`}>
             <input
@@ -84,17 +98,20 @@ export function StudentPicker({
               className={checkboxClass}
               aria-label={`Select ${s.name}`}
             />
-            <span className="w-7 shrink-0 text-right font-mono text-xs text-subtle">{s.roll ?? "—"}</span>
+            {noun === "students" && <span className="w-7 shrink-0 text-right font-mono text-xs text-subtle">{s.roll ?? "—"}</span>}
             <button type="button" onClick={() => toggle(s.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
               <Avatar name={s.name} src={s.photoUrl} size="sm" />
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium text-fg">{s.name}</span>
-                <span className="block font-mono text-[11px] text-subtle">{s.code}</span>
+                <span className="block text-[11px] text-subtle">
+                  <span className="font-mono">{s.code}</span>
+                  {s.sub && ` · ${s.sub}`}
+                </span>
               </span>
             </button>
             <span className="hidden flex-wrap justify-end gap-1 sm:flex">
               {s.missing.map((m) => (
-                <Link key={m} href={`${profilePath}/${s.id}`} title="Open the profile to add it">
+                <Link key={m} href={s.profile ? `${profilePath}${s.profile}` : `${profilePath}/${s.id}`} title="Open the profile to add it">
                   <Badge tone="amber">No {m}</Badge>
                 </Link>
               ))}
@@ -114,7 +131,7 @@ export function StudentPicker({
               {tooMany && <span className="ml-2 text-danger">Choose at most {max} at a time.</span>}
             </>
           ) : (
-            "Tick the students whose ID cards you want."
+            `Tick the ${noun} whose ID cards you want.`
           )}
         </p>
         {ids.length > 0 && !tooMany ? (

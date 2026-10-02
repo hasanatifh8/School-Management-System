@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowLeftRight,
   BookOpen,
+  Bus,
   CalendarCheck,
   CalendarClock,
   CalendarDays,
@@ -15,6 +16,7 @@ import {
   LayoutDashboard,
   Megaphone,
   PiggyBank,
+  Plane,
   Presentation,
   School,
   Settings,
@@ -62,6 +64,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           label: "Daily",
           items: [
             { href: "/admin/attendance", label: "Attendance", icon: <CalendarCheck /> },
+            { href: "/admin/leave", label: "Leave", icon: <Plane /> },
             fees,
             { href: "/admin/notices", label: "Notices", icon: <Megaphone /> },
           ],
@@ -92,6 +95,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           items: [
             { href: "/admin/expenses", label: "Expenses", icon: <PiggyBank /> },
             { href: "/admin/id-cards", label: "ID cards", icon: <IdCard /> },
+            { href: "/admin/transport", label: "Transport", icon: <Bus /> },
             { href: "/admin/sessions", label: "Sessions", icon: <CalendarRange /> },
           ],
         },

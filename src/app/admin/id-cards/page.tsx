@@ -1,13 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, ImageOff, School } from "lucide-react";
+import { ArrowRight, ImageOff, School, Settings2 } from "lucide-react";
 import { IdCardSteps } from "@/components/id-card/steps";
 import { StudentPicker } from "@/components/id-card/student-picker";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui";
+import { Badge, ButtonLink, Card, EmptyState, PageHeader } from "@/components/ui";
 import { db } from "@/lib/db";
-import { MAX_CARDS_PER_BATCH, loadIdCardRoster } from "@/lib/id-cards";
+import { MAX_CARDS_PER_BATCH, loadIdCardRoster, loadStaffIdCardRoster } from "@/lib/id-cards";
 import { sectionLabel } from "@/lib/queries";
 import { getCurrentSchool } from "@/lib/school";
+import { IdCardTabs } from "./id-card-tabs";
+
+const backSettings = (
+  <ButtonLink href="/admin/id-cards/settings" icon={Settings2} variant="secondary">
+    Card back
+  </ButtonLink>
+);
 
 const STEPS = [{ label: "Choose class", href: "/admin/id-cards" }, { label: "Pick students" }, { label: "Download or print" }];
 
@@ -15,6 +22,30 @@ const STEPS = [{ label: "Choose class", href: "/admin/id-cards" }, { label: "Pic
 export default async function IdCardsPage({ searchParams }: PageProps<"/admin/id-cards">) {
   const sp = await searchParams;
   const school = await getCurrentSchool();
+
+  if (sp.tab === "staff") {
+    const people = await loadStaffIdCardRoster(school.id);
+    return (
+      <>
+        <PageHeader title="ID cards" subtitle="Cards for teachers and non-teaching staff, with employee code, designation and department." action={backSettings} />
+        <IdCardTabs active="staff" />
+        <IdCardSteps steps={[{ label: "Pick teachers & staff" }, { label: "Download or print" }]} current={0} />
+        {people.length ? (
+          <StudentPicker
+            students={people.map((p) => ({ ...p, roll: null }))}
+            generatePath="/admin/id-cards/staff"
+            profilePath="/admin"
+            max={MAX_CARDS_PER_BATCH}
+            noun="staff"
+          />
+        ) : (
+          <Card>
+            <EmptyState icon={School} title="No teachers or staff yet" />
+          </Card>
+        )}
+      </>
+    );
+  }
 
   if (typeof sp.section === "string") {
     const section = await db.section.findFirst({ where: { id: sp.section, class: { schoolId: school.id } }, include: { class: true } });
@@ -48,7 +79,8 @@ export default async function IdCardsPage({ searchParams }: PageProps<"/admin/id
 
   return (
     <>
-      <PageHeader title="ID cards" subtitle="Make student ID cards class by class, then download them as images or print them." />
+      <PageHeader title="ID cards" subtitle="Make student ID cards class by class, then download them as images or print them." action={backSettings} />
+      <IdCardTabs active="students" />
       <IdCardSteps steps={STEPS} current={0} />
       {sections.length === 0 ? (
         <Card>

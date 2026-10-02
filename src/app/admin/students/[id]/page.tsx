@@ -1,6 +1,29 @@
 import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { BookOpen, CalendarDays, CircleCheck, Droplet, FileText, Hash, History, IdCard, LayoutGrid, Mail, Pencil, Phone, RotateCcw, UserRound, UserRoundX, Wallet } from "lucide-react";
+import {
+  BookOpen,
+  Bus,
+  CalendarClock,
+  CalendarDays,
+  CircleCheck,
+  ClipboardList,
+  Droplet,
+  FileBarChart,
+  FileText,
+  Hash,
+  History,
+  IdCard,
+  LayoutGrid,
+  Mail,
+  Megaphone,
+  Pencil,
+  Phone,
+  RotateCcw,
+  Ticket,
+  UserRound,
+  UserRoundX,
+  Wallet,
+} from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
@@ -14,15 +37,21 @@ import { fullName, getClassesWithSections, getHouses, sectionLabel } from "@/lib
 import { HouseBadge } from "@/components/house";
 import { removeStudent, restoreStudent, setStudentSubjects, updateStudent } from "../actions";
 import { StudentForm } from "../student-form";
+import { AdmitCardPanel, ExamsPanel, NoticesPanel, ReportCardPanel, TimetablePanel, TransportPanel } from "@/components/student-profile/panels";
+import { TransportAssign } from "@/components/student-profile/transport-assign";
+import { studentExams, studentNotices } from "@/lib/student-profile";
+import { assignTransport } from "../../transport/actions";
 
-type Tab = "overview" | "edit" | "documents";
+const TABS = ["overview", "exams", "results", "timetable", "notices", "admit-card", "transport", "documents", "edit"] as const;
+type Tab = (typeof TABS)[number];
 
 const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
 export default async function StudentPage({ params, searchParams }: PageProps<"/admin/students/[id]">) {
   const { id } = await params;
-  const { tab: tabParam, admitted } = await searchParams;
-  const tab: Tab = tabParam === "documents" ? "documents" : tabParam === "edit" ? "edit" : "overview";
+  const { tab: tabParam, admitted, exam: examParam } = await searchParams;
+  const tab: Tab = TABS.find((t) => t === tabParam) ?? "overview";
+  const selectedExam = typeof examParam === "string" ? examParam : undefined;
   const school = await getCurrentSchool();
   const [student, classes, allSubjects, houses] = await Promise.all([
     db.student.findFirst({
@@ -31,6 +60,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
         section: { include: { class: { include: { subjects: true } } } },
         house: true,
         subjects: true,
+        transportRoute: true,
         enrollments: {
           orderBy: { session: { startDate: "desc" } },
           include: { session: true, section: { include: { class: true } } },
@@ -62,6 +92,13 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const removed = student.status === "INACTIVE";
 
   const tabHref = (t: Tab) => `/admin/students/${student.id}${t === "overview" ? "" : `?tab=${t}`}`;
+  const examTabs = tab === "exams" || tab === "results" || tab === "admit-card";
+  const [exams, notices, routes] = await Promise.all([
+    examTabs ? studentExams(student) : [],
+    tab === "notices" ? studentNotices(student.id) : [],
+    tab === "transport" ? db.transportRoute.findMany({ where: { schoolId: school.id }, orderBy: { routeNumber: "asc" }, select: { id: true, routeNumber: true, name: true, stops: true } }) : [],
+  ]);
+  const actor = { kind: "admin" as const, schoolId: school.id, who: "" };
 
   return (
     <>
@@ -158,10 +195,48 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       <div className="mb-6 border-b border-line">
         <nav aria-label="Student sections" className={tabBarClass}>
           <StatusTab href={tabHref("overview")} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
-          <StatusTab href={tabHref("edit")} active={tab === "edit"} label="Edit details" icon={Pencil} />
+          <StatusTab href={tabHref("exams")} active={tab === "exams"} label="Examinations" icon={ClipboardList} />
+          <StatusTab href={tabHref("results")} active={tab === "results"} label="Report card" icon={FileBarChart} />
+          <StatusTab href={tabHref("timetable")} active={tab === "timetable"} label="Timetable" icon={CalendarClock} />
+          <StatusTab href={tabHref("notices")} active={tab === "notices"} label="Notices" icon={Megaphone} />
+          <StatusTab href={tabHref("admit-card")} active={tab === "admit-card"} label="Admit card" icon={Ticket} />
+          <StatusTab href={tabHref("transport")} active={tab === "transport"} label="Transport" icon={Bus} />
           <StatusTab href={tabHref("documents")} active={tab === "documents"} label="Documents" icon={FileText} count={student.documents.length} />
+          <StatusTab href={tabHref("edit")} active={tab === "edit"} label="Edit details" icon={Pencil} />
         </nav>
       </div>
+
+      {tab === "exams" && <ExamsPanel exams={exams} reportHref={(e) => `${tabHref("results")}&exam=${e.id}`} />}
+      {tab === "results" && (
+        <ReportCardPanel
+          actor={actor}
+          studentId={student.id}
+          exams={exams}
+          selected={selectedExam}
+          tabHref={(examId) => `${tabHref("results")}&exam=${examId}`}
+          cardHref={(e) => `/admin/results/${e.id}/${e.sectionId}?student=${student.id}`}
+        />
+      )}
+      {tab === "timetable" && <TimetablePanel schoolId={school.id} sectionId={student.sectionId} />}
+      {tab === "notices" && <NoticesPanel notices={notices} noticeHref={(nid) => `/admin/notices/${nid}`} />}
+      {tab === "admit-card" && (
+        <AdmitCardPanel
+          schoolId={school.id}
+          studentId={student.id}
+          exams={exams.filter((e) => e.sectionId === student.sectionId)}
+          selected={selectedExam}
+          tabHref={(examId) => `${tabHref("admit-card")}&exam=${examId}`}
+          cardHref={(e) => `/admin/admit-cards/${e.id}/${e.sectionId}?student=${student.id}`}
+        />
+      )}
+      {tab === "transport" && (
+        <TransportPanel
+          route={student.transportRoute}
+          stop={student.transportStop}
+          routeHref={student.transportRoute ? `/admin/transport/${student.transportRoute.id}` : undefined}
+          assign={<TransportAssign action={assignTransport.bind(null, student.id)} routes={routes} routeId={student.transportRouteId} stop={student.transportStop} />}
+        />
+      )}
 
       {tab === "documents" && <DocumentsPanel ownerKind="student" ownerId={student.id} documents={student.documents} />}
 

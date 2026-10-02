@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BookOpen, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Users } from "lucide-react";
+import { BookOpen, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Plane, Users } from "lucide-react";
 import { SchoolLogo } from "@/components/school-logo";
 import { AccountCard, AppShell, type NavGroup } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -37,6 +37,8 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
         { href: "/teacher", label: "Dashboard", icon: <LayoutDashboard />, exact: true },
         { href: "/teacher/timetable", label: "Timetable", icon: <CalendarClock /> },
         { href: "/teacher/calendar", label: "School calendar", icon: <CalendarDays /> },
+        { href: "/teacher/students", label: "Students", icon: <GraduationCap /> },
+        { href: "/teacher/leave", label: "Leave", icon: <Plane /> },
       ],
     },
     ...(myClass
@@ -44,7 +46,7 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
           {
             label: "My class",
             items: [
-              { href: "/teacher/class", label: "My class", icon: <Users />, sub: myClass, alsoActive: ["/teacher/students"] },
+              { href: "/teacher/class", label: "My class", icon: <Users />, sub: myClass },
               { href: "/teacher/attendance", label: "Attendance", icon: <CalendarCheck /> },
               { href: "/teacher/notices", label: "Notices", icon: <Megaphone /> },
               { href: "/teacher/id-cards", label: "ID cards", icon: <IdCard /> },
