@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { NavTracker } from "@/components/nav-tracker";
 import { BookOpen, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Plane, Users } from "lucide-react";
 import { SchoolLogo } from "@/components/school-logo";
 import { AccountCard, AppShell, type NavGroup } from "@/components/ui";
@@ -98,6 +99,7 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
         />
       }
     >
+      <NavTracker />
       {children}
     </AppShell>
   );

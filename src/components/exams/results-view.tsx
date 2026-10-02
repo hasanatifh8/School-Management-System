@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "@/components/back-link";
 import { ArrowLeft, ChevronLeft, ChevronRight, FileBarChart, Lock, PenLine, Printer, TableProperties, Users } from "lucide-react";
 import { CardKeys } from "@/components/exams/card-keys";
 import { ReportCard, ResultSheet, type SchoolHeader } from "@/components/exams/report-card";
@@ -58,7 +59,7 @@ export function ResultsView({
           {pageStyle(printPortrait)}
           <CardKeys prev={prev ? cardHref(prev.student.id) : null} next={next ? cardHref(next.student.id) : null} list={baseHref} />
           <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-b border-line bg-surface-2/95 px-4 py-3 backdrop-blur print:hidden sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
-            <Link href={baseHref} className={buttonVariants.ghost}>
+            <Link replace href={baseHref} className={buttonVariants.ghost}>
               <ArrowLeft className="h-4 w-4" />
               All students
             </Link>
@@ -67,7 +68,7 @@ export function ResultsView({
             </span>
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {prev ? (
-                <Link href={cardHref(prev.student.id)} scroll={false} className={navBtn} title="Previous (←)">
+                <Link replace href={cardHref(prev.student.id)} scroll={false} className={navBtn} title="Previous (←)">
                   <ChevronLeft className="h-4 w-4" />
                   <span className="max-w-32 truncate">{prev.student.name}</span>
                 </Link>
@@ -78,7 +79,7 @@ export function ResultsView({
                 </span>
               )}
               {next ? (
-                <Link href={cardHref(next.student.id)} scroll={false} className={navBtn} title="Next (→)">
+                <Link replace href={cardHref(next.student.id)} scroll={false} className={navBtn} title="Next (→)">
                   <span className="max-w-32 truncate">{next.student.name}</span>
                   <ChevronRight className="h-4 w-4" />
                 </Link>
@@ -112,7 +113,7 @@ export function ResultsView({
           <span className="flex-1">
             All {byRoll.length} report cards in roll-number order, one per A4 page. Use this only to print the whole class.
           </span>
-          <Link href={baseHref} className={buttonVariants.ghost}>
+          <Link replace href={baseHref} className={buttonVariants.ghost}>
             Back to students
           </Link>
           <PdfDownloadButton root="all-cards" fileName={fileBase("Report cards")} label={`Download ${byRoll.length} as PDF`} />
@@ -144,10 +145,10 @@ export function ResultsView({
       <div className="space-y-6 print:hidden">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Link href={back.href} className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-accent-text">
+            <BackLink href={back.href} className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-accent-text">
               <ArrowLeft className="h-3.5 w-3.5" />
               {back.label}
-            </Link>
+            </BackLink>
             <h1 className="text-2xl font-semibold tracking-tight text-fg">Results · {sheet.section.label}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
               {sheet.exam.name} · Session {sheet.exam.session}
@@ -174,7 +175,7 @@ export function ResultsView({
                 <PrintButton label="Print result sheet" />
               </>
             ) : (
-              <Link href={`${baseHref}?view=all-cards`} className={buttonVariants.secondary}>
+              <Link replace href={`${baseHref}?view=all-cards`} className={buttonVariants.secondary}>
                 <Printer className="h-4 w-4" />
                 Print all report cards
               </Link>
@@ -200,11 +201,11 @@ export function ResultsView({
         </div>
 
         <nav className="flex gap-6 border-b border-line">
-          <Link href={baseHref} className={tab(!isSheet)}>
+          <Link replace href={baseHref} className={tab(!isSheet)}>
             <Users className="h-4 w-4" />
             Students & report cards
           </Link>
-          <Link href={`${baseHref}?view=sheet`} className={tab(isSheet)}>
+          <Link replace href={`${baseHref}?view=sheet`} className={tab(isSheet)}>
             <TableProperties className="h-4 w-4" />
             Result sheet
           </Link>

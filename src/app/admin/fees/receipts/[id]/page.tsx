@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "@/components/back-link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, GraduationCap, HandCoins, XCircle } from "lucide-react";
 import { AutoPrint } from "@/components/fees/auto-print";
@@ -228,19 +229,19 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               {copies.length === 2 ? "Print one copy instead" : "Print parent + office copies"}
             </Link>
           )}
-          {/* Back goes where the receipt was opened from, replacing this page in the
-              history so the browser's Back button doesn't bounce between the two. */}
+          {/* Back returns to where the receipt was opened from: a real step back when
+              that was the previous page, so the browser's Back button doesn't loop. */}
           {from ? (
-            <Link replace href={BACK[from].href(receipt.studentId)} className={buttonVariants.ghost}>
+            <BackLink href={BACK[from].href(receipt.studentId)} className={buttonVariants.ghost}>
               <ArrowLeft className="h-4 w-4" />
               {BACK[from].label}
-            </Link>
+            </BackLink>
           ) : (
             receipt.studentId && (
-              <Link replace href={`/admin/fees/students/${receipt.studentId}`} className={buttonVariants.ghost}>
+              <BackLink href={`/admin/fees/students/${receipt.studentId}`} className={buttonVariants.ghost}>
                 <ArrowLeft className="h-4 w-4" />
                 Back to {receipt.studentName.split(" ")[0]}&apos;s fees
-              </Link>
+              </BackLink>
             )
           )}
         </div>

@@ -4,7 +4,7 @@ import { ArrowLeft, Download, Eye, Printer, Ticket } from "lucide-react";
 import { AdmitCardPages } from "@/components/exams/admit-card";
 import { AutoRun, PdfDownloadButton } from "@/components/pdf-download";
 import { PrintButton } from "@/components/print-button";
-import { Avatar, ButtonLink, Card, EmptyState, PageHeader, PagedList, buttonVariants } from "@/components/ui";
+import { Avatar, Card, EmptyState, PageHeader, PagedList, buttonVariants } from "@/components/ui";
 import { loadAdmitCards } from "@/lib/admit-cards";
 import { loadExam } from "@/lib/exams";
 import { getCurrentSchool } from "@/lib/school";
@@ -35,7 +35,7 @@ export default async function AdmitCardSectionPage({ params, searchParams }: Pag
         {printPage}
         <AutoRun action={typeof query.do === "string" ? query.do : undefined} root="admit-card" fileName={file(one.name)} />
         <div className="flex flex-wrap items-center gap-2 print:hidden">
-          <Link href={base} className={buttonVariants.ghost}>
+          <Link replace href={base} className={buttonVariants.ghost}>
             <ArrowLeft className="h-4 w-4" />
             All students
           </Link>
@@ -64,7 +64,7 @@ export default async function AdmitCardSectionPage({ params, searchParams }: Pag
           <span className="flex-1">
             All {data.students.length} admit cards for {data.section.label}, two per A4 page, in roll-number order.
           </span>
-          <Link href={base} className={buttonVariants.ghost}>
+          <Link replace href={base} className={buttonVariants.ghost}>
             Back to students
           </Link>
           <PdfDownloadButton root="admit-cards" fileName={file(`all ${data.students.length}`)} label="Download PDF" />
@@ -89,9 +89,10 @@ export default async function AdmitCardSectionPage({ params, searchParams }: Pag
         ]}
         action={
           data.students.length > 0 && (
-            <ButtonLink href={`${base}?view=all`} icon={Printer}>
+            <Link replace href={`${base}?view=all`} className={buttonVariants.primary}>
+              <Printer className="h-4 w-4" />
               Print / download all
-            </ButtonLink>
+            </Link>
           )
         }
       />
@@ -104,21 +105,21 @@ export default async function AdmitCardSectionPage({ params, searchParams }: Pag
               <li key={s.id} className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2 sm:px-6">
                 <span className="w-8 text-right text-sm tabular-nums text-subtle">{s.rollNumber ?? "—"}</span>
                 <Avatar name={s.name} src={s.photoUrl} />
-                <Link href={`${base}?student=${s.id}`} className="min-w-0 flex-1">
+                <Link replace href={`${base}?student=${s.id}`} className="min-w-0 flex-1">
                   <p className="truncate font-medium text-fg hover:text-accent-text">{s.name}</p>
                   <p className="truncate text-xs text-muted">
                     <span className="font-mono">{s.studentCode}</span>
                     {s.guardian.name && ` · ${s.guardian.name}`} · {s.papers.length} paper{s.papers.length === 1 ? "" : "s"}
                   </p>
                 </Link>
-                <Link href={`${base}?student=${s.id}`} className={`${buttonVariants.secondary} !px-3 !py-1.5 text-xs`}>
+                <Link replace href={`${base}?student=${s.id}`} className={`${buttonVariants.secondary} !px-3 !py-1.5 text-xs`}>
                   <Eye className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Preview</span>
                 </Link>
-                <Link href={`${base}?student=${s.id}&do=print`} title="Print" aria-label={`Print ${s.name}'s admit card`} className={iconBtn}>
+                <Link replace href={`${base}?student=${s.id}&do=print`} title="Print" aria-label={`Print ${s.name}'s admit card`} className={iconBtn}>
                   <Printer className="h-4 w-4" />
                 </Link>
-                <Link href={`${base}?student=${s.id}&do=pdf`} title="Download PDF" aria-label={`Download ${s.name}'s admit card`} className={iconBtn}>
+                <Link replace href={`${base}?student=${s.id}&do=pdf`} title="Download PDF" aria-label={`Download ${s.name}'s admit card`} className={iconBtn}>
                   <Download className="h-4 w-4" />
                 </Link>
               </li>

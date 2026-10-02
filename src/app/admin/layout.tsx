@@ -27,6 +27,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/school-logo";
+import { NavTracker } from "@/components/nav-tracker";
 import { AccountCard, AppShell, type NavGroup, type NavItem } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getPortalSchool, getViewer, schoolLogoUrl } from "@/lib/school";
@@ -162,6 +163,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
         )
       }
     >
+      <NavTracker />
       {children}
     </AppShell>
   );

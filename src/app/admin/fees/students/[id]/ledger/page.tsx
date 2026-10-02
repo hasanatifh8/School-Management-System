@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { BackLink } from "@/components/back-link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, ExternalLink, ListTree, Receipt } from "lucide-react";
 import { AutoPrint } from "@/components/fees/auto-print";
 import { PrintButton } from "@/components/print-button";
-import { Badge, ButtonLink, Card, EmptyState, buttonVariants } from "@/components/ui";
+import { Badge, Card, EmptyState, buttonVariants } from "@/components/ui";
 import { getFeesAccess, loadLedger } from "@/lib/fees";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
 import { fullName, sectionLabel } from "@/lib/queries";
@@ -36,9 +37,10 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
     <div className="space-y-6">
       {sp.print === "1" && <AutoPrint />}
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <ButtonLink href={`/admin/fees/students/${student.id}`} variant="secondary" icon={ArrowLeft}>
+        <BackLink href={`/admin/fees/students/${student.id}`} className={buttonVariants.secondary}>
+          <ArrowLeft className="h-4 w-4" />
           Back to {student.firstName}&apos;s fees
-        </ButtonLink>
+        </BackLink>
         <div className="flex flex-wrap gap-2">
           <a href={`${pdf}?inline=1`} target="_blank" rel="noopener" className={buttonVariants.secondary}>
             <ExternalLink className="h-4 w-4" />
