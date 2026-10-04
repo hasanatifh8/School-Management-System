@@ -22,6 +22,7 @@ const BACK = {
   fees: { label: "Back to fees", href: () => "/admin/fees" },
   dashboard: { label: "Back to dashboard", href: () => "/admin" },
   ledger: { label: "Back to ledger", href: (studentId: string | null) => (studentId ? `/admin/fees/students/${studentId}/ledger` : "/admin/fees/receipts") },
+  desk: { label: "Back to Fee desk", href: (studentId: string | null) => (studentId ? `/admin/fee-desk?s=${studentId}` : "/admin/fee-desk") },
 } as const;
 
 export default async function ReceiptPage({ params, searchParams }: PageProps<"/admin/fees/receipts/[id]">) {

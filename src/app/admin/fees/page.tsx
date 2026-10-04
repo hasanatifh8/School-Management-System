@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { CalendarDays, IndianRupee, Receipt, TriangleAlert, Wallet } from "lucide-react";
-import { Badge, ButtonLink, Card, EmptyState, PagedList, ProgressBar, StatCard, StatGrid, Table, tbodyClass, tdClass, TextLink, thClass, theadClass, trClass } from "@/components/ui";
+import { CalendarDays, IndianRupee, Receipt, Sparkles, TriangleAlert, Wallet } from "lucide-react";
+import { Badge, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar, StatCard, StatGrid, Table, tbodyClass, tdClass, TextLink, thClass, theadClass, trClass } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, outstandingByStudent } from "@/lib/fees";
@@ -45,6 +45,9 @@ export default async function FeesOverviewPage() {
 
   return (
     <div className="space-y-6">
+      <Callout icon={Sparkles} tone="info" action={<ButtonLink href="/admin/fee-desk" size="sm">Open Fee desk</ButtonLink>}>
+        <strong className="font-semibold">New: Fee desk.</strong> Find a student, type the amount received and print, all on one screen. These pages stay as they are.
+      </Callout>
       <NoticeBoard schoolId={school.id} audience="staff" title="Notices for staff" />
       <StatGrid>
         <StatCard icon={IndianRupee} tone="emerald" label="Collected today" value={todayAgg._sum.total ?? 0} prefix="₹" detail={`${todayAgg._count} receipt(s)`} href="/admin/fees/receipts" />

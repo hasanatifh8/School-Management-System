@@ -331,6 +331,71 @@ export function allocateDiscount(chosen: { key: string; balance: number; month: 
   return out;
 }
 
+/* ───────────────────────── Paying an amount (Fee desk) ───────────────────────── */
+
+export type PaymentLine = { item: DueItem; amount: number; discount: number; lateFee: number; full: boolean };
+
+/**
+ * Applies an amount received to a student's unpaid instalments, oldest first
+ * (last session's arrears, then earlier months, this month, then months ahead).
+ * A discount is taken off the oldest instalments first. An instalment's late
+ * fee (by the payment date) is collected when that instalment is paid in full;
+ * a part payment leaves the late fee owing. Shared by the Fee desk's preview
+ * and its server action, so both always agree.
+ */
+export function allocatePayment(items: DueItem[], { amount, discount = 0, waiveLate = false, payDate }: { amount: number; discount?: number; waiveLate?: boolean; payDate: string }) {
+  const open = items
+    .filter((d) => d.balance > 0)
+    .sort((a, b) => (a.arrears ? 0 : 1) - (b.arrears ? 0 : 1) || a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName));
+  let cash = Math.max(0, amount);
+  let disc = Math.max(0, discount);
+  let lateWaived = 0;
+  const lines: PaymentLine[] = [];
+  for (const d of open) {
+    if (cash <= 0 && disc <= 0) break;
+    const late = payDate > d.lateAfter ? d.lateFeeRate : 0;
+    const dsc = Math.min(disc, d.balance);
+    disc -= dsc;
+    const base = d.balance - dsc;
+    const lateDue = waiveLate ? 0 : late;
+    let pay = 0;
+    let lateFee = 0;
+    let full = false;
+    if (cash >= base + lateDue) {
+      pay = base;
+      lateFee = lateDue;
+      cash -= base + lateDue;
+      full = true;
+      if (waiveLate) lateWaived += late;
+    } else {
+      pay = Math.min(cash, base);
+      cash -= pay;
+    }
+    if (pay + dsc > 0) lines.push({ item: d, amount: pay, discount: dsc, lateFee, full });
+  }
+  return {
+    lines,
+    /** Received but more than everything owed for the session. */
+    excess: cash,
+    /** Discount left over because the amount didn't reach enough instalments. */
+    unusedDiscount: disc,
+    lateWaived,
+    total: lines.reduce((n, l) => n + l.amount + l.lateFee, 0),
+  };
+}
+
+/** What a student owes, three ways, for the Fee desk's quick amounts (late fees as of `payDate`). */
+export function quickAmounts(items: DueItem[], payDate: string) {
+  const open = items.filter((d) => d.balance > 0);
+  const owe = (d: DueItem) => d.balance + (payDate > d.lateAfter ? d.lateFeeRate : 0);
+  const sum = (list: DueItem[]) => list.reduce((n, d) => n + owe(d), 0);
+  return {
+    dueNow: sum(open.filter((d) => d.arrears || d.due <= payDate)),
+    upToMonth: sum(open.filter((d) => d.arrears || d.due.slice(0, 7) <= payDate.slice(0, 7))),
+    session: sum(open),
+  };
+}
+
 /* ───────────────────────── Amount in words (Indian system) ───────────────────────── */
 
 const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];

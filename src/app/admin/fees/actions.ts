@@ -6,9 +6,9 @@ import { z } from "zod";
 import { type ActionState, validationError } from "@/lib/action-state";
 import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { getFeesAccess, loadStudentAccount, nextReceiptNumber, requireFeesManager } from "@/lib/fees";
+import { type ReceiptLine, receiptLine, saveReceipt } from "@/lib/fee-receipts";
+import { getFeesAccess, loadStudentAccount, requireFeesManager } from "@/lib/fees";
 import { FREQUENCIES, PAYMENT_MODES, dueKey, rupees, monthLabel, sessionMonths } from "@/lib/fees-shared";
-import { fullName, sectionLabel } from "@/lib/queries";
 
 const MAX_AMOUNT = 10_000_000; // ₹1 crore per instalment is plenty
 
@@ -230,7 +230,7 @@ const paymentSchema = z.object({
 /** Records a payment against the chosen instalments and creates a numbered receipt. */
 export async function collectFee(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const access = await getFeesAccess();
-  const { school, session, today, who } = access;
+  const { school, session, today } = access;
   const account = await loadStudentAccount(school.id, studentId);
   if (!account || account.student.status !== "ACTIVE") return { error: "Student not found." };
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData));
@@ -247,7 +247,7 @@ export async function collectFee(studentId: string, _: ActionState, formData: Fo
   const waiveLateFee = formData.get("waiveLateFee") === "on";
   const byKey = new Map(account.dues.map((d) => [dueKey(d.headId, d.period), d]));
   const rupeesIn = (name: string) => String(formData.get(name) ?? "").replace(/[,\s₹]/g, "");
-  const lines: { headId: string; headName: string; period: string; periodLabel: string; amount: number; discount: number; lateFee: number; charged: number }[] = [];
+  const lines: ReceiptLine[] = [];
   let lateWaived = 0;
   for (const key of new Set([...formData.keys()].filter((k) => k.startsWith("pay:") || k.startsWith("disc:")).map((k) => k.slice(k.indexOf(":") + 1)))) {
     const item = byKey.get(key);
@@ -262,18 +262,7 @@ export async function collectFee(studentId: string, _: ActionState, formData: Fo
       const due = date > item.lateAfter ? item.lateFeeRate : 0;
       const lateFee = waiveLateFee ? 0 : due;
       if (waiveLateFee) lateWaived += due;
-      lines.push({
-        headId: item.headId,
-        headName: item.headName,
-        period: item.period,
-        // Months before admission are marked as such on the receipt.
-        periodLabel: item.beforeAdmission ? `${item.label} · before admission` : item.label,
-        amount,
-        discount,
-        lateFee,
-        // The instalment keeps this price from now on (a later fee or class change won't reprice it).
-        charged: item.amount,
-      });
+      lines.push(receiptLine(item, amount, discount, lateFee));
     }
   }
   if (!lines.length) return { error: "Choose at least one fee and enter the amount paid." };
@@ -283,84 +272,13 @@ export async function collectFee(studentId: string, _: ActionState, formData: Fo
     return { error: "Say why the discount is given, e.g. sibling or staff ward.", fieldErrors: { discountNote: ["Reason needed for a discount"] } };
   }
 
-  const { student } = account;
-  // A waived late fee is noted on the receipt, so the waiver can be traced.
-  const note = lateWaived ? `Late fee ${rupees(lateWaived)} waived by ${who}` : null;
-  const feeNote = admissionFeeNote(account);
-  let receipt;
-  try {
-    receipt = await db.$transaction(
-      async (tx) => {
-        // Re-check what is paid inside the transaction: another counter (or tab) may have
-        // just collected the same instalments, which would otherwise be paid twice.
-        const fresh = await tx.feeReceiptItem.groupBy({
-          by: ["headId", "period"],
-          where: { receipt: { studentId: student.id, cancelledAt: null }, OR: lines.map((l) => ({ headId: l.headId, period: l.period })) },
-          _sum: { amount: true, discount: true, lateFee: true },
-        });
-        const now = new Map(fresh.map((f) => [dueKey(f.headId!, f.period), f._sum]));
-        for (const l of lines) {
-          const item = byKey.get(dueKey(l.headId, l.period))!;
-          const f = now.get(dueKey(l.headId, l.period));
-          if ((f?.amount ?? 0) + (f?.discount ?? 0) !== item.paid + item.discount || (f?.lateFee ?? 0) !== item.lateFeePaid) throw new PaymentChanged();
-        }
-        return tx.feeReceipt.create({
-          data: {
-            schoolId: school.id,
-            sessionId: session.id,
-            studentId: student.id,
-            number: await nextReceiptNumber(tx, school.id, session.name),
-            date: parseISODate(date)!,
-            mode,
-            reference,
-            remarks: [remarks, note].filter(Boolean).join(" · ") || null,
-            discountNote: discounted ? discountNote : null,
-            feeNote,
-            total: lines.reduce((n, l) => n + l.amount + l.lateFee, 0),
-            studentName: fullName(student),
-            studentCode: student.studentCode,
-            className: student.section ? sectionLabel(student.section) : null,
-            collectedBy: who,
-            items: { create: lines },
-          },
-        });
-      },
-      { isolationLevel: "Serializable" },
-    );
-  } catch (e) {
-    // Serializable conflicts (P2034) mean another payment was saved at the same moment.
-    if (e instanceof PaymentChanged || (e as { code?: string }).code === "P2034") {
-      return { error: "A payment for this student was just recorded elsewhere. Reload the page to see the latest dues before collecting." };
-    }
-    throw e;
-  }
+  const saved = await saveReceipt({ access, account, lines, date, mode, reference, remarks, discountNote: discounted ? discountNote : null, lateWaived });
+  if ("error" in saved) return { error: saved.error };
+  const receipt = saved;
   revalidatePath("/admin/fees", "layout");
   redirect(`/admin/fees/receipts/${receipt.id}?new=1`);
 }
 
-/**
- * For a student admitted after the session began: how the months before
- * admission were handled, as printed on the receipt.
- */
-function admissionFeeNote(account: NonNullable<Awaited<ReturnType<typeof loadStudentAccount>>>) {
-  const { student, session, heads } = account;
-  const admitted = student.admissionDate.toISOString().slice(0, 10);
-  const start = session.startDate.toISOString().slice(0, 10);
-  if (admitted.slice(0, 7) <= start.slice(0, 7) || admitted > session.endDate.toISOString().slice(0, 10)) return null;
-  const when = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(student.admissionDate);
-  const from = student.feesFrom?.toISOString().slice(0, 10);
-  // Opt-in fees (e.g. transport) set to start before admission are charged as chosen.
-  const optEarly = account.optionalHeads
-    .filter((o) => o.added && o.from && o.from < admitted.slice(0, 7))
-    .map((o) => `${o.name} charged from ${monthLabel(o.from!)}`);
-  const extra = optEarly.length ? ` ${optEarly.join("; ")}.` : "";
-  if (!from || from.slice(0, 7) >= admitted.slice(0, 7)) return `Admitted ${when}. ${optEarly.length ? "Other fees" : "Fees"} before admission are not charged.${extra}`;
-  const picked = student.feesFromHeadIds.length ? heads.filter((h) => student.feesFromHeadIds.includes(h.id)).map((h) => h.name) : [];
-  return `Admitted ${when}. Fees before admission charged from ${monthLabel(from.slice(0, 7))}${picked.length ? ` for ${picked.join(", ")} only` : " for all fees"}.${extra}`;
-}
-
-/** The student's dues changed between loading the form and saving the payment. */
-class PaymentChanged extends Error {}
 
 const cancelSchema = z.object({ reason: z.string().trim().min(3, "Say why it is cancelled").max(200) });
 
