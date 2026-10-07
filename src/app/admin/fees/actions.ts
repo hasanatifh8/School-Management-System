@@ -92,7 +92,9 @@ export async function saveFeeHead(headId: string | null, _: ActionState, formDat
     }
   });
   revalidatePath("/admin/fees", "layout");
-  redirect("/admin/fees/structure");
+  // Back to the class the fee was opened from, if any.
+  const back = String(formData.get("returnClass") ?? "");
+  redirect(classes.some((c) => c.id === back) ? `/admin/fees/structure?class=${back}` : "/admin/fees/structure");
 }
 
 export async function deleteFeeHead(headId: string): Promise<ActionState> {

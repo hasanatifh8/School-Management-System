@@ -27,6 +27,7 @@ export function FeeHeadForm({
   head,
   routes,
   startMonth = 4,
+  returnClass,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   classes: { id: string; name: string }[];
@@ -35,6 +36,8 @@ export function FeeHeadForm({
   routes?: RouteFares[];
   /** The session's first month (4 = April), where instalment months start. */
   startMonth?: number;
+  /** The class whose fee view opened this form: saving goes back there. */
+  returnClass?: string;
 }) {
   // The transport fee charges each student's stop fare, monthly: only its name, due day and late fee are set here.
   const transport = head?.transport ?? false;
@@ -59,6 +62,7 @@ export function FeeHeadForm({
         const e = state.fieldErrors;
         return (
           <>
+            {returnClass && <input type="hidden" name="returnClass" value={returnClass} />}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Fee name" name="name" errors={e} required hint="e.g. Tuition fee, Admission fee, Transport, Annual charges">
                 <input name="name" defaultValue={head?.name} maxLength={60} required className={inputClass} />
