@@ -1,6 +1,6 @@
 import { Card, PageHeader } from "@/components/ui";
 import { createSchool } from "../../../actions";
-import { SchoolForm } from "../../school-form";
+import { SchoolForm } from "@/components/school-form";
 
 export default function NewSchoolPage() {
   return (

@@ -22,6 +22,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/admin/c
     <>
       <PageHeader
         title="School calendar"
+        breadcrumbs={[{ label: "Settings", href: "/admin/settings" }, { label: "School calendar" }]}
         subtitle={`Plan session ${session.name}: exams, tests, sports day, meetings and holidays. Teachers see it once published.`}
         action={
           <>

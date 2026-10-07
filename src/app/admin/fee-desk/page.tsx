@@ -1,28 +1,27 @@
 import Link from "next/link";
-import { ArrowLeft, BookOpenCheck, CircleCheck, Eye, HandCoins, LayoutList, Phone, Printer, Receipt, SearchCheck, Wallet } from "lucide-react";
-import { Avatar, Badge, ButtonLink, Card, EmptyState, buttonVariants } from "@/components/ui";
+import { ArrowLeft, Check, CircleCheck, HandCoins, IndianRupee, LayoutList, Phone, Receipt, SearchCheck, Wallet } from "lucide-react";
+import { Avatar, Badge, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
-import { MODE_LABELS, monthLabel, quickAmounts, rupees } from "@/lib/fees-shared";
+import { MODE_LABELS, deskMonths, rupees, type DeskMonthStatus } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
-import { quickCollect, type DeskStudent } from "./actions";
-import { DeskCollect } from "./desk-collect";
+import type { DeskStudent } from "./actions";
 import { DeskSearch } from "./desk-search";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /**
- * The Fee desk: a cashier's one-screen counter. Find a student on the left,
- * collect on the right (type the amount; it pays the oldest dues first), print
- * and move on. The classic Fees pages stay available for anything unusual.
+ * The Fee desk: a cashier's one-screen counter. Find a student on the left;
+ * on the right, their twelve months show what is paid and what is due. A month
+ * opens as a fee bill to collect, which then prints as the receipt. The classic
+ * Fees pages stay available for anything unusual.
  */
 export default async function FeeDeskPage({ searchParams }: PageProps<"/admin/fee-desk">) {
   const sp = await searchParams;
   const { school, session, today, canManage } = await getFeesAccess();
   const selectedId = typeof sp.s === "string" ? sp.s : null;
-  const receiptId = typeof sp.r === "string" ? sp.r : null;
 
   if (!(await db.feeHead.count({ where: { sessionId: session.id } }))) {
     return (
@@ -41,13 +40,12 @@ export default async function FeeDeskPage({ searchParams }: PageProps<"/admin/fe
   }
 
   const valid = { schoolId: school.id, cancelledAt: null, date: parseISODate(today)! };
-  const [todayAgg, byMode, sections, lastReceipts, account, justMade] = await Promise.all([
+  const [todayAgg, byMode, sections, lastReceipts, account] = await Promise.all([
     db.feeReceipt.aggregate({ where: valid, _sum: { total: true }, _count: true }),
     db.feeReceipt.groupBy({ by: ["mode"], where: valid, _sum: { total: true } }),
     db.section.findMany({ where: { class: { schoolId: school.id } }, orderBy: [{ class: { sortOrder: "asc" } }, { name: "asc" }], include: { class: true } }),
     db.feeReceipt.findMany({ where: { schoolId: school.id, studentId: { not: null } }, orderBy: { createdAt: "desc" }, take: 40, select: { studentId: true } }),
     selectedId ? loadStudentAccount(school.id, selectedId) : null,
-    receiptId ? db.feeReceipt.findFirst({ where: { id: receiptId, schoolId: school.id }, select: { id: true, number: true, total: true, mode: true, studentId: true } }) : null,
   ]);
 
   // Recent: the last few students paid for, newest first.
@@ -104,22 +102,6 @@ export default async function FeeDeskPage({ searchParams }: PageProps<"/admin/fe
         </div>
 
         <div className="space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-          {justMade && (!account || justMade.studentId === account.student.id) && (
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-success-line bg-success-soft px-4 py-3">
-              <CircleCheck className="h-5 w-5 shrink-0 text-success" />
-              <p className="min-w-0 flex-1 text-sm text-fg">
-                <strong className="font-semibold">{rupees(justMade.total)} collected</strong> by {MODE_LABELS[justMade.mode]} · receipt{" "}
-                <span className="font-mono">{justMade.number}</span>
-              </p>
-              <a href={`/admin/fees/receipts/${justMade.id}?print=1`} target="_blank" rel="noopener" className={buttonVariants.primary}>
-                <Printer className="h-4 w-4" /> Print
-              </a>
-              <Link href={`/admin/fees/receipts/${justMade.id}?from=desk`} className={buttonVariants.secondary}>
-                <Eye className="h-4 w-4" /> View
-              </Link>
-            </div>
-          )}
-
           {!selectedId ? (
             <Card className="lg:h-full">
               <EmptyState
@@ -150,7 +132,7 @@ function DeskHeader() {
           Fee desk
           <Badge tone="indigo">New</Badge>
         </h1>
-        <p className="text-sm text-muted">Find a student, enter what they pay, print the receipt.</p>
+        <p className="text-sm text-muted">Find a student, open a month, collect and print the receipt.</p>
       </div>
       <ButtonLink href="/admin/fees" variant="ghost" icon={LayoutList}>
         Classic fees
@@ -159,12 +141,15 @@ function DeskHeader() {
   );
 }
 
-/** The chosen student: who they are, what they owe, the collect form and recent receipts. */
+/** The chosen student: who they are, their twelve months at a glance, and recent receipts. */
 function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnType<typeof loadStudentAccount>>>; today: string }) {
   const { student, dues, totals, receipts, session } = account;
   const name = fullName(student);
-  const quick = quickAmounts(dues, today);
-  const admittedLate = student.admissionDate.toISOString().slice(0, 7) > session.startDate.toISOString().slice(0, 7);
+  const months = deskMonths(dues, session.startDate.toISOString().slice(0, 10), today);
+  // The oldest month still owing (due by now), collected first.
+  const payNow = months.find((m) => m.status === "OVERDUE" || m.status === "DUE" || (m.status === "PARTIAL" && (m.key === "arrears" || m.key <= today.slice(0, 7))));
+  const unpaidCount = months.filter((m) => m.status === "OVERDUE" || m.status === "DUE" || m.status === "PARTIAL").length;
+  const href = (month: string) => `/admin/fee-desk/${student.id}/${month}`;
 
   return (
     <>
@@ -177,61 +162,74 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-semibold text-fg">{name}</h2>
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-              <span className="font-mono">{student.studentCode}</span>
               {student.section && <Badge tone="indigo">{sectionLabel(student.section)}</Badge>}
-              {student.rollNumber != null && <span>Roll {student.rollNumber}</span>}
+              <span className="font-mono">{student.studentCode}</span>
               {student.fatherName && <span>· {student.fatherName}</span>}
               {student.phone && (
-                <a href={`tel:${student.phone}`} className="inline-flex items-center gap-1 font-medium text-accent-text hover:underline">
+                <a href={`tel:${student.phone}`} className="inline-flex items-center gap-1 text-accent-text hover:underline">
                   <Phone className="h-3.5 w-3.5" /> {student.phone}
                 </a>
               )}
             </p>
           </div>
+          {student.status === "ACTIVE" && payNow ? (
+            <span className="flex flex-col items-end gap-1">
+              <ButtonLink href={href(payNow.key)} icon={IndianRupee} size="lg">
+                Collect {payNow.key === "arrears" ? "arrears" : payNow.label.split(" ")[0]} · {rupees(payNow.balance + payNow.late)}
+              </ButtonLink>
+              {unpaidCount > 1 && <span className="text-xs text-danger">{unpaidCount} months unpaid</span>}
+            </span>
+          ) : (
+            totals.total > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
+                <CircleCheck className="h-4 w-4" /> Nothing due now
+              </span>
+            )
+          )}
         </div>
-        <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-line pt-4">
-          <Figure label="Due now" value={quick.dueNow} tone={quick.dueNow ? "text-danger" : "text-success"} />
-          <Figure label="Left this session" value={quick.session} />
-          <Figure label="Paid this session" value={totals.paid} tone="text-success" />
-        </dl>
-        {admittedLate && (
-          <p className="mt-3 text-xs text-muted">
-            Admitted {shortDate.format(student.admissionDate)} {student.admissionDate.getUTCFullYear()}
-            {student.feesFrom ? `, fees from ${monthLabel(student.feesFrom.toISOString().slice(0, 7))}` : "; months before that aren't charged"}.{" "}
-            <Link href={`/admin/fees/students/${student.id}`} className="font-medium text-accent-text hover:underline">
-              Change
-            </Link>
-          </p>
-        )}
       </section>
 
-      {student.status !== "ACTIVE" ? (
+      {student.status !== "ACTIVE" && (
         <Card>
           <p className="text-sm text-fg-2">This student was removed, so no new payments can be taken.</p>
         </Card>
-      ) : (
-        <DeskCollect
-          key={dues.map((d) => `${d.headId}:${d.period}:${d.balance}`).join(",")}
-          dues={dues}
-          today={today}
-          minDate={session.startDate.toISOString().slice(0, 10)}
-          action={quickCollect.bind(null, student.id)}
-        />
       )}
 
       <Card
-        title="Recent receipts"
+        title={`Session ${session.name}`}
+        description="Open a month to see its fees and collect."
+        padded={false}
+        action={<span className="text-sm text-muted">Paid {rupees(totals.paid)}</span>}
+      >
+        <ul className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 sm:p-4 xl:grid-cols-4">
+          {months.map((m) => {
+            const s = MONTH_STYLE[m.status];
+            return (
+              <li key={m.key} className={m.key === "arrears" ? "col-span-full" : undefined}>
+                <Link href={href(m.key)} className={`group flex h-full flex-col rounded-xl border px-3 py-2.5 transition hover:-translate-y-px hover:shadow-card ${s.box}`}>
+                  <span className="flex items-center justify-between gap-2 text-sm font-medium text-fg">
+                    {m.key === "arrears" ? m.label : m.label.split(" ")[0]}
+                    {m.status === "PAID" && <Check className="h-4 w-4 text-success" aria-hidden />}
+                  </span>
+                  <span className="mt-1 text-base font-semibold tabular-nums text-fg">
+                    {m.status === "NONE" ? <span className="text-sm font-normal text-subtle">—</span> : rupees(m.status === "PAID" ? m.charged : m.balance + m.late)}
+                  </span>
+                  <span className={`mt-0.5 text-xs font-medium ${s.text}`}>{s.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+
+      <Card
+        title="Receipts"
         icon={Receipt}
         padded={false}
         action={
-          <span className="flex items-center gap-3 text-sm">
-            <Link href={`/admin/fees/students/${student.id}/ledger`} className="inline-flex items-center gap-1 font-medium text-accent-text hover:underline">
-              <BookOpenCheck className="h-4 w-4" /> Ledger
-            </Link>
-            <Link href={`/admin/fees/students/${student.id}`} className="font-medium text-accent-text hover:underline">
-              Detailed view
-            </Link>
-          </span>
+          <Link href={`/admin/fees/students/${student.id}`} className="text-sm font-medium text-accent-text hover:underline">
+            Detailed view
+          </Link>
         }
       >
         {receipts.length === 0 ? (
@@ -239,18 +237,15 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
         ) : (
           <ul className="divide-y divide-line">
             {receipts.slice(0, 5).map((r) => (
-              <li key={r.id} className="flex items-center gap-3 px-4 py-2.5 text-sm sm:px-6">
-                <Link href={`/admin/fees/receipts/${r.id}?from=desk`} className="font-mono text-xs font-medium text-accent-text hover:underline">
-                  {r.number}
+              <li key={r.id}>
+                <Link href={`/admin/fees/receipts/${r.id}?from=desk`} className="flex items-center gap-3 px-4 py-2.5 text-sm transition hover:bg-surface-2 sm:px-6">
+                  <span className="font-mono text-xs font-medium text-accent-text">{r.number}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted">
+                    {shortDate.format(r.date)} · {MODE_LABELS[r.mode]}
+                    {r.session.name !== session.name && ` · ${r.session.name}`}
+                  </span>
+                  {r.cancelledAt ? <Badge tone="red">Cancelled</Badge> : <span className="font-semibold tabular-nums text-fg">{rupees(r.total)}</span>}
                 </Link>
-                <span className="min-w-0 flex-1 truncate text-xs text-muted">
-                  {shortDate.format(r.date)} · {MODE_LABELS[r.mode]}
-                  {r.session.name !== session.name && ` · ${r.session.name}`}
-                </span>
-                {r.cancelledAt ? <Badge tone="red">Cancelled</Badge> : <span className="font-semibold tabular-nums text-fg">{rupees(r.total)}</span>}
-                <a href={`/admin/fees/receipts/${r.id}?print=1`} target="_blank" rel="noopener" title="Print" aria-label={`Print receipt ${r.number}`} className="rounded-md p-1.5 text-subtle hover:bg-surface-3 hover:text-fg">
-                  <Printer className="h-4 w-4" />
-                </a>
               </li>
             ))}
           </ul>
@@ -260,11 +255,11 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
   );
 }
 
-function Figure({ label, value, tone = "text-fg" }: { label: string; value: number; tone?: string }) {
-  return (
-    <div>
-      <dt className="text-[11px] font-medium uppercase tracking-wider text-muted">{label}</dt>
-      <dd className={`mt-0.5 text-lg font-semibold tabular-nums ${tone}`}>{rupees(value)}</dd>
-    </div>
-  );
-}
+const MONTH_STYLE: Record<DeskMonthStatus, { label: string; box: string; text: string }> = {
+  PAID: { label: "Paid", box: "border-success-line bg-success-soft/50", text: "text-success" },
+  PARTIAL: { label: "Part paid", box: "border-warning-line bg-warning-soft/50", text: "text-warning" },
+  OVERDUE: { label: "Overdue", box: "border-danger-line bg-danger-soft/50", text: "text-danger" },
+  DUE: { label: "Due", box: "border-warning-line bg-warning-soft/40", text: "text-warning" },
+  UPCOMING: { label: "Upcoming", box: "border-line bg-surface hover:border-line-strong", text: "text-muted" },
+  NONE: { label: "No fees", box: "border-dashed border-line bg-surface opacity-60", text: "text-subtle" },
+};

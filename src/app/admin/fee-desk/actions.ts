@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { RedirectType, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { type ActionState, validationError } from "@/lib/action-state";
@@ -9,7 +9,7 @@ import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { receiptLine, saveReceipt } from "@/lib/fee-receipts";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
-import { PAYMENT_MODES, allocatePayment, rupees } from "@/lib/fees-shared";
+import { PAYMENT_MODES, payMonths } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -68,11 +68,6 @@ export async function searchDeskStudents(query: string, sectionId: string | null
 }
 
 const quickSchema = z.object({
-  amount: z
-    .string()
-    .transform((v) => v.replace(/[,\s₹]/g, ""))
-    .refine((v) => /^\d{0,8}$/.test(v), "Enter the amount in whole rupees")
-    .transform((v) => (v ? Number(v) : 0)),
   discount: z
     .string()
     .optional()
@@ -87,9 +82,8 @@ const quickSchema = z.object({
 });
 
 /**
- * The Fee desk's one-step collection: the amount received is applied to the
- * student's dues oldest first (see allocatePayment), then a receipt is made and
- * the desk shows it, ready for the next student.
+ * The Fee desk's collection: one month's bill is paid in full, with its late
+ * fee (see payMonths), then a receipt is made and opened.
  */
 export async function quickCollect(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const access = await getFeesAccess();
@@ -98,12 +92,14 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
   if (!account || account.student.status !== "ACTIVE") return { error: "Student not found." };
   const parsed = quickSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationError(parsed.error);
-  const { amount, discount, discountNote, date, mode, reference, remarks } = parsed.data;
+  const { discount, discountNote, date, mode, reference, remarks } = parsed.data;
+  const months = formData.getAll("month").map(String);
 
   if (date > today || date < session.startDate.toISOString().slice(0, 10)) {
     return { error: `The payment date must be in session ${session.name}, not in the future.`, fieldErrors: { date: ["Out of range"] } };
   }
-  if (amount <= 0 && discount <= 0) return { error: "Enter the amount received.", fieldErrors: { amount: ["Enter the amount"] } };
+  // Each month is billed and collected on its own.
+  if (months.length !== 1) return { error: "Collect one month at a time." };
   if ((mode === "CHEQUE" || mode === "UPI" || mode === "BANK_TRANSFER") && !reference) {
     return { error: "Enter the cheque / UPI / transaction number.", fieldErrors: { reference: ["Required for this payment mode"] } };
   }
@@ -111,14 +107,14 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
     return { error: "Say why the discount is given, e.g. sibling or staff ward.", fieldErrors: { discountNote: ["Reason needed for a discount"] } };
   }
 
-  const plan = allocatePayment(account.dues, { amount, discount, waiveLate: formData.get("waiveLate") === "on", payDate: date });
-  if (plan.excess > 0) {
-    return { error: `${rupees(plan.excess)} more than everything this student owes for the session. Collect ${rupees(amount - plan.excess)} instead.`, fieldErrors: { amount: ["More than owed"] } };
-  }
-  if (plan.unusedDiscount > 0) {
-    return { error: `The discount is ${rupees(plan.unusedDiscount)} more than the fees this payment covers. Lower it, or collect more.`, fieldErrors: { discount: ["Too large"] } };
-  }
-  if (!plan.lines.length) return { error: "Nothing to collect: this student has no dues." };
+  // The bill's late fee ticks: each month's late fee charged (lateOn) or waived (lateOff).
+  const lateChoice = Object.fromEntries([
+    ...formData.getAll("lateOff").map((k) => [String(k), false] as const),
+    ...formData.getAll("lateOn").map((k) => [String(k), true] as const),
+  ]);
+  const plan = payMonths(account.dues, months, { discount, waiveLate: formData.get("waiveLate") === "on", lateChoice, payDate: date });
+  if (plan.unusedDiscount > 0) return { error: "The discount is more than the fees of the ticked months.", fieldErrors: { discount: ["Too large"] } };
+  if (!plan.lines.length) return { error: "This month is already paid. Reload the page." };
 
   const saved = await saveReceipt({
     access,
@@ -134,5 +130,6 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
   if ("error" in saved) return { error: saved.error };
   revalidatePath("/admin/fees", "layout");
   revalidatePath("/admin/fee-desk");
-  redirect(`/admin/fee-desk?s=${studentId}&r=${saved.id}`, RedirectType.replace);
+  // Straight to the receipt, which confirms the payment and is ready to print.
+  redirect(`/admin/fees/receipts/${saved.id}?new=1&from=desk`);
 }

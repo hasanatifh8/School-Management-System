@@ -5,6 +5,7 @@ import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { buttonVariants, FormActions, inputClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
+import { StopsEditor } from "./stops-editor";
 
 type Values = {
   routeNumber: string;
@@ -16,6 +17,8 @@ type Values = {
   attendantName: string | null;
   attendantPhone: string | null;
   stops: string[];
+  stopFares: number[];
+  stopTimes: string[];
 };
 
 /** A bus or van route: number, vehicle, driver and the stops in order. */
@@ -51,10 +54,8 @@ export function RouteForm({ action, values, submitLabel }: { action: (s: ActionS
               <Field label="Attendant's phone" name="attendantPhone" errors={e}>
                 <input name="attendantPhone" inputMode="tel" maxLength={15} defaultValue={values?.attendantPhone ?? ""} className={inputClass} />
               </Field>
-              <Field label="Stops, in order" name="stops" errors={e} hint="One per line, with the pick-up time if you like, e.g. “Hazratganj (7:10 am)”." className="sm:col-span-2 lg:col-span-4">
-                <textarea name="stops" rows={6} defaultValue={values?.stops.join("\n")} className={inputClass} />
-              </Field>
             </div>
+            <StopsEditor stops={values?.stops ?? []} times={values?.stopTimes ?? []} fares={values?.stopFares ?? []} error={e?.stops?.[0]} />
             <FormActions>
               <Link href="/admin/transport" className={buttonVariants.secondary}>
                 Cancel

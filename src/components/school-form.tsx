@@ -11,10 +11,21 @@ import type { ActionState } from "@/lib/action-state";
 
 export const BOARDS = ["CBSE", "ICSE / ISC", "State Board", "IB", "Cambridge (IGCSE)", "NIOS", "Other"];
 
+export const SCHOOL_TYPES = [
+  { value: "PRIVATE", label: "Private" },
+  { value: "GOVERNMENT", label: "Government" },
+  { value: "SEMI_GOVERNMENT", label: "Semi-government" },
+  { value: "OTHER", label: "Other" },
+] as const;
+
 type SchoolValues = {
   name: string;
   code: string;
   board: string | null;
+  schoolType: string | null;
+  udiseCode: string | null;
+  affiliationNo: string | null;
+  affiliationYear: number | null;
   principalName: string | null;
   establishedYear: number | null;
   motto: string | null;
@@ -31,6 +42,7 @@ export function SchoolForm({
   submitLabel,
   cancelHref,
   offerDemo = false,
+  lockCode = false,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   school?: SchoolValues;
@@ -38,6 +50,8 @@ export function SchoolForm({
   submitLabel: string;
   cancelHref?: string;
   offerDemo?: boolean;
+  /** Show the code read-only: only Power Admin changes it. */
+  lockCode?: boolean;
 }) {
   return (
     <ActionForm action={action} className="space-y-8">
@@ -50,10 +64,17 @@ export function SchoolForm({
               <Field label="School name" name="name" errors={e} required>
                 <input name="name" required defaultValue={school?.name} placeholder="e.g. Delhi Public School" className={inputClass} />
               </Field>
-              <Field label="School code" name="code" errors={e} required hint="Short and unique, e.g. DPS or SVM01">
+              <Field
+                label="School code"
+                name="code"
+                errors={e}
+                required={!lockCode}
+                hint={lockCode ? "Set by Power Admin" : "Short and unique, e.g. DPS or SVM01"}
+              >
                 <input
                   name="code"
                   required
+                  disabled={lockCode}
                   maxLength={12}
                   defaultValue={school?.code}
                   placeholder="DPS"
@@ -69,6 +90,40 @@ export function SchoolForm({
                     </option>
                   ))}
                 </Select>
+              </Field>
+              <Field label="School type" name="schoolType" errors={e}>
+                <Select name="schoolType" defaultValue={school?.schoolType ?? ""} className={selectClass}>
+                  <option value="">Select type</option>
+                  {SCHOOL_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="UDISE code" name="udiseCode" errors={e} hint="11 digits, from UDISE+">
+                <input
+                  name="udiseCode"
+                  inputMode="numeric"
+                  maxLength={11}
+                  defaultValue={school?.udiseCode ?? ""}
+                  placeholder="07050100101"
+                  className={`${inputClass} font-mono`}
+                />
+              </Field>
+              <Field label="Affiliation / registration number" name="affiliationNo" errors={e}>
+                <input name="affiliationNo" maxLength={40} defaultValue={school?.affiliationNo ?? ""} placeholder="e.g. 2730123" className={inputClass} />
+              </Field>
+              <Field label="Affiliation / registration year" name="affiliationYear" errors={e}>
+                <input
+                  name="affiliationYear"
+                  type="number"
+                  min={1800}
+                  max={new Date().getFullYear()}
+                  defaultValue={school?.affiliationYear ?? ""}
+                  placeholder="2005"
+                  className={inputClass}
+                />
               </Field>
               <Field label="Established (year)" name="establishedYear" errors={e}>
                 <input

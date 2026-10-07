@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { type ActionState, optionalEmail, optionalName, optionalPhone, optionalText, requiredName, validationError } from "@/lib/action-state";
+import { type ActionState, requiredName, validationError } from "@/lib/action-state";
 import { db } from "@/lib/db";
+import { schoolSchema } from "@/lib/school-schema";
 import { loadDemoData } from "@/lib/demo-data";
 import { readPhotoUpload } from "@/lib/photos";
 import {
@@ -43,38 +44,6 @@ export async function powerLogout() {
 }
 
 /* ───────────────────────── Schools ───────────────────────── */
-
-const schoolSchema = z.object({
-  name: z.string().trim().min(2, "School name is required").max(120),
-  code: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9]{2,12}$/, "2–12 letters or digits, e.g. DPS or SVM01"),
-  board: optionalText,
-  principalName: optionalName("Principal"),
-  establishedYear: z
-    .string()
-    .trim()
-    .optional()
-    .transform((v, ctx) => {
-      if (!v) return null;
-      const year = Number(v);
-      if (!Number.isInteger(year) || year < 1800 || year > new Date().getFullYear()) {
-        ctx.addIssue({ code: "custom", message: "Enter a year such as 1995" });
-        return z.NEVER;
-      }
-      return year;
-    }),
-  motto: optionalText,
-  address: optionalText,
-  phone: optionalPhone,
-  email: optionalEmail,
-  website: z
-    .union([z.literal(""), z.url({ message: "Enter a full address, e.g. https://school.edu.in" })])
-    .optional()
-    .transform((v) => v || null),
-});
 
 const adminSchema = z.object({
   adminName: requiredName("Name").refine((v) => v.length >= 2, "Enter the full name"),

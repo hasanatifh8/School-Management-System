@@ -4,7 +4,7 @@ import "server-only";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import type { PaymentModeKey } from "@/lib/fees-shared";
-import { dueKey, monthLabel, rupees, type DueItem } from "@/lib/fees-shared";
+import { dueKey, monthLabel, type DueItem } from "@/lib/fees-shared";
 import { type getFeesAccess, type loadStudentAccount, nextReceiptNumber } from "@/lib/fees";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -57,8 +57,6 @@ export async function saveReceipt({
   const { school, session, who } = access;
   const { student } = account;
   const byKey = new Map(account.dues.map((d) => [dueKey(d.headId, d.period), d]));
-  // A waived late fee is noted on the receipt, so the waiver can be traced.
-  const note = lateWaived ? `Late fee ${rupees(lateWaived)} waived by ${who}` : null;
   try {
     return await db.$transaction(
       async (tx) => {
@@ -82,7 +80,9 @@ export async function saveReceipt({
             date: parseISODate(date)!,
             mode,
             reference,
-            remarks: [remarks, note].filter(Boolean).join(" · ") || null,
+            remarks,
+            // A waived late fee is recorded, so the waiver shows on the receipt and the ledger.
+            lateWaived,
             discountNote,
             feeNote: admissionFeeNote(account),
             total: lines.reduce((n, l) => n + l.amount + l.lateFee, 0),

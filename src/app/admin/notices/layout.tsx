@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { TabCrumbs } from "@/components/tab-crumbs";
 import { PageHeader } from "@/components/ui";
 import { sendDueNotices } from "@/lib/messaging/server";
 import { getCurrentSchool } from "@/lib/school";
@@ -10,6 +11,7 @@ export default async function NoticesLayout({ children }: LayoutProps<"/admin/no
   after(() => sendDueNotices(40, school.id));
   return (
     <>
+      <TabCrumbs crumbs={{ "/admin/notices/settings": [{ label: "Settings", href: "/admin/settings" }, { label: "WhatsApp & SMS" }] }} />
       <PageHeader title="Notices" subtitle="Send notices to parents, teachers and staff by WhatsApp or SMS, now or on a chosen date." />
       <NoticesTabs />
       {children}

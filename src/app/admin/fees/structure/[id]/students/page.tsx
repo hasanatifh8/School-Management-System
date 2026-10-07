@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { UserMinus, UserPlus, Users } from "lucide-react";
 import type { Prisma } from "@/generated/prisma/client";
 import { ActionForm, SubmitButton } from "@/components/forms";
@@ -23,6 +23,8 @@ export default async function OptionalFeeStudentsPage({ params, searchParams }: 
   ]);
   const head = heads.find((h) => h.id === id && h.optional);
   if (!head) notFound();
+  // Who pays the transport fee follows who is on a bus.
+  if (head.transport) redirect("/admin/transport");
 
   // Only classes this fee has an amount for.
   const charged = classes.filter((c) => head.amounts[c.id] > 0);

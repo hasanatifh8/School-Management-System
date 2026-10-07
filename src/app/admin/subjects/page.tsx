@@ -47,6 +47,7 @@ export default async function SubjectsPage() {
     <>
       <PageHeader
         title="Subjects"
+        breadcrumbs={[{ label: "Settings", href: "/admin/settings" }, { label: "Subjects" }]}
         subtitle="Subjects offered by the school. Add them to a class from the class's page."
       />
       <div className="grid gap-6 xl:grid-cols-3">

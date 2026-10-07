@@ -5,7 +5,9 @@ import { Card, EmptyState, PageHeader, PersonCell } from "@/components/ui";
 import { db } from "@/lib/db";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { rupees } from "@/lib/fees-shared";
 import { getCurrentSchool } from "@/lib/school";
+import { formatTime } from "@/lib/timetable-shared";
 import { deleteRoute, saveRoute } from "../actions";
 import { RouteForm } from "../route-form";
 
@@ -25,6 +27,8 @@ export default async function RoutePage({ params }: PageProps<"/admin/transport/
   });
   if (!route) notFound();
   const stops = [...route.stops, null];
+  const fare = (stop: string | null) => (stop ? route.stopFares[route.stops.indexOf(stop)] : 0);
+  const time = (stop: string | null) => (stop ? route.stopTimes[route.stops.indexOf(stop)] : "");
   const at = (stop: string | null) => route.students.filter((s) => (stop ? s.transportStop === stop : !s.transportStop || !route.stops.includes(s.transportStop)));
 
   return (
@@ -59,7 +63,9 @@ export default async function RoutePage({ params }: PageProps<"/admin/transport/
                   <div key={stop ?? "none"} className="px-6 py-3">
                     <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
                       <MapPin className="h-3.5 w-3.5" />
-                      {stop ?? "No stop chosen"} · {list.length}
+                      {stop ?? "No stop chosen"}
+                      {time(stop) ? ` (${formatTime(time(stop))})` : ""} · {list.length}
+                      {fare(stop) ? <span className="ml-auto font-medium normal-case tracking-normal tabular-nums">{rupees(fare(stop))}/month</span> : null}
                     </p>
                     <ul className="space-y-2">
                       {list.map((s) => (

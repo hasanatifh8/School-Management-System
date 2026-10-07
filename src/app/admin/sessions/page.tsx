@@ -74,7 +74,10 @@ export default async function SessionsPage({ searchParams }: PageProps<"/admin/s
 
   return (
     <>
-      <PageHeader title="Sessions" subtitle="Academic years run April–March unless you change the dates. Promote classes at the end of each year." />
+      <PageHeader
+        title="Sessions"
+        breadcrumbs={[{ label: "Settings", href: "/admin/settings" }, { label: "Academic sessions" }]}
+        subtitle="Academic years run April–March unless you change the dates. Promote classes at the end of each year." />
 
       {started && (
         <div className="mb-6 flex items-start gap-3 rounded-2xl border border-success-line bg-success-soft p-4 text-sm text-success">

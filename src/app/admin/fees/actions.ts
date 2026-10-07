@@ -8,7 +8,7 @@ import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { type ReceiptLine, receiptLine, saveReceipt } from "@/lib/fee-receipts";
 import { getFeesAccess, loadStudentAccount, requireFeesManager } from "@/lib/fees";
-import { FREQUENCIES, PAYMENT_MODES, dueKey, rupees, monthLabel, sessionMonths } from "@/lib/fees-shared";
+import { FREQUENCIES, PAYMENT_MODES, dueKey, lateFeeOwed, rupees, monthLabel, sessionMonths } from "@/lib/fees-shared";
 
 const MAX_AMOUNT = 10_000_000; // ₹1 crore per instalment is plenty
 
@@ -19,6 +19,7 @@ const headSchema = z
     name: z.string().trim().min(2, "Enter the fee name").max(60),
     frequency: z.enum(FREQUENCIES, "Choose how often it is charged"),
     optional: z.literal("on").optional(),
+    lateFeeMonthly: z.literal("on").optional(),
     dueDay: z.coerce.number().int().min(1, "1–28").max(28, "Choose a day from 1 to 28"),
     dueMonth: z.coerce.number().int().min(1).max(12).optional(),
     lateFee: z
@@ -28,7 +29,7 @@ const headSchema = z
       .refine((v) => !v || (/^\d{1,6}$/.test(v) && Number(v) <= MAX_AMOUNT), "Whole rupees only")
       .transform((v) => (v ? Number(v) : 0)),
   })
-  .transform((v) => ({ ...v, optional: v.optional === "on", dueMonth: v.frequency === "YEARLY" ? (v.dueMonth ?? 4) : null }));
+  .transform((v) => ({ ...v, optional: v.optional === "on", lateFeeMonthly: v.lateFeeMonthly === "on", dueMonth: v.frequency === "YEARLY" ? (v.dueMonth ?? 4) : null }));
 
 /** Class amounts from fields named `amount:<classId>`; blank means the class isn't charged. */
 function readAmounts(formData: FormData, classIds: Set<string>) {
@@ -51,12 +52,14 @@ export async function saveFeeHead(headId: string | null, _: ActionState, formDat
   const parsed = headSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationError(parsed.error);
   const classes = await db.schoolClass.findMany({ where: { schoolId: school.id }, select: { id: true } });
-  const { amounts, errors } = readAmounts(formData, new Set(classes.map((c) => c.id)));
-  if (Object.keys(errors).length) return { error: "Amounts must be whole rupees.", fieldErrors: errors };
-  if (!amounts.length) return { error: "Enter the amount for at least one class." };
-
   const existing = headId ? await db.feeHead.findFirst({ where: { id: headId, sessionId: session.id } }) : null;
   if (headId && !existing) return { error: "Fee not found." };
+  // The transport fee's amounts are the stop fares (set in Transport); it stays a monthly opt-in.
+  const transport = existing?.transport ?? false;
+  const { amounts, errors } = transport ? { amounts: [], errors: {} } : readAmounts(formData, new Set(classes.map((c) => c.id)));
+  if (Object.keys(errors).length) return { error: "Amounts must be whole rupees.", fieldErrors: errors };
+  if (!transport && !amounts.length) return { error: "Enter the amount for at least one class." };
+  const data = transport ? { ...parsed.data, frequency: "MONTHLY" as const, optional: true, dueMonth: null } : parsed.data;
   const clash = await db.feeHead.findFirst({
     where: { sessionId: session.id, name: { equals: parsed.data.name, mode: "insensitive" }, ...(headId && { id: { not: headId } }) },
   });
@@ -68,17 +71,19 @@ export async function saveFeeHead(headId: string | null, _: ActionState, formDat
 
   await db.$transaction(async (tx) => {
     const head = existing
-      ? await tx.feeHead.update({ where: { id: existing.id }, data: parsed.data })
+      ? await tx.feeHead.update({ where: { id: existing.id }, data })
       : await tx.feeHead.create({
           data: {
-            ...parsed.data,
+            ...data,
             schoolId: school.id,
             sessionId: session.id,
             sortOrder: (await tx.feeHead.count({ where: { sessionId: session.id } })) + 1,
           },
         });
-    await tx.feeAmount.deleteMany({ where: { headId: head.id } });
-    await tx.feeAmount.createMany({ data: amounts.map((a) => ({ ...a, headId: head.id })) });
+    if (!transport) {
+      await tx.feeAmount.deleteMany({ where: { headId: head.id } });
+      await tx.feeAmount.createMany({ data: amounts.map((a) => ({ ...a, headId: head.id })) });
+    }
   });
   revalidatePath("/admin/fees", "layout");
   redirect("/admin/fees/structure");
@@ -86,7 +91,7 @@ export async function saveFeeHead(headId: string | null, _: ActionState, formDat
 
 export async function deleteFeeHead(headId: string): Promise<ActionState> {
   const { session } = await requireFeesManager();
-  const head = await db.feeHead.findFirst({ where: { id: headId, sessionId: session.id } });
+  const head = await db.feeHead.findFirst({ where: { id: headId, sessionId: session.id, transport: false } });
   if (!head) return { error: "Fee not found." };
   if (await db.feeReceiptItem.count({ where: { headId } })) {
     return { error: `Payments were taken for “${head.name}”, so it can't be deleted. Remove its class amounts instead to stop charging it.` };
@@ -99,11 +104,12 @@ export async function deleteFeeHead(headId: string): Promise<ActionState> {
 /** Copies the fee heads and amounts of the most recent earlier session into the current one. */
 export async function copyPreviousStructure(): Promise<ActionState> {
   const { school, session } = await requireFeesManager();
-  if (await db.feeHead.count({ where: { sessionId: session.id } })) return { error: "This session already has fees." };
+  // The transport fee is created automatically each session, so it neither counts nor is copied.
+  if (await db.feeHead.count({ where: { sessionId: session.id, transport: false } })) return { error: "This session already has fees." };
   const previous = await db.academicSession.findFirst({
-    where: { schoolId: school.id, id: { not: session.id }, startDate: { lt: session.startDate }, feeHeads: { some: {} } },
+    where: { schoolId: school.id, id: { not: session.id }, startDate: { lt: session.startDate }, feeHeads: { some: { transport: false } } },
     orderBy: { startDate: "desc" },
-    include: { feeHeads: { include: { amounts: true } } },
+    include: { feeHeads: { where: { transport: false }, include: { amounts: true } } },
   });
   if (!previous) return { error: "No earlier session has fees to copy." };
   await db.$transaction(async (tx) => {
@@ -118,6 +124,7 @@ export async function copyPreviousStructure(): Promise<ActionState> {
           dueDay: h.dueDay,
           dueMonth: h.dueMonth,
           lateFee: h.lateFee,
+          lateFeeMonthly: h.lateFeeMonthly,
           sortOrder: h.sortOrder,
           amounts: { create: h.amounts.map((a) => ({ classId: a.classId, amount: a.amount })) },
         },
@@ -208,16 +215,28 @@ export async function removeOptionalFeeStudents(headId: string, _: ActionState, 
 /** First day of this month (India), where a newly added opt-in fee starts. */
 const thisMonth = () => parseISODate(`${todayISO().slice(0, 7)}-01`)!;
 
-/** The month an opt-in fee (e.g. transport) starts for a student; blank = the whole session. */
+/** The months an opt-in fee (e.g. transport) is charged for a student: from (blank = whole session) to (blank = session end). */
 export async function setOptionalFeeFrom(studentId: string, headId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const { school, session } = await getFeesAccess();
   const row = await db.studentFeeHead.findFirst({ where: { studentId, headId, student: { schoolId: school.id }, head: { sessionId: session.id } }, include: { head: true } });
   if (!row) return { error: "This student isn't on that fee." };
-  const month = String(formData.get("from") ?? "");
-  if (month && !sessionMonths(session.startDate.toISOString().slice(0, 10)).includes(month)) return { error: "Choose a month of this session." };
-  await db.studentFeeHead.update({ where: { studentId_headId: { studentId, headId } }, data: { fromDate: month ? parseISODate(`${month}-01`) : null } });
+  const months = sessionMonths(session.startDate.toISOString().slice(0, 10));
+  const from = String(formData.get("from") ?? "");
+  const to = String(formData.get("to") ?? "");
+  if ((from && !months.includes(from)) || (to && !months.includes(to))) return { error: "Choose months of this session." };
+  if (from && to && to < from) return { error: "The last month can't be before the first." };
+  await db.studentFeeHead.update({
+    where: { studentId_headId: { studentId, headId } },
+    data: { fromDate: from ? parseISODate(`${from}-01`) : null, toDate: to ? parseISODate(`${to}-01`) : null },
+  });
   revalidatePath("/admin/fees", "layout");
-  return { ok: true, message: `${row.head.name} charged ${month ? `from ${monthLabel(month)}` : "for the whole session"}.` };
+  return { ok: true, message: `${row.head.name} charged ${monthRange(from, to)}.` };
+}
+
+/** "from Aug 2026 to Mar 2027", "for the whole session", … */
+function monthRange(from: string, to: string) {
+  if (!from && !to) return "for the whole session";
+  return [from && `from ${monthLabel(from)}`, to ? `to ${monthLabel(to)}` : "to the end of the session"].filter(Boolean).join(" ");
 }
 
 const paymentSchema = z.object({
@@ -259,7 +278,7 @@ export async function collectFee(studentId: string, _: ActionState, formData: Fo
     if (amount + discount > item.balance) return { error: `${item.headName} (${item.label}): only ${rupees(item.balance)} is left, including any discount.` };
     if (amount + discount > 0) {
       // Late only if paid after the due date (or admission), going by the payment date entered.
-      const due = date > item.lateAfter ? item.lateFeeRate : 0;
+      const due = lateFeeOwed(item, date);
       const lateFee = waiveLateFee ? 0 : due;
       if (waiveLateFee) lateWaived += due;
       lines.push(receiptLine(item, amount, discount, lateFee));

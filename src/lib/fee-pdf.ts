@@ -208,21 +208,25 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
   const lateCount = receipt.items.filter((i) => i.lateFee > 0).length;
   const cols = [
     { label: "#", w: 26 },
-    { label: "Fee", w: discount ? 175 : 235 },
+    { label: "Fee", w: 235 },
     { label: "Period", w: 150 },
-    ...(discount ? [{ label: "Discount", w: 70, align: "right" as const }] : []),
-    { label: discount ? "Paid" : "Amount", w: 94, align: "right" as const },
+    { label: "Amount", w: 94, align: "right" as const },
   ];
   w.table(
     cols,
     [
-      ...receipt.items.map((i, n) => ({ cells: [String(n + 1), i.headName, i.periodLabel, ...(discount ? [i.discount ? rupees(i.discount) : "—"] : []), rupees(i.amount)] })),
+      // Each fee at its full amount; the discount comes off the total, once.
+      ...receipt.items.map((i, n) => ({ cells: [String(n + 1), i.headName, i.periodLabel, rupees(i.amount + i.discount)] })),
       // Late fees collected, as one line (the total already includes them).
-      ...(lateFee
-        ? [{ cells: [String(receipt.items.length + 1), "Late fee", `${lateCount} late instalment${lateCount === 1 ? "" : "s"}`, ...(discount ? ["—"] : []), rupees(lateFee)] }]
+      ...(lateFee ? [{ cells: [String(receipt.items.length + 1), "Late fee", `${lateCount} late instalment${lateCount === 1 ? "" : "s"}`, rupees(lateFee)] }] : []),
+      ...(discount
+        ? [
+            { cells: ["", "Subtotal", "", rupees(receipt.total + discount)] },
+            { cells: ["", "Discount", "", `- ${rupees(discount)}`] },
+          ]
         : []),
     ],
-    ["", discount ? "Total paid" : "Total", "", ...(discount ? [rupees(discount)] : []), rupees(receipt.total)],
+    ["", discount ? "Total paid" : "Total", "", rupees(receipt.total)],
   );
   w.ensure(80);
   w.text(amountInWords(receipt.total), M, { size: 8.5, color: MUTED, width: A4.w - 2 * M });
@@ -243,6 +247,7 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
   w.y -= 4;
 
   const notes: [string, string][] = [["Paid by", receipt.total ? `${MODE_LABELS[receipt.mode]}${receipt.reference ? ` · ${receipt.reference}` : ""}` : "Nothing to pay (fully discounted)"]];
+  if (receipt.lateWaived) notes.push(["Late fee waived", rupees(receipt.lateWaived)]);
   if (receipt.remarks) notes.push(["Remarks", receipt.remarks]);
   if (discount) notes.push([`Discount ${rupees(discount)}`, receipt.discountNote ?? ""]);
   notes.push(["Received by", receipt.collectedBy]);
@@ -268,10 +273,18 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
 
 /* ───────────────────────── Ledger ───────────────────────── */
 
-const STATUS_LABEL = { PAID: "Paid", PARTIAL: "Part paid", OVERDUE: "Overdue", UPCOMING: "Upcoming" } as const;
+const STATUS_LABEL = { PAID: "Paid", PARTIAL: "Part paid", OVERDUE: "Overdue", DUE: "Due", UPCOMING: "Upcoming", NONE: "—" } as const;
+const KIND_TAG: Partial<Record<Ledger["statement"][number]["kind"], string>> = {
+  OPENING: "Brought forward",
+  LATE: "Late fee",
+  LATE_DUE: "Late fee due",
+  DISCOUNT: "Discount",
+  WAIVER: "Waived",
+  CANCELLED: "Cancelled",
+};
 
 export async function ledgerPdf(ledger: Ledger, school: School) {
-  const { student, session, rows, history, totals } = ledger;
+  const { student, session, statement, months, sums } = ledger;
   const name = fullName(student);
   const { doc, regular, bold } = await newDoc(`Fee ledger – ${name}`);
   const logo = await schoolLogo(doc, school.id);
@@ -288,73 +301,81 @@ export async function ledgerPdf(ledger: Ledger, school: School) {
   w.y -= 4;
 
   // Summary strip
-  const tiles: [string, string][] = [
-    ["Total fee", rupees(totals.total)],
-    ["Discount", rupees(totals.discount)],
-    ["Paid", rupees(totals.paid)],
-    ["Due now", rupees(totals.dueNow)],
-    ["Upcoming", rupees(totals.upcoming)],
+  const tiles: [string, string, boolean][] = [
+    ["Fees charged", rupees(sums.fees + sums.opening), false],
+    ["Late fees", rupees(sums.lateCharged + sums.lateDue), false],
+    ["Discounts", rupees(sums.discount), false],
+    ["Late fee waived", rupees(sums.lateWaived), false],
+    ["Paid", rupees(sums.paid), false],
+    ["Balance due", rupees(sums.dueNow), sums.dueNow > 0],
   ];
   const tw = (A4.w - 2 * M) / tiles.length;
   w.ensure(44);
-  tiles.forEach(([k, v], i) => {
+  tiles.forEach(([k, v, red], i) => {
     const x = M + i * tw;
     w.page.drawRectangle({ x: x + 2, y: w.y - 26, width: tw - 4, height: 38, color: FILL });
-    w.text(k.toUpperCase(), x + 10, { size: 6.8, bold: true, color: MUTED });
+    w.text(k.toUpperCase(), x + 8, { size: 6.4, bold: true, color: MUTED });
     w.y -= 16;
-    w.text(v, x + 10, { size: 11, bold: true, color: k === "Due now" && totals.dueNow ? RED : INK, width: tw - 16 });
+    w.text(v, x + 8, { size: 10.5, bold: true, color: red ? RED : INK, width: tw - 12 });
     w.y += 16;
   });
   w.y -= 44;
 
-  w.text("Instalments", M, { size: 10.5, bold: true });
-  w.y -= 14;
-  w.table(
-    [
-      { label: "Fee / period", w: 104 },
-      { label: "Total fee", w: 56, align: "right" },
-      { label: "Discount", w: 52, align: "right" },
-      { label: "Paid", w: 54, align: "right" },
-      { label: "Due", w: 52, align: "right" },
-      { label: "Paid on", w: 64 },
-      { label: "Receipt", w: 74 },
-      { label: "Status", w: 59 },
-    ],
-    rows.map((r) => ({
-      muted: r.status === "UPCOMING",
-      cells: [
-        [r.headName, r.label],
-        rupees(r.amount),
-        r.discount ? rupees(r.discount) : "—",
-        r.paid ? rupees(r.paid) : "—",
-        r.balance ? rupees(r.balance) : "—",
-        r.payments.length ? r.payments.map((p) => fmtDate(p.date)) : "—",
-        r.payments.length ? r.payments.map((p) => p.number) : "—",
-        STATUS_LABEL[r.status],
-      ],
-    })),
-    ["Total", rupees(totals.total), rupees(totals.discount), rupees(totals.paid), rupees(totals.dueNow + totals.upcoming), "", "", ""],
-  );
-
-  if (history.length) {
-    w.y -= 10;
-    w.ensure(40);
-    w.text("Payment history", M, { size: 10.5, bold: true });
+  if (months.length) {
+    w.text("Month by month", M, { size: 10.5, bold: true });
     w.y -= 14;
     w.table(
       [
-        { label: "Date", w: 75 },
-        { label: "Receipt", w: 95 },
-        { label: "Session", w: 60 },
-        { label: "Mode", w: 85 },
-        { label: "Discount", w: 70, align: "right" },
-        { label: "Paid", w: 70, align: "right" },
-        { label: "Status", w: 60 },
+        { label: "Month", w: 150 },
+        { label: "Fees", w: 62, align: "right" },
+        { label: "Late fee", w: 62, align: "right" },
+        { label: "Discount", w: 62, align: "right" },
+        { label: "Paid", w: 62, align: "right" },
+        { label: "Balance", w: 62, align: "right" },
+        { label: "Status", w: 55 },
       ],
-      history.map((h) => ({
-        muted: h.cancelled,
-        cells: [fmtDate(h.date), h.number, h.session, MODE_LABELS[h.mode], h.discount ? rupees(h.discount) : "—", rupees(h.paid), h.cancelled ? "Cancelled" : "Valid"],
+      months.map((m) => ({
+        muted: m.status === "UPCOMING",
+        cells: [
+          [m.label, m.fees.join(", ")],
+          rupees(m.charged),
+          m.late + m.lateDue ? `${rupees(m.late + m.lateDue)}${m.lateDue ? " (due)" : ""}` : "—",
+          m.discount ? rupees(m.discount) : "—",
+          m.paid + m.late ? rupees(m.paid + m.late) : "—",
+          m.balance ? rupees(m.balance) : "—",
+          STATUS_LABEL[m.status],
+        ],
       })),
+    );
+  }
+
+  if (statement.length) {
+    w.y -= 10;
+    w.ensure(40);
+    w.text("Statement", M, { size: 10.5, bold: true });
+    w.y -= 14;
+    const info = (k: string) => k === "WAIVER" || k === "CANCELLED";
+    w.table(
+      [
+        { label: "Date", w: 62 },
+        { label: "Particulars", w: 190 },
+        { label: "Receipt", w: 75 },
+        { label: "Charged", w: 62, align: "right" },
+        { label: "Paid / off", w: 62, align: "right" },
+        { label: "Balance", w: 66, align: "right" },
+      ],
+      statement.map((e) => ({
+        muted: e.kind === "CANCELLED",
+        cells: [
+          fmtDate(e.date),
+          [KIND_TAG[e.kind] && !e.particulars.startsWith(KIND_TAG[e.kind]!) ? `${e.particulars} [${KIND_TAG[e.kind]}]` : e.particulars, ...(e.detail ? [e.detail] : [])],
+          e.receipt?.number ?? "—",
+          info(e.kind) || !e.debit ? "" : rupees(e.debit),
+          info(e.kind) || !e.credit ? "" : rupees(e.credit),
+          info(e.kind) ? "" : rupees(e.balance),
+        ],
+      })),
+      ["", `Balance due as of ${fmtDate(ledger.today)}`, "", rupees(statement.reduce((n, e) => n + e.debit, 0)), rupees(statement.reduce((n, e) => n + e.credit, 0)), rupees(sums.dueNow)],
     );
   }
 

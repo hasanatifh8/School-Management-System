@@ -6,6 +6,7 @@ import {
   CalendarOff,
   CalendarRange,
   ChevronRight,
+  School,
   IdCard,
   KeyRound,
   ListTree,
@@ -23,6 +24,12 @@ import { getTheme } from "@/lib/theme-server";
 type Item = { href: string; icon: LucideIcon; tone: IconTone; title: string; text: string };
 
 const groups: { title: string; items: Item[] }[] = [
+  {
+    title: "School",
+    items: [
+      { href: "/admin/settings/school", icon: School, tone: "sky", title: "School details", text: "Name, logo, UDISE, affiliation and contacts" },
+    ],
+  },
   {
     title: "School year",
     items: [

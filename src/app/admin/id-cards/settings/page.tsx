@@ -35,7 +35,7 @@ export default async function CardBackSettingsPage() {
               <textarea name="guidelines" rows={5} defaultValue={row.idCardGuidelines ?? ""} placeholder={DEFAULT_GUIDELINES.join("\n")} className={inputClass} />
             </Field>
             <p className="text-xs text-muted">
-              The school&apos;s name, logo, address, phone, email and website come from the school&apos;s details, which Power Admin manages.
+              The school&apos;s name, logo, address, phone, email and website come from Settings › School details.
             </p>
             <SubmitButton icon={<Save className="h-4 w-4" />}>Save card back</SubmitButton>
           </ActionForm>

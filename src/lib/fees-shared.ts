@@ -91,12 +91,30 @@ export type FeeHeadInfo = {
   name: string;
   frequency: Frequency;
   optional: boolean;
+  /** Amount is the student's transport stop fare (monthly), not a class amount. */
+  transport: boolean;
   dueDay: number;
   dueMonth: number | null;
-  /** Extra charge, once per instalment, when it is paid after its due date. */
+  /** Extra charge when an instalment is paid after its due date. */
   lateFee: number;
+  /** Charge the late fee again for every month the instalment stays unpaid (else once). */
+  lateFeeMonthly: boolean;
   amounts: Record<string, number>; // classId → rupees
 };
+
+/** What a fee costs a student: their stop fare for the transport fee, else their class's amount. */
+export function headAmount(head: Pick<FeeHeadInfo, "transport" | "amounts">, classId: string | null | undefined, transportFare: number) {
+  if (head.transport) return transportFare > 0 ? transportFare : undefined;
+  return classId ? head.amounts[classId] : undefined;
+}
+
+/** Monthly fare of a student's stop, or 0 when not on transport or the stop has no fare. */
+export function stopFare(student: { transportStop: string | null; transportRoute: { stops: string[]; stopFares: number[] } | null }) {
+  const r = student.transportRoute;
+  if (!r || !student.transportStop) return 0;
+  const i = r.stops.indexOf(student.transportStop);
+  return i >= 0 ? (r.stopFares[i] ?? 0) : 0;
+}
 
 export type DueStatus = "PAID" | "PARTIAL" | "OVERDUE" | "UPCOMING";
 
@@ -113,11 +131,13 @@ export type DueItem = {
   discount: number;
   balance: number;
   status: DueStatus;
-  /** Late fee owed as of today: unpaid past `lateAfter`, and no late fee taken yet. */
+  /** Late fee owed as of today (see lateFeeMonths), and no late fee taken yet. */
   lateFee: number;
   /** The head's late fee, if one can still be charged on this instalment (0 if none or already paid). */
   lateFeeRate: number;
-  /** Late if paid after this day: the due date, or the admission date for a student who joined later. */
+  /** The late fee repeats for each month unpaid (else it is charged once). */
+  lateFeeMonthly: boolean;
+  /** Late fees fall due by default only after this day: the due date, or the first due day after admission for a student who joined later. */
   lateAfter: string;
   /** Late fee already collected on this instalment. */
   lateFeePaid: number;
@@ -133,7 +153,8 @@ export const dueKey = (headId: string, period: string) => `${headId}|${period}`;
  * Everything a student is charged in a session, instalment by instalment.
  * - Heads without an amount for the student's class don't apply.
  * - Optional heads apply only if the student was added to them, from the month
- *   they were added (`optIns` maps head → first day charged, null = whole session).
+ *   they were added (`optIns` maps head → first day charged, null = whole session)
+ *   up to a last month if one was set (`optUntil`, "2027-01"; none = session end).
  *   A start month earlier than admission is honoured as chosen.
  * - A one-time fee for a mid-session admission falls due on the admission date.
  * - One-time heads apply only to students admitted during this session.
@@ -150,6 +171,8 @@ export function studentDues({
   chargeFrom,
   backHeadIds = [],
   optIns,
+  optUntil = new Map(),
+  transportFare = 0,
   paid,
   discounts = new Map(),
   lateFeesPaid = new Map(),
@@ -165,6 +188,10 @@ export function studentDues({
   /** Fees charged for the months before admission; empty = all of them. */
   backHeadIds?: string[];
   optIns: Map<string, string | null>;
+  /** Opt-in head → last month charged ("2027-01"); absent = to the end of the session. */
+  optUntil?: Map<string, string>;
+  /** Monthly fare of the student's transport stop (0 = none), for the transport fee. */
+  transportFare?: number;
   paid: Map<string, number>; // dueKey → rupees
   discounts?: Map<string, number>; // dueKey → rupees waived
   lateFeesPaid?: Map<string, number>; // dueKey → late fee collected
@@ -175,12 +202,13 @@ export function studentDues({
   const items: DueItem[] = [];
   const start = chargeFrom ?? admissionDate;
   for (const head of heads) {
-    const amount = classId ? head.amounts[classId] : undefined;
+    const amount = headAmount(head, classId, transportFare);
     // Anything already paid still shows, even if the head no longer applies.
     const applies = amount != null && amount > 0 && (!head.optional || optIns.has(head.id));
     const optFrom = head.optional ? (optIns.get(head.id) ?? null) : null;
     // An opt-in fee started before admission was set that way on purpose: it overrides the admission rule.
     const optOverride = !!optFrom && optFrom < admissionDate;
+    const optTo = head.optional ? optUntil.get(head.id) : undefined;
     const backOk = !backHeadIds.length || backHeadIds.includes(head.id);
     for (const p of feePeriods(head, session.start, session.name)) {
       const k = dueKey(head.id, p.key);
@@ -192,7 +220,9 @@ export function studentDues({
         (head.frequency !== "ONE_TIME" || admissionDate >= session.start) &&
         (optOverride
           ? p.end >= optFrom!
-          : p.end >= start && (!beforeAdmission || backOk) && (!optFrom || p.end >= optFrom));
+          : p.end >= start && (!beforeAdmission || backOk) && (!optFrom || p.end >= optFrom)) &&
+        // An opt-in fee set to stop after a month charges nothing later.
+        (!optTo || p.start.slice(0, 7) <= optTo);
       // A one-time fee (e.g. admission) falls due on the admission date for a mid-session admission.
       const dueOn = head.frequency === "ONE_TIME" && admissionDate > p.due ? admissionDate : p.due;
       if (!charged && !paidSoFar && !discount) continue;
@@ -216,8 +246,9 @@ export function studentDues({
         balance,
         status: balance === 0 ? "PAID" : paidSoFar + discount > 0 ? "PARTIAL" : dueOn <= today ? "OVERDUE" : "UPCOMING",
         // Charged once per instalment, only after the due date has passed.
-        lateFee: today > lateAfter ? lateFeeRate : 0,
+        lateFee: 0, // set below, once the item is complete
         lateFeeRate,
+        lateFeeMonthly: head.lateFeeMonthly,
         lateAfter,
         lateFeePaid,
         beforeAdmission: beforeAdmission && head.frequency !== "ONE_TIME",
@@ -225,7 +256,42 @@ export function studentDues({
       });
     }
   }
+  for (const d of items) d.lateFee = lateFeeOwed(d, today);
   return items.sort((a, b) => a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName));
+}
+
+/** One month's late fee on an instalment: "<dueKey>@<n>", the month it covers, and whether it is charged unless changed. */
+export type LateMonth = { key: string; label: string; from: string; amount: number; onByDefault: boolean; beforeAdmission: boolean };
+
+/** `iso` date plus `n` months, on the same day (or the month's last day). */
+function addMonths(date: string, n: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  const yy = y + Math.floor((m - 1 + n) / 12);
+  const mm = (m - 1 + n) % 12;
+  return iso(yy, mm, Math.min(d, lastDay(yy, mm)));
+}
+
+/**
+ * The late fees on an unpaid instalment if paid on `payDate`: one for the month
+ * it falls late, then (monthly late fees) one more for each further month it
+ * stays unpaid, all charged unless fees staff untick them. Months before the
+ * student's admission are flagged so staff can see them.
+ */
+export function lateFeeMonths(d: DueItem, payDate: string): LateMonth[] {
+  if (d.balance <= 0 || d.lateFeeRate <= 0) return [];
+  const out: LateMonth[] = [];
+  for (let n = 0; n < 120; n++) {
+    const from = addMonths(d.due, n);
+    if (payDate <= from) break;
+    out.push({ key: `${dueKey(d.headId, d.period)}@${n}`, label: monthLabel(from.slice(0, 7)), from, amount: d.lateFeeRate, onByDefault: true, beforeAdmission: from < d.lateAfter });
+    if (!d.lateFeeMonthly) break;
+  }
+  return out;
+}
+
+/** Late fee owed on an instalment paid on `payDate`: the months charged by default, or as `choice` (key → charged) says. */
+export function lateFeeOwed(d: DueItem, payDate: string, choice?: Record<string, boolean>) {
+  return lateFeeMonths(d, payDate).reduce((n, l) => n + ((choice?.[l.key] ?? l.onByDefault) ? l.amount : 0), 0);
 }
 
 /** The first `dueDay` of a month falling on or after `date` ("2026-07-20", 10 → "2026-08-10"). */
@@ -338,26 +404,33 @@ export type PaymentLine = { item: DueItem; amount: number; discount: number; lat
 /**
  * Applies an amount received to a student's unpaid instalments, oldest first
  * (last session's arrears, then earlier months, this month, then months ahead).
- * A discount is taken off the oldest instalments first. An instalment's late
+ * A discount comes off the bill as a whole: it is shared across the instalments
+ * in proportion to what each owes (so no one fee looks cut), to settle them in
+ * the books. An instalment's late
  * fee (by the payment date) is collected when that instalment is paid in full;
  * a part payment leaves the late fee owing. Shared by the Fee desk's preview
  * and its server action, so both always agree.
  */
-export function allocatePayment(items: DueItem[], { amount, discount = 0, waiveLate = false, payDate }: { amount: number; discount?: number; waiveLate?: boolean; payDate: string }) {
+export function allocatePayment(
+  items: DueItem[],
+  { amount, discount = 0, waiveLate = false, lateChoice, payDate }: { amount: number; discount?: number; waiveLate?: boolean; lateChoice?: Record<string, boolean>; payDate: string },
+) {
   const open = items
     .filter((d) => d.balance > 0)
     .sort((a, b) => (a.arrears ? 0 : 1) - (b.arrears ? 0 : 1) || a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName));
   let cash = Math.max(0, amount);
-  let disc = Math.max(0, discount);
+  const share = shareDiscount(open, Math.max(0, discount));
+  // Discount beyond everything owed is left over (unusedDiscount).
+  const disc = Math.max(0, discount) - [...share.values()].reduce((n, v) => n + v, 0);
   let lateWaived = 0;
   const lines: PaymentLine[] = [];
   for (const d of open) {
-    if (cash <= 0 && disc <= 0) break;
-    const late = payDate > d.lateAfter ? d.lateFeeRate : 0;
-    const dsc = Math.min(disc, d.balance);
-    disc -= dsc;
+    if (cash <= 0 && !share.get(d)) continue;
+    // The usual late fee, and what is charged after any months were ticked off (or on).
+    const late = lateFeeOwed(d, payDate);
+    const dsc = share.get(d) ?? 0;
     const base = d.balance - dsc;
-    const lateDue = waiveLate ? 0 : late;
+    const lateDue = waiveLate ? 0 : lateFeeOwed(d, payDate, lateChoice);
     let pay = 0;
     let lateFee = 0;
     let full = false;
@@ -366,7 +439,7 @@ export function allocatePayment(items: DueItem[], { amount, discount = 0, waiveL
       lateFee = lateDue;
       cash -= base + lateDue;
       full = true;
-      if (waiveLate) lateWaived += late;
+      lateWaived += Math.max(0, late - lateDue);
     } else {
       pay = Math.min(cash, base);
       cash -= pay;
@@ -384,10 +457,81 @@ export function allocatePayment(items: DueItem[], { amount, discount = 0, waiveL
   };
 }
 
+/** The Fee desk row an instalment belongs to: its due month ("2026-07"), or "arrears" for last session's. */
+export const deskMonth = (d: DueItem) => (d.arrears ? "arrears" : d.due.slice(0, 7));
+
+export type DeskMonthStatus = "PAID" | "PARTIAL" | "OVERDUE" | "DUE" | "UPCOMING" | "NONE";
+
+/**
+ * A student's fees as Fee desk months: one per month of the session (and one
+ * for last session's arrears, first), each with its instalments, what is left,
+ * the late fee owing by `payDate`, and a status.
+ */
+export function deskMonths(dues: DueItem[], sessionStart: string, payDate: string) {
+  const keys = [...(dues.some((d) => d.arrears) ? ["arrears"] : []), ...sessionMonths(sessionStart)];
+  return keys.map((key) => {
+    const items = dues.filter((d) => deskMonth(d) === key);
+    const charged = items.reduce((n, d) => n + d.amount, 0);
+    const balance = items.reduce((n, d) => n + d.balance, 0);
+    const late = items.reduce((n, d) => n + lateFeeOwed(d, payDate), 0);
+    const status: DeskMonthStatus = !items.length
+      ? "NONE"
+      : balance === 0
+        ? "PAID"
+        : items.some((d) => d.paid + d.discount > 0)
+          ? "PARTIAL"
+          : items.some((d) => d.balance > 0 && d.due < payDate)
+            ? "OVERDUE"
+            : key.slice(0, 7) <= payDate.slice(0, 7) || key === "arrears"
+              ? "DUE"
+              : "UPCOMING";
+    const label = key === "arrears" ? `Unpaid from ${items[0]?.arrears ?? "last session"}` : monthLabel(key);
+    return { key, label, items, charged, balance, late, status };
+  });
+}
+
+/**
+ * Pays the chosen months in full: every unpaid instalment in them, with late
+ * fees (as of `payDate`, unless waived), less any discount (oldest first).
+ * Shared by the Fee desk's preview and its server action, so both always agree.
+ */
+export function payMonths(
+  items: DueItem[],
+  months: string[],
+  { discount = 0, waiveLate = false, lateChoice, payDate }: { discount?: number; waiveLate?: boolean; lateChoice?: Record<string, boolean>; payDate: string },
+) {
+  const chosen = new Set(months);
+  const open = items.filter((d) => d.balance > 0 && chosen.has(deskMonth(d)));
+  const fees = open.reduce((n, d) => n + d.balance, 0);
+  const late = waiveLate ? 0 : open.reduce((n, d) => n + lateFeeOwed(d, payDate, lateChoice), 0);
+  return { ...allocatePayment(open, { amount: Math.max(0, fees - discount) + late, discount, waiveLate, lateChoice, payDate }), fees, late };
+}
+
+/**
+ * Splits a bill-level discount across instalments in proportion to their
+ * balances, in whole rupees (the leftover rupees go to the largest shares).
+ * Never more than an instalment owes; anything beyond the bill is left unshared.
+ */
+function shareDiscount(items: DueItem[], discount: number) {
+  const total = items.reduce((n, d) => n + d.balance, 0);
+  const share = new Map<DueItem, number>();
+  if (!discount || !total) return share;
+  const off = Math.min(discount, total);
+  const exact = items.map((d) => ({ d, x: (off * d.balance) / total }));
+  for (const e of exact) share.set(e.d, Math.floor(e.x));
+  let left = off - [...share.values()].reduce((n, v) => n + v, 0);
+  for (const e of [...exact].sort((a, b) => (b.x % 1) - (a.x % 1))) {
+    if (left <= 0) break;
+    share.set(e.d, share.get(e.d)! + 1);
+    left--;
+  }
+  return share;
+}
+
 /** What a student owes, three ways, for the Fee desk's quick amounts (late fees as of `payDate`). */
 export function quickAmounts(items: DueItem[], payDate: string) {
   const open = items.filter((d) => d.balance > 0);
-  const owe = (d: DueItem) => d.balance + (payDate > d.lateAfter ? d.lateFeeRate : 0);
+  const owe = (d: DueItem) => d.balance + lateFeeOwed(d, payDate);
   const sum = (list: DueItem[]) => list.reduce((n, d) => n + owe(d), 0);
   return {
     dueNow: sum(open.filter((d) => d.arrears || d.due <= payDate)),

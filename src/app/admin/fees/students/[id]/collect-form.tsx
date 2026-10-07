@@ -6,7 +6,7 @@ import { Banknote, Building2, CalendarClock, ChevronDown, CreditCard, FileCheck2
 import { Field, FormMessage } from "@/components/forms";
 import { Badge, Button, SegmentedControl, SuccessState, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { MODE_LABELS, PAYMENT_MODES, allocateDiscount, dueKey, feeSummary, monthLabel, rupees, type DueItem, type MonthDues } from "@/lib/fees-shared";
+import { MODE_LABELS, PAYMENT_MODES, allocateDiscount, dueKey, feeSummary, lateFeeOwed, monthLabel, rupees, type DueItem, type MonthDues } from "@/lib/fees-shared";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 const fmt = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
@@ -66,7 +66,7 @@ export function CollectForm({
   const [payDate, setPayDate] = useState(today);
   const [state, formAction, pending] = useActionState(action, {});
   /** Late fee for an instalment if paid on the payment date entered (as the server works it out). */
-  const lateOf = (d: DueItem) => (payDate > d.lateAfter ? d.lateFeeRate : 0);
+  const lateOf = (d: DueItem) => lateFeeOwed(d, payDate);
   const lateIn = (items: DueItem[]) => items.reduce((n, d) => n + lateOf(d), 0);
 
   const chosen = open.filter((d) => selected.has(key(d)));

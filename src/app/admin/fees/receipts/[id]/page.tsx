@@ -3,6 +3,7 @@ import { BackLink } from "@/components/back-link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, GraduationCap, HandCoins, XCircle } from "lucide-react";
 import { AutoPrint } from "@/components/fees/auto-print";
+import { CollectedToast } from "@/components/fees/collected-toast";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { ButtonLink, Card, SuccessState, buttonVariants, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -50,11 +51,12 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
       run.last = item.periodLabel;
       run.count++;
       prev.period = `${run.first} – ${run.last} (${run.count})`;
-      prev.amount += item.amount;
+      prev.amount += item.amount + item.discount;
       prev.discount += item.discount;
     } else {
       run = { first: item.periodLabel, last: item.periodLabel, count: 1 };
-      lines.push({ key: item.id, name: item.headName, period: item.periodLabel, amount: item.amount, discount: item.discount });
+      // Each fee at its full amount; the discount comes off the total, once.
+      lines.push({ key: item.id, name: item.headName, period: item.periodLabel, amount: item.amount + item.discount, discount: item.discount });
     }
   }
   const discount = lines.reduce((n, l) => n + l.discount, 0);
@@ -115,8 +117,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
             <th className="w-8 py-[1.2mm] pl-1 font-semibold">#</th>
             <th className="py-[1.2mm] font-semibold">Fee</th>
             <th className="py-[1.2mm] font-semibold">Period</th>
-            {discount > 0 && <th className="py-[1.2mm] text-right font-semibold">Discount</th>}
-            <th className="py-[1.2mm] pr-1 text-right font-semibold">{discount > 0 ? "Paid" : "Amount"}</th>
+            <th className="py-[1.2mm] pr-1 text-right font-semibold">Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -125,7 +126,6 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               <td className="py-[1mm] pl-1 text-slate-500">{i + 1}</td>
               <td className="py-[1mm]">{item.name}</td>
               <td className="py-[1mm]">{item.period}</td>
-              {discount > 0 && <td className="py-[1mm] text-right tabular-nums">{item.discount ? rupees(item.discount) : "—"}</td>}
               <td className="py-[1mm] pr-1 text-right tabular-nums">{rupees(item.amount)}</td>
             </tr>
           ))}
@@ -136,17 +136,31 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               <td className="py-[1mm]">
                 {lateCount} late instalment{lateCount === 1 ? "" : "s"}
               </td>
-              {discount > 0 && <td className="py-[1mm] text-right">—</td>}
               <td className="py-[1mm] pr-1 text-right tabular-nums">{rupees(lateFee)}</td>
             </tr>
           )}
         </tbody>
         <tfoot>
+          {discount > 0 && (
+            <>
+              <tr>
+                <td colSpan={3} className="pt-[1.5mm] pl-1 text-right text-slate-600">
+                  Subtotal
+                </td>
+                <td className="pt-[1.5mm] pr-1 text-right tabular-nums">{rupees(receipt.total + discount)}</td>
+              </tr>
+              <tr>
+                <td colSpan={3} className="py-[0.5mm] pl-1 text-right text-slate-600">
+                  Discount
+                </td>
+                <td className="py-[0.5mm] pr-1 text-right tabular-nums">− {rupees(discount)}</td>
+              </tr>
+            </>
+          )}
           <tr className="border-b-2 border-slate-400">
             <td colSpan={3} className="py-[1.5mm] pl-1 text-right font-semibold">
               {discount > 0 ? "Total paid" : "Total"}
             </td>
-            {discount > 0 && <td className="py-[1.5mm] text-right font-semibold tabular-nums">{rupees(discount)}</td>}
             <td className="py-[1.5mm] pr-1 text-right text-[11pt] font-bold tabular-nums">{rupees(receipt.total)}</td>
           </tr>
         </tfoot>
@@ -166,6 +180,11 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
             <span className="text-slate-500">Paid by:</span>{" "}
             {receipt.total ? `${MODE_LABELS[receipt.mode]}${receipt.reference ? ` · ${receipt.reference}` : ""}` : "Nothing to pay (fully discounted)"}
           </p>
+          {receipt.lateWaived > 0 && (
+            <p>
+              <span className="text-slate-500">Late fee waived:</span> {rupees(receipt.lateWaived)}
+            </p>
+          )}
           {receipt.remarks && (
             <p>
               <span className="text-slate-500">Remarks:</span> {receipt.remarks}
@@ -195,6 +214,9 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
     <div className="space-y-6">
       <div className="space-y-4 print:hidden">
         {sp.new === "1" && !receipt.cancelledAt && (
+          <CollectedToast receiptId={receipt.id} title={`${rupees(receipt.total)} collected`} description={`Receipt ${receipt.number} · ${receipt.studentName}`} />
+        )}
+        {sp.new === "1" && !receipt.cancelledAt && (
           <Card>
             <SuccessState
               title={`${rupees(receipt.total)} collected`}
@@ -206,7 +228,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               action={
                 <>
                   <PrintButton />
-                  <ButtonLink href="/admin/fees/collect" variant="secondary" icon={HandCoins}>
+                  <ButtonLink href={from === "desk" ? "/admin/fee-desk" : "/admin/fees/collect"} variant="secondary" icon={HandCoins}>
                     Collect another
                   </ButtonLink>
                 </>

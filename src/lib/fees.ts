@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { MONTH_NAMES, dueKey, dueTotals, studentDues, type FeeHeadInfo } from "@/lib/fees-shared";
+import { MODE_LABELS, MONTH_NAMES, deskMonths, dueKey, dueTotals, headAmount, rupees, stopFare, studentDues, type FeeHeadInfo } from "@/lib/fees-shared";
 import { getPortalSchool, getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
+import { ensureTransportFee } from "@/lib/transport-fees";
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -19,6 +20,8 @@ export const getFeesAccess = cache(async () => {
   const school = await getPortalSchool();
   const viewer = (await getViewer())!;
   const session = await getCurrentSession(school.id);
+  // Bus riders pay their stop's fare through a fee the school never sets up by hand.
+  await ensureTransportFee(school.id, session.id);
   const staff = viewer.kind === "admin" ? viewer.admin : null;
   return {
     school,
@@ -47,9 +50,11 @@ export async function loadFeeHeads(sessionId: string): Promise<(FeeHeadInfo & { 
     name: h.name,
     frequency: h.frequency,
     optional: h.optional,
+    transport: h.transport,
     dueDay: h.dueDay,
     dueMonth: h.dueMonth,
     lateFee: h.lateFee,
+    lateFeeMonthly: h.lateFeeMonthly,
     sortOrder: h.sortOrder,
     amounts: Object.fromEntries(h.amounts.map((a) => [a.classId, a.amount])),
   }));
@@ -93,15 +98,21 @@ async function paidByStudent(sessionId: string, studentIds?: string[]) {
 async function optInsByStudent(sessionId: string, studentIds?: string[]) {
   const rows = await db.studentFeeHead.findMany({
     where: { head: { sessionId }, ...(studentIds && { studentId: { in: studentIds } }) },
-    select: { studentId: true, headId: true, fromDate: true },
+    select: { studentId: true, headId: true, fromDate: true, toDate: true },
   });
-  // head → first day it is charged from (null = the whole session).
+  // Per student, head → first day it is charged from (null = the whole session),
+  // and head → last month charged ("2027-01"), when one was set.
   const map = new Map<string, Map<string, string | null>>();
+  const until = new Map<string, Map<string, string>>();
   for (const r of rows) {
     if (!map.has(r.studentId)) map.set(r.studentId, new Map());
     map.get(r.studentId)!.set(r.headId, r.fromDate ? isoDate(r.fromDate) : null);
+    if (r.toDate) {
+      if (!until.has(r.studentId)) until.set(r.studentId, new Map());
+      until.get(r.studentId)!.set(r.headId, isoDate(r.toDate).slice(0, 7));
+    }
   }
-  return map;
+  return Object.assign(map, { until });
 }
 
 /** A student's fee account for the current session. */
@@ -109,9 +120,10 @@ export async function loadStudentAccount(schoolId: string, studentId: string) {
   const { session, today } = await getFeesAccess();
   const student = await db.student.findFirst({
     where: { id: studentId, schoolId },
-    include: { section: { include: { class: true } } },
+    include: { section: { include: { class: true } }, transportRoute: { select: { stops: true, stopFares: true } } },
   });
   if (!student) return null;
+  const fare = stopFare(student);
   const [heads, paid, optIns, receipts] = await Promise.all([
     loadFeeHeads(session.id),
     paidByStudent(session.id, [student.id]),
@@ -128,6 +140,8 @@ export async function loadStudentAccount(schoolId: string, studentId: string) {
     admissionDate: isoDate(student.admissionDate),
     chargeFrom: student.feesFrom ? isoDate(student.feesFrom) : null,
     optIns: optIns.get(student.id) ?? new Map(),
+    optUntil: optIns.until.get(student.id),
+    transportFare: fare,
     paid: paid.paid.get(student.id) ?? new Map(),
     discounts: paid.discounts.get(student.id),
     lateFeesPaid: paid.lateFees.get(student.id),
@@ -137,18 +151,21 @@ export async function loadStudentAccount(schoolId: string, studentId: string) {
     today,
   });
   // Last session's unpaid fees, carried in as arrears (they come first, being oldest).
-  const arrears = await previousSessionArrears(student, session.startDate, today);
+  const arrears = await previousSessionArrears(student, fare, session.startDate, today);
   const classId = student.section?.classId;
   const optionalHeads = heads
-    .filter((h) => h.optional && classId && h.amounts[classId])
+    .filter((h) => h.optional && headAmount(h, classId, fare))
     .map((h) => ({
       id: h.id,
       name: h.name,
-      amount: h.amounts[classId!],
+      amount: headAmount(h, classId, fare)!,
+      transport: h.transport,
       frequency: h.frequency,
       added: optIns.get(student.id)?.has(h.id) ?? false,
       /** First month charged ("2026-10"), or null for the whole session. */
       from: optIns.get(student.id)?.get(h.id)?.slice(0, 7) ?? null,
+      /** Last month charged ("2027-01"), or null for the end of the session. */
+      to: optIns.until.get(student.id)?.get(h.id) ?? null,
       paid: dues.some((d) => d.headId === h.id && d.paid > 0),
     }));
   return {
@@ -170,6 +187,7 @@ export async function loadStudentAccount(schoolId: string, studentId: string) {
  */
 async function previousSessionArrears(
   student: { id: string; schoolId: string; admissionDate: Date; feesFrom: Date | null; feesFromHeadIds: string[] },
+  transportFare: number,
   currentStart: Date,
   today: string,
 ) {
@@ -197,6 +215,8 @@ async function previousSessionArrears(
     chargeFrom: fromThen ? isoDate(student.feesFrom!) : null,
     backHeadIds: fromThen ? student.feesFromHeadIds : [],
     optIns: optIns.get(student.id) ?? new Map(),
+    optUntil: optIns.until.get(student.id),
+    transportFare,
     paid: paid.paid.get(student.id) ?? new Map(),
     discounts: paid.discounts.get(student.id),
     lateFeesPaid: paid.lateFees.get(student.id),
@@ -213,7 +233,15 @@ export async function outstandingByStudent(schoolId: string, where: Prisma.Stude
   const { session, today } = await getFeesAccess();
   const students = await db.student.findMany({
     where: { ...where, schoolId, status: "ACTIVE", sectionId: { not: null } },
-    select: { id: true, admissionDate: true, feesFrom: true, feesFromHeadIds: true, section: { select: { classId: true } } },
+    select: {
+      id: true,
+      admissionDate: true,
+      feesFrom: true,
+      feesFromHeadIds: true,
+      section: { select: { classId: true } },
+      transportStop: true,
+      transportRoute: { select: { stops: true, stopFares: true } },
+    },
   });
   const ids = students.map((s) => s.id);
   const [heads, paid, optIns] = await Promise.all([
@@ -229,6 +257,8 @@ export async function outstandingByStudent(schoolId: string, where: Prisma.Stude
       admissionDate: isoDate(s.admissionDate),
       chargeFrom: s.feesFrom ? isoDate(s.feesFrom) : null,
       optIns: optIns.get(s.id) ?? new Map(),
+      optUntil: optIns.until.get(s.id),
+      transportFare: stopFare(s),
       paid: paid.paid.get(s.id) ?? new Map(),
       discounts: paid.discounts.get(s.id),
       lateFeesPaid: paid.lateFees.get(s.id),
@@ -253,7 +283,15 @@ export async function monthlyFeeTrend(schoolId: string) {
   const start = isoDate(session.startDate);
   const students = await db.student.findMany({
     where: { schoolId, status: "ACTIVE", sectionId: { not: null } },
-    select: { id: true, admissionDate: true, feesFrom: true, feesFromHeadIds: true, section: { select: { classId: true } } },
+    select: {
+      id: true,
+      admissionDate: true,
+      feesFrom: true,
+      feesFromHeadIds: true,
+      section: { select: { classId: true } },
+      transportStop: true,
+      transportRoute: { select: { stops: true, stopFares: true } },
+    },
   });
   const ids = students.map((s) => s.id);
   const [heads, paid, optIns, receipts] = await Promise.all([
@@ -271,6 +309,8 @@ export async function monthlyFeeTrend(schoolId: string) {
       admissionDate: isoDate(s.admissionDate),
       chargeFrom: s.feesFrom ? isoDate(s.feesFrom) : null,
       optIns: optIns.get(s.id) ?? new Map(),
+      optUntil: optIns.until.get(s.id),
+      transportFare: stopFare(s),
       paid: paid.paid.get(s.id) ?? new Map(),
       discounts: paid.discounts.get(s.id),
       lateFeesPaid: paid.lateFees.get(s.id),
@@ -318,41 +358,104 @@ export async function nextReceiptNumber(tx: Prisma.TransactionClient, schoolId: 
  * was charged, discounted, paid and is still pending, plus the receipts that
  * paid it; and every receipt across sessions as the payment history.
  */
+export type LedgerEntry = {
+  date: string;
+  kind: "OPENING" | "FEE" | "LATE" | "PAYMENT" | "DISCOUNT" | "WAIVER" | "CANCELLED" | "LATE_DUE";
+  particulars: string;
+  detail?: string;
+  debit: number;
+  credit: number;
+  /** Running balance after this entry (owed by the student). */
+  balance: number;
+  receipt?: { id: string; number: string };
+};
+
+/**
+ * A student's fee ledger for the session, as a statement: every fee charged
+ * (on its due date), late fee, payment, discount and waiver in date order with
+ * a running balance; plus a month-by-month summary.
+ */
 export async function loadLedger(schoolId: string, studentId: string) {
   const account = await loadStudentAccount(schoolId, studentId);
   if (!account) return null;
-  const items = await db.feeReceiptItem.findMany({
-    where: { headId: { not: null }, receipt: { studentId, sessionId: account.session.id, cancelledAt: null } },
-    select: { headId: true, period: true, receipt: { select: { id: true, number: true, date: true } } },
-    orderBy: { receipt: { date: "asc" } },
-  });
-  const payments = new Map<string, { id: string; number: string; date: string }[]>();
-  for (const i of items) {
-    const k = dueKey(i.headId!, i.period);
-    const list = payments.get(k) ?? [];
-    if (!list.some((p) => p.id === i.receipt.id)) list.push({ id: i.receipt.id, number: i.receipt.number, date: isoDate(i.receipt.date) });
-    payments.set(k, list);
-  }
-  const rows = account.dues.map((d) => ({ ...d, payments: payments.get(dueKey(d.headId, d.period)) ?? [] }));
-  const history = await db.feeReceipt.findMany({
-    where: { studentId, schoolId },
+  const { dues, session, today } = account;
+  const receipts = await db.feeReceipt.findMany({
+    where: { studentId, schoolId, sessionId: session.id },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-    include: { session: { select: { name: true } }, items: { select: { discount: true } } },
+    include: { items: { select: { headId: true, period: true, amount: true, discount: true, lateFee: true } } },
   });
-  return {
-    ...account,
-    rows,
-    history: history.map((r) => ({
-      id: r.id,
-      number: r.number,
-      date: isoDate(r.date),
-      session: r.session.name,
-      mode: r.mode,
-      paid: r.total,
-      discount: r.items.reduce((n, i) => n + i.discount, 0),
-      cancelled: !!r.cancelledAt,
-    })),
+  const arrearsKeys = new Set(dues.filter((d) => d.arrears).map((d) => dueKey(d.headId, d.period)));
+
+  const entries: Omit<LedgerEntry, "balance">[] = [];
+  // Opening: last session's fees still owed when this session began.
+  const paidOnArrears = receipts
+    .filter((r) => !r.cancelledAt)
+    .flatMap((r) => r.items)
+    .filter((i) => i.headId && arrearsKeys.has(dueKey(i.headId, i.period)))
+    .reduce((n, i) => n + i.amount + i.discount, 0);
+  const opening = dues.filter((d) => d.arrears).reduce((n, d) => n + d.balance, 0) + paidOnArrears;
+  if (opening) {
+    entries.push({ date: isoDate(session.startDate), kind: "OPENING", particulars: `Brought forward from ${dues.find((d) => d.arrears)!.arrears}`, debit: opening, credit: 0 });
+  }
+  // Fees charged on their due dates (those not yet due only if something was paid ahead).
+  for (const d of dues) {
+    if (d.arrears || (d.due > today && !d.paid && !d.discount)) continue;
+    entries.push({ date: d.due, kind: "FEE", particulars: d.headName, detail: d.label, debit: d.amount, credit: 0 });
+  }
+  for (const r of receipts) {
+    const date = isoDate(r.date);
+    const receipt = { id: r.id, number: r.number };
+    if (r.cancelledAt) {
+      entries.push({ date, kind: "CANCELLED", particulars: `Receipt cancelled`, detail: r.cancelReason ?? undefined, debit: 0, credit: 0, receipt });
+      continue;
+    }
+    const late = r.items.reduce((n, i) => n + i.lateFee, 0);
+    const discount = r.items.reduce((n, i) => n + i.discount, 0);
+    if (late) entries.push({ date, kind: "LATE", particulars: "Late fee", detail: r.lateWaived ? `${rupees(late + r.lateWaived)} due, ${rupees(r.lateWaived)} waived` : undefined, debit: late, credit: 0, receipt });
+    if (r.lateWaived) entries.push({ date, kind: "WAIVER", particulars: `Late fee waived · ${rupees(r.lateWaived)}`, detail: `By ${r.collectedBy}`, debit: 0, credit: 0, receipt });
+    if (r.total) entries.push({ date, kind: "PAYMENT", particulars: `Payment received · ${MODE_LABELS[r.mode]}`, detail: r.reference ? `Ref ${r.reference}` : undefined, debit: 0, credit: r.total, receipt });
+    if (discount) entries.push({ date, kind: "DISCOUNT", particulars: "Discount", detail: r.discountNote ?? undefined, debit: 0, credit: discount, receipt });
+  }
+  // Late fee owed today on what is still unpaid.
+  const lateDue = dues.reduce((n, d) => n + d.lateFee, 0);
+  if (lateDue) entries.push({ date: today, kind: "LATE_DUE", particulars: "Late fee due as of today", detail: "On unpaid fees; can be waived when collecting", debit: lateDue, credit: 0 });
+
+  // Date order; on one day, charges before what pays them.
+  const order: LedgerEntry["kind"][] = ["OPENING", "FEE", "LATE", "LATE_DUE", "PAYMENT", "DISCOUNT", "WAIVER", "CANCELLED"];
+  entries.sort((a, b) => a.date.localeCompare(b.date) || order.indexOf(a.kind) - order.indexOf(b.kind));
+  let balance = 0;
+  const statement: LedgerEntry[] = entries.map((e) => ({ ...e, balance: (balance += e.debit - e.credit) }));
+
+  const valid = receipts.filter((r) => !r.cancelledAt);
+  const sums = {
+    fees: dues.filter((d) => !d.arrears).reduce((n, d) => n + d.amount, 0),
+    opening,
+    lateCharged: valid.reduce((n, r) => n + r.items.reduce((m, i) => m + i.lateFee, 0), 0),
+    lateDue,
+    lateWaived: valid.reduce((n, r) => n + r.lateWaived, 0),
+    discount: valid.reduce((n, r) => n + r.items.reduce((m, i) => m + i.discount, 0), 0),
+    paid: valid.reduce((n, r) => n + r.total, 0),
+    dueNow: Math.max(0, balance),
+    upcoming: dues.filter((d) => d.due > today).reduce((n, d) => n + d.balance, 0),
   };
+
+  // Month by month: what each month charged, its late fee, discount, payments and what is left.
+  const months = deskMonths(dues, isoDate(session.startDate), today)
+    .filter((m) => m.items.length)
+    .map((m) => ({
+      key: m.key,
+      label: m.label,
+      fees: m.items.map((d) => d.headName),
+      charged: m.charged,
+      late: m.items.reduce((n, d) => n + d.lateFeePaid, 0),
+      lateDue: m.items.reduce((n, d) => n + d.lateFee, 0),
+      discount: m.items.reduce((n, d) => n + d.discount, 0),
+      paid: m.items.reduce((n, d) => n + d.paid, 0),
+      balance: m.balance,
+      status: m.status,
+    }));
+
+  return { ...account, statement, months, sums };
 }
 
 export type Ledger = NonNullable<Awaited<ReturnType<typeof loadLedger>>>;

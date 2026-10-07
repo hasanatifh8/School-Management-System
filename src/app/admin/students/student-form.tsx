@@ -63,6 +63,7 @@ export function StudentForm({
   houses,
   student,
   submitLabel,
+  submitIcon = <Save className="h-4 w-4" />,
   cancelHref,
   photoUrl,
 }: {
@@ -71,6 +72,8 @@ export function StudentForm({
   houses: HouseOption[];
   student?: StudentValues;
   submitLabel: string;
+  /** Defaults to a save icon. */
+  submitIcon?: ReactNode;
   cancelHref?: string;
   /** URL of the saved photo, if any. */
   photoUrl?: string | null;
@@ -331,7 +334,7 @@ export function StudentForm({
                   Cancel
                 </Link>
               )}
-              <SubmitButton icon={<Save className="h-4 w-4" />}>{submitLabel}</SubmitButton>
+              <SubmitButton icon={submitIcon}>{submitLabel}</SubmitButton>
             </FormActions>
           </>
         );

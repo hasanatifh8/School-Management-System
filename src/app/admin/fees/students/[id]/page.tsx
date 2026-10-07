@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpenCheck, Bus, CalendarClock, Receipt, School, TriangleAlert } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Avatar, Badge, Breadcrumbs, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar, selectClass } from "@/components/ui";
+import { MonthRange } from "@/components/fees/month-range";
+import { Avatar, Badge, Breadcrumbs, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar } from "@/components/ui";
 import { photoUrl } from "@/lib/photos";
 import { loadStudentAccount, getFeesAccess } from "@/lib/fees";
 import { FREQUENCY_META, MODE_LABELS, monthLabel, rupees, sessionMonths } from "@/lib/fees-shared";
@@ -28,7 +29,7 @@ export default async function StudentFeesPage({ params, searchParams }: PageProp
   // Fees that can be charged for months before admission: recurring ones this student pays.
   const classId = student.section?.classId;
   const backChoices = account.heads
-    .filter((h) => h.frequency !== "ONE_TIME" && classId && h.amounts[classId] && (!h.optional || optionalHeads.some((o) => o.id === h.id && o.added)))
+    .filter((h) => h.frequency !== "ONE_TIME" && (h.optional ? optionalHeads.some((o) => o.id === h.id && o.added) : classId && h.amounts[classId]))
     .map((h) => ({ id: h.id, name: h.name }));
   const admittedMidSession = isoDay(student.admissionDate).slice(0, 7) > isoDay(session.startDate).slice(0, 7);
   // The billing month: ?month= if it is in the session, else this month (or the session's nearest end).
@@ -190,26 +191,24 @@ export default async function StudentFeesPage({ params, searchParams }: PageProp
                       <span className="font-medium text-fg">{h.name}</span>
                       <span className="block text-xs text-muted">
                         {rupees(h.amount)} · {FREQUENCY_META[h.frequency].short}
+                        {h.transport && ` · fare for ${student.transportStop ?? "their stop"}`}
                       </span>
                     </span>
-                    <ActionForm action={setOptionalFee.bind(null, student.id, h.id, !h.added)} compact className="flex flex-col items-end gap-1">
-                      <SubmitButton variant={h.added ? "ghost" : "secondary"} size="sm" confirm={h.added ? `Stop charging ${h.name}?` : undefined}>
-                        {h.added ? "Remove" : "Add"}
-                      </SubmitButton>
-                    </ActionForm>
+                    {h.transport && h.added ? (
+                      // Follows the student's bus: changed from their Transport tab.
+                      <Link href={`/admin/students/${student.id}?tab=transport`} className="text-xs font-medium text-accent-text hover:underline">
+                        Bus &amp; stop
+                      </Link>
+                    ) : (
+                      <ActionForm action={setOptionalFee.bind(null, student.id, h.id, !h.added)} compact className="flex flex-col items-end gap-1">
+                        <SubmitButton variant={h.added ? "ghost" : "secondary"} size="sm" confirm={h.added ? `Stop charging ${h.name}?` : undefined}>
+                          {h.added ? "Remove" : "Add"}
+                        </SubmitButton>
+                      </ActionForm>
+                    )}
                     {h.added && (
                       <ActionForm action={setOptionalFeeFrom.bind(null, student.id, h.id)} compact className="flex w-full flex-wrap items-center gap-2 text-xs">
-                        <label className="flex items-center gap-1.5 text-muted">
-                          From
-                          <select name="from" defaultValue={h.from ?? ""} className={`${selectClass} !w-40 !py-1 text-xs`}>
-                            <option value="">Whole session</option>
-                            {months.map((m) => (
-                              <option key={m} value={m}>
-                                {monthLabel(m)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                        <MonthRange months={months} from={h.from} to={h.to} names={["from", "to"]} startLabel="Whole session" compact />
                         <SubmitButton variant="ghost" size="sm">
                           Save
                         </SubmitButton>

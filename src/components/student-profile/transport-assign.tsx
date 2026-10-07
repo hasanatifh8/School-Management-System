@@ -6,8 +6,11 @@ import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { Card, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
+import { MonthRange } from "@/components/fees/month-range";
+import { rupees } from "@/lib/fees-shared";
+import { formatTime } from "@/lib/timetable-shared";
 
-type Route = { id: string; routeNumber: string; name: string | null; stops: string[] };
+type Route = { id: string; routeNumber: string; name: string | null; stops: string[]; stopTimes: string[]; stopFares: number[] };
 
 /** Choose a route and the stop on it, or no school transport. */
 export function TransportAssign({
@@ -15,11 +18,16 @@ export function TransportAssign({
   routes,
   routeId,
   stop,
+  months,
+  feeRange,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   routes: Route[];
   routeId: string | null;
   stop: string | null;
+  /** The session's months, for when the transport fee runs. */
+  months: string[];
+  feeRange: { from: string | null; to: string | null };
 }) {
   const [chosen, setChosen] = useState(routeId ?? "");
   const route = routes.find((r) => r.id === chosen);
@@ -50,13 +58,22 @@ export function TransportAssign({
                     <option value="" disabled>
                       Choose a stop
                     </option>
-                    {route.stops.map((s) => (
+                    {route.stops.map((s, i) => (
                       <option key={s} value={s}>
                         {s}
+                        {route.stopTimes[i] ? ` (${formatTime(route.stopTimes[i])})` : ""}
+                        {route.stopFares[i] ? ` · ${rupees(route.stopFares[i])}/month` : ""}
                       </option>
                     ))}
                   </select>
                 </Field>
+              )}
+              {route && (
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-fg-2">Transport fee months</p>
+                  <MonthRange months={months} from={feeRange.from} to={feeRange.to} />
+                  <p className="mt-1.5 text-xs text-muted">The stop&apos;s fare is added to the student&apos;s fees for each of these months.</p>
+                </div>
               )}
               <SubmitButton icon={<Save className="h-4 w-4" />} variant="secondary">
                 Save

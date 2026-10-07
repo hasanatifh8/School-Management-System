@@ -1,29 +1,6 @@
 import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import {
-  BookOpen,
-  Bus,
-  CalendarClock,
-  CalendarDays,
-  CircleCheck,
-  ClipboardList,
-  Droplet,
-  FileBarChart,
-  FileText,
-  Hash,
-  History,
-  IdCard,
-  LayoutGrid,
-  Mail,
-  Megaphone,
-  Pencil,
-  Phone,
-  RotateCcw,
-  Ticket,
-  UserRound,
-  UserRoundX,
-  Wallet,
-} from "lucide-react";
+import { BookOpen, Bus, CalendarClock, CalendarDays, CircleCheck, ClipboardList, Droplet, FileBarChart, FileCheck2, FileText, Hash, History, IdCard, LayoutGrid, Mail, Megaphone, Pencil, Phone, RotateCcw, Ticket, UserRound, UserRoundX, Wallet } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
@@ -41,6 +18,9 @@ import { AdmitCardPanel, ExamsPanel, NoticesPanel, ReportCardPanel, TimetablePan
 import { TransportAssign } from "@/components/student-profile/transport-assign";
 import { studentExams, studentNotices } from "@/lib/student-profile";
 import { assignTransport } from "../../transport/actions";
+import { todayISO } from "@/lib/attendance-shared";
+import { sessionMonths } from "@/lib/fees-shared";
+import { getCurrentSession } from "@/lib/sessions";
 
 const TABS = ["overview", "exams", "results", "timetable", "notices", "admit-card", "transport", "documents", "edit"] as const;
 type Tab = (typeof TABS)[number];
@@ -93,11 +73,20 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
 
   const tabHref = (t: Tab) => `/admin/students/${student.id}${t === "overview" ? "" : `?tab=${t}`}`;
   const examTabs = tab === "exams" || tab === "results" || tab === "admit-card";
-  const [exams, notices, routes] = await Promise.all([
+  const [exams, notices, routes, session] = await Promise.all([
     examTabs ? studentExams(student) : [],
     tab === "notices" ? studentNotices(student.id) : [],
-    tab === "transport" ? db.transportRoute.findMany({ where: { schoolId: school.id }, orderBy: { routeNumber: "asc" }, select: { id: true, routeNumber: true, name: true, stops: true } }) : [],
+    tab === "transport" ? db.transportRoute.findMany({ where: { schoolId: school.id }, orderBy: { routeNumber: "asc" }, select: { id: true, routeNumber: true, name: true, stops: true, stopTimes: true, stopFares: true } }) : [],
+    getCurrentSession(school.id),
   ]);
+  // The months the transport fee runs, as set now (a new rider starts this month).
+  const feeMonths = sessionMonths(session.startDate.toISOString().slice(0, 10));
+  const transportFee =
+    tab === "transport" ? await db.studentFeeHead.findFirst({ where: { studentId: student.id, head: { sessionId: session.id, transport: true } }, select: { fromDate: true, toDate: true } }) : null;
+  const thisMonth = todayISO().slice(0, 7);
+  const feeRange = transportFee
+    ? { from: transportFee.fromDate?.toISOString().slice(0, 7) ?? null, to: transportFee.toDate?.toISOString().slice(0, 7) ?? null }
+    : { from: feeMonths.includes(thisMonth) ? thisMonth : null, to: null };
   const actor = { kind: "admin" as const, schoolId: school.id, who: "" };
 
   return (
@@ -143,6 +132,9 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           <>
             {!removed && (
               <MoreMenu>
+                <MenuLink href={`/admin/students/${student.id}/acknowledgement`} icon={<FileCheck2 />}>
+                  Admission acknowledgement
+                </MenuLink>
                 <MenuLink href={`/admin/id-cards/generate?ids=${student.id}`} icon={<IdCard />}>
                   Generate ID card
                 </MenuLink>
@@ -234,7 +226,16 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           route={student.transportRoute}
           stop={student.transportStop}
           routeHref={student.transportRoute ? `/admin/transport/${student.transportRoute.id}` : undefined}
-          assign={<TransportAssign action={assignTransport.bind(null, student.id)} routes={routes} routeId={student.transportRouteId} stop={student.transportStop} />}
+          assign={
+            <TransportAssign
+              action={assignTransport.bind(null, student.id)}
+              routes={routes}
+              routeId={student.transportRouteId}
+              stop={student.transportStop}
+              months={feeMonths}
+              feeRange={feeRange}
+            />
+          }
         />
       )}
 

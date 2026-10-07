@@ -17,7 +17,7 @@ export default async function TransportPage() {
     <>
       <PageHeader
         title="Transport"
-        subtitle={routes.length ? `${routes.length} route${routes.length === 1 ? "" : "s"} · ${riders} students use school transport` : "Bus and van routes, their drivers and stops."}
+        subtitle={routes.length ? `${routes.length} route${routes.length === 1 ? "" : "s"} · ${riders} students use school transport` : "Bus and van routes, their drivers, stops and fares. Each student's stop fare is added to their fees every month."}
         action={
           <ButtonLink href="/admin/transport/new" icon={Plus}>
             New route

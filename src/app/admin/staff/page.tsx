@@ -84,6 +84,7 @@ export default async function StaffPage({ searchParams }: PageProps<"/admin/staf
     <>
       <PageHeader
         title="Staff"
+        breadcrumbs={access === "cashier" ? [{ label: "Settings", href: "/admin/settings" }, { label: "Cashiers" }] : undefined}
         subtitle={`Non-teaching staff: ${payroll._count} on the payroll, ${rupees(payroll._sum.monthlySalary ?? 0)} a month in salaries.`}
         action={
           <ButtonLink href="/admin/staff/new" icon={UserPlus}>

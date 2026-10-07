@@ -74,8 +74,8 @@ export async function createStudent(_: ActionState, formData: FormData): Promise
   );
 
   revalidatePath("/admin", "layout");
-  // The profile then offers to collect the new student's fees.
-  redirect(`/admin/students/${student.id}?admitted=1`);
+  // Next: transport, then optional fees (each can be skipped).
+  redirect(`/admin/students/new/${student.id}/transport`);
 }
 
 export async function updateStudent(

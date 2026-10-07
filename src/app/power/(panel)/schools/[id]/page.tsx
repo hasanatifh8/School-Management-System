@@ -27,7 +27,7 @@ import {
   setSchoolStatus,
   updateSchool,
 } from "../../../actions";
-import { SchoolForm } from "../../school-form";
+import { SchoolForm } from "@/components/school-form";
 import { AdminsCard } from "./admins-card";
 
 export default async function PowerSchoolPage({ params, searchParams }: PageProps<"/power/schools/[id]">) {

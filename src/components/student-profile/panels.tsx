@@ -8,12 +8,14 @@ import { Badge, Card, EmptyState, buttonVariants } from "@/components/ui";
 import { loadAdmitCards } from "@/lib/admit-cards";
 import { formatISO, shortDate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
+import { rupees } from "@/lib/fees-shared";
 import { computeResults, loadSheet } from "@/lib/exam-marks";
 import { loadExam, schoolHeader, type ExamActor } from "@/lib/exams";
 import { dateSpan, formatExamDate, timeRange } from "@/lib/exams-shared";
 import { noticeStatus } from "@/lib/notices-shared";
 import type { StudentExam, studentNotices } from "@/lib/student-profile";
 import { getPeriods, loadSectionCells } from "@/lib/timetable";
+import { formatTime } from "@/lib/timetable-shared";
 
 const STATUS = {
   upcoming: { label: "Upcoming", tone: "sky" },
@@ -278,9 +280,11 @@ type Route = {
   attendantName: string | null;
   attendantPhone: string | null;
   stops: string[];
+  stopFares: number[];
+  stopTimes: string[];
 };
 
-/** Route, vehicle, driver and stop; `assign` is the admin's form to change it. */
+/** Route, vehicle, driver and stop; `assign` is the admin's form to change it (and shows the stop's fare). */
 export function TransportPanel({ route, stop, assign, routeHref }: { route: Route | null; stop: string | null; assign?: React.ReactNode; routeHref?: string }) {
   return (
     <div className="grid gap-6 xl:grid-cols-3">
@@ -304,7 +308,15 @@ export function TransportPanel({ route, stop, assign, routeHref }: { route: Rout
             </div>
             <div>
               <dt className="text-eyebrow uppercase text-muted">Pick-up / drop stop</dt>
-              <dd className="mt-0.5 text-lg font-semibold text-fg">{stop ?? <span className="text-base font-normal text-warning">Not chosen</span>}</dd>
+              <dd className="mt-0.5 text-lg font-semibold text-fg">
+                {stop ?? <span className="text-base font-normal text-warning">Not chosen</span>}
+                {stop && route.stopTimes[route.stops.indexOf(stop)] && (
+                  <span className="block text-sm font-normal text-muted">Pick-up {formatTime(route.stopTimes[route.stops.indexOf(stop)])}</span>
+                )}
+                {assign && stop && route.stopFares[route.stops.indexOf(stop)] > 0 && (
+                  <span className="block text-sm font-normal text-muted">{rupees(route.stopFares[route.stops.indexOf(stop)])} a month</span>
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-eyebrow uppercase text-muted">Vehicle</dt>
@@ -345,9 +357,10 @@ export function TransportPanel({ route, stop, assign, routeHref }: { route: Rout
               <div className="sm:col-span-2">
                 <dt className="text-eyebrow uppercase text-muted">Stops</dt>
                 <dd className="mt-1 flex flex-wrap gap-1.5">
-                  {route.stops.map((s) => (
+                  {route.stops.map((s, i) => (
                     <Badge key={s} tone={s === stop ? "indigo" : "slate"}>
                       {s}
+                      {route.stopTimes[i] && ` · ${formatTime(route.stopTimes[i])}`}
                     </Badge>
                   ))}
                 </dd>

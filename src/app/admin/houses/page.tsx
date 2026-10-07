@@ -33,6 +33,7 @@ export default async function HousesPage() {
     <>
       <PageHeader
         title="Houses"
+        breadcrumbs={[{ label: "Settings", href: "/admin/settings" }, { label: "Houses" }]}
         subtitle={
           withoutHouse
             ? `${withoutHouse} active student(s) are not in a house yet.`

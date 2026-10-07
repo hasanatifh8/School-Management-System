@@ -150,12 +150,23 @@ enum SchoolStatus {
   SUSPENDED
 }
 
+enum SchoolType {
+  PRIVATE
+  GOVERNMENT
+  SEMI_GOVERNMENT
+  OTHER
+}
+
 model School {
   id               String       @id @default(cuid())
   name             String
   code             String       @unique
   status           SchoolStatus @default(ACTIVE)
   board            String?
+  schoolType       SchoolType?
+  udiseCode        String? // UDISE+ code issued by the Ministry of Education (11 digits)
+  affiliationNo    String? // affiliation / registration number with the board
+  affiliationYear  Int?
   principalName    String?
   establishedYear  Int?
   motto            String?
@@ -701,6 +712,8 @@ model TransportRoute {
   attendantName  String?
   attendantPhone String?
   stops          String[] // in order, e.g. "Hazratganj (7:10 am)"
+  stopFares      Int[]    @default([]) // monthly fare in whole rupees, same order as stops; 0 = not set
+  stopTimes      String[] @default([]) // pick-up time "HH:MM", same order as stops; "" = not set
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -735,9 +748,11 @@ model FeeHead {
   name      String
   frequency FeeFrequency
   optional  Boolean      @default(false)
+  transport Boolean      @default(false) // amount is each student's stop fare (Transport), not per class; monthly, opt-in
   dueDay    Int          @default(10) // day of the month the fee is due
   dueMonth  Int? // YEARLY only: 1–12
-  lateFee   Int          @default(0) // extra charge, once per instalment, when paid after the due day
+  lateFee   Int          @default(0) // extra charge when an instalment is paid after its due day
+  lateFeeMonthly Boolean @default(true) // charge the late fee again for every month it stays unpaid (false = once)
   sortOrder Int          @default(0)
   createdAt DateTime     @default(now())
 
@@ -767,6 +782,7 @@ model StudentFeeHead {
   studentId String
   headId    String
   fromDate  DateTime? @db.Date // charged from this month (the month the student was added); null = whole session
+  toDate    DateTime? @db.Date // charged up to this month (its first day); null = to the end of the session
   createdAt DateTime  @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -798,6 +814,7 @@ model FeeReceipt {
   cancelledBy  String?
   cancelReason String?
   discountNote String? // why a discount was given (required when any line has one)
+  lateWaived   Int         @default(0) // late fee the collector chose not to charge (whole or some months)
   feeNote      String? // how fees before a mid-session admission were handled, as at this payment
 
   school  School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
