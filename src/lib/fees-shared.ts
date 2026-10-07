@@ -45,6 +45,25 @@ function span(sessionStart: string, from: number, months: number, dueDay: number
   return { start: iso(y1, m1, 1), end: iso(y2, m2, lastDay(y2, m2)), due: iso(y1, m1, Math.min(dueDay, lastDay(y1, m1))) };
 }
 
+/** Months from the session's first month to calendar month `month` (1–12); 0 when none is set. */
+function monthOffset(month: number | null, sessionStart: string) {
+  return month ? (month - Number(sessionStart.slice(5, 7)) + 12) % 12 : 0;
+}
+
+/** How many months apart a fee's instalments are, for the frequencies whose due month can be chosen. */
+export const INSTALMENT_GAP: Partial<Record<Frequency, number>> = { QUARTERLY: 3, HALF_YEARLY: 6, YEARLY: 12 };
+
+/**
+ * The calendar months (1–12) a quarterly, half-yearly or yearly fee falls due,
+ * given the first one chosen; sessionStartMonth is the session's first month (4 = April).
+ */
+export function dueMonthsOf(frequency: Frequency, firstMonth: number | null, sessionStartMonth: number) {
+  const gap = INSTALMENT_GAP[frequency];
+  if (!gap) return [];
+  const first = firstMonth ? (firstMonth - sessionStartMonth + 12) % 12 % gap : 0;
+  return Array.from({ length: 12 / gap }, (_, i) => ((sessionStartMonth - 1 + first + i * gap) % 12) + 1);
+}
+
 /** The instalments of a fee head in a session (sessionStart = "2026-04-01"). */
 export function feePeriods(
   head: { frequency: Frequency; dueDay: number; dueMonth: number | null },
@@ -58,18 +77,23 @@ export function feePeriods(
         const [y, m] = sessionMonth(sessionStart, i);
         return { key: iso(y, m, 1).slice(0, 7), label: `${MONTH_NAMES[m]} ${y}`, ...span(sessionStart, i, 1, dueDay) };
       });
-    case "QUARTERLY":
+    case "QUARTERLY": {
+      // Each quarter falls due in the same month of it: the first (Apr, Jul…) unless another was chosen.
+      const at = monthOffset(head.dueMonth, sessionStart) % 3;
       return [0, 1, 2, 3].map((q) => {
         const [, a] = sessionMonth(sessionStart, q * 3);
         const [, b] = sessionMonth(sessionStart, q * 3 + 2);
-        return { key: `Q${q + 1}`, label: `Q${q + 1} · ${MONTH_NAMES[a]}–${MONTH_NAMES[b]}`, ...span(sessionStart, q * 3, 3, dueDay) };
+        return { key: `Q${q + 1}`, label: `Q${q + 1} · ${MONTH_NAMES[a]}–${MONTH_NAMES[b]}`, ...span(sessionStart, q * 3, 3, dueDay), due: span(sessionStart, q * 3 + at, 1, dueDay).due };
       });
-    case "HALF_YEARLY":
+    }
+    case "HALF_YEARLY": {
+      const at = monthOffset(head.dueMonth, sessionStart) % 6;
       return [0, 1].map((h) => {
         const [, a] = sessionMonth(sessionStart, h * 6);
         const [, b] = sessionMonth(sessionStart, h * 6 + 5);
-        return { key: `H${h + 1}`, label: `${MONTH_NAMES[a]}–${MONTH_NAMES[b]}`, ...span(sessionStart, h * 6, 6, dueDay) };
+        return { key: `H${h + 1}`, label: `${MONTH_NAMES[a]}–${MONTH_NAMES[b]}`, ...span(sessionStart, h * 6, 6, dueDay), due: span(sessionStart, h * 6 + at, 1, dueDay).due };
       });
+    }
     case "YEARLY": {
       // The chosen calendar month, placed inside the session (Apr–Mar).
       const startMonth = Number(sessionStart.slice(5, 7)) - 1;
@@ -490,21 +514,58 @@ export function deskMonths(dues: DueItem[], sessionStart: string, payDate: strin
   });
 }
 
+export type DeskMonth = ReturnType<typeof deskMonths>[number];
+
 /**
- * Pays the chosen months in full: every unpaid instalment in them, with late
- * fees (as of `payDate`, unless waived), less any discount (oldest first).
+ * The month whose bill collects `key`'s balance: its own, or for a part-paid
+ * month the next month with fees (the rest moves on as "previous dues").
+ */
+export function billMonthFor(months: DeskMonth[], key: string): string {
+  const i = months.findIndex((m) => m.key === key);
+  const m = months[i];
+  if (!m || m.status !== "PARTIAL") return key;
+  const next = months.slice(i + 1).find((n) => n.items.length > 0);
+  if (!next) return key;
+  return next.status === "PARTIAL" ? billMonthFor(months, next.key) : next.key;
+}
+
+/**
+ * A month's bill: the part-paid balances of earlier months carried into it,
+ * then its own fees. `movedTo` is set when this month was part paid and its
+ * balance is collected on a later bill instead.
+ */
+export function billOf(months: DeskMonth[], key: string) {
+  const month = months.find((m) => m.key === key);
+  if (!month) return null;
+  const target = billMonthFor(months, key);
+  const carried = months.filter((m) => m.key !== key && m.status === "PARTIAL" && m.balance > 0 && billMonthFor(months, m.key) === key);
+  return { month, carried, keys: [...carried.map((m) => m.key), key], movedTo: target !== key ? months.find((m) => m.key === target)! : null };
+}
+
+/**
+ * Pays the chosen months: every unpaid instalment in them, with late fees (as
+ * of `payDate`, unless waived), less any discount; or, given `received`, only
+ * that much (oldest first: a part payment, the rest left owing).
  * Shared by the Fee desk's preview and its server action, so both always agree.
  */
 export function payMonths(
   items: DueItem[],
   months: string[],
-  { discount = 0, waiveLate = false, lateChoice, payDate }: { discount?: number; waiveLate?: boolean; lateChoice?: Record<string, boolean>; payDate: string },
+  {
+    discount = 0,
+    waiveLate = false,
+    lateChoice,
+    received,
+    payDate,
+  }: { discount?: number; waiveLate?: boolean; lateChoice?: Record<string, boolean>; received?: number; payDate: string },
 ) {
   const chosen = new Set(months);
   const open = items.filter((d) => d.balance > 0 && chosen.has(deskMonth(d)));
   const fees = open.reduce((n, d) => n + d.balance, 0);
   const late = waiveLate ? 0 : open.reduce((n, d) => n + lateFeeOwed(d, payDate, lateChoice), 0);
-  return { ...allocatePayment(open, { amount: Math.max(0, fees - discount) + late, discount, waiveLate, lateChoice, payDate }), fees, late };
+  const full = Math.max(0, fees - discount) + late;
+  const amount = received == null ? full : Math.min(received, full);
+  return { ...allocatePayment(open, { amount, discount, waiveLate, lateChoice, payDate }), fees, late, full, excess: received == null ? 0 : Math.max(0, received - full) };
 }
 
 /**

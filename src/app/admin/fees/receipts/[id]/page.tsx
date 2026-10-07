@@ -45,9 +45,11 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
   // Consecutive instalments of the same fee become one line: "Tuition fee · Apr 2026 – Sep 2026 (6)".
   const lines: { key: string; name: string; period: string; amount: number; discount: number }[] = [];
   let run: { first: string; last: string; count: number } | null = null;
+  // A fee paid only in part on this receipt says so: "Oct 2026 (part of ₹2,000)".
+  const isPart = (i: { amount: number; discount: number; charged: number }) => i.charged > 0 && i.amount + i.discount < i.charged;
   for (const item of receipt.items) {
     const prev = lines.at(-1);
-    if (prev && prev.name === item.headName && run) {
+    if (prev && prev.name === item.headName && run && !isPart(item) && !prev.period.includes("part of")) {
       run.last = item.periodLabel;
       run.count++;
       prev.period = `${run.first} – ${run.last} (${run.count})`;
@@ -56,7 +58,8 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
     } else {
       run = { first: item.periodLabel, last: item.periodLabel, count: 1 };
       // Each fee at its full amount; the discount comes off the total, once.
-      lines.push({ key: item.id, name: item.headName, period: item.periodLabel, amount: item.amount + item.discount, discount: item.discount });
+      const period = isPart(item) ? `${item.periodLabel} (part of ${rupees(item.charged)})` : item.periodLabel;
+      lines.push({ key: item.id, name: item.headName, period, amount: item.amount + item.discount, discount: item.discount });
     }
   }
   const discount = lines.reduce((n, l) => n + l.discount, 0);

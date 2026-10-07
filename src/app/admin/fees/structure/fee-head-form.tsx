@@ -6,7 +6,13 @@ import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { FREQUENCIES, FREQUENCY_META, MONTH_NAMES, rupees, type Frequency } from "@/lib/fees-shared";
+import { FREQUENCIES, FREQUENCY_META, INSTALMENT_GAP, MONTH_NAMES, dueMonthsOf, rupees, type Frequency } from "@/lib/fees-shared";
+
+/** [5, 8, 11, 2] → "May, Aug, Nov and Feb" */
+const listMonths = (months: number[]) => {
+  const names = months.map((m) => MONTH_NAMES[m - 1]);
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names.join("");
+};
 import { formatTime } from "@/lib/timetable-shared";
 
 /** A bus route's stops and fares, as set under Transport. */
@@ -20,16 +26,27 @@ export function FeeHeadForm({
   classes,
   head,
   routes,
+  startMonth = 4,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   classes: { id: string; name: string }[];
   head?: Head;
   /** For the transport fee: the stop fares it charges, from Transport. */
   routes?: RouteFares[];
+  /** The session's first month (4 = April), where instalment months start. */
+  startMonth?: number;
 }) {
   // The transport fee charges each student's stop fare, monthly: only its name, due day and late fee are set here.
   const transport = head?.transport ?? false;
   const [frequency, setFrequency] = useState<Frequency>(head?.frequency ?? "MONTHLY");
+  // Yearly: the month it falls due; quarterly / half-yearly: the first instalment's month (the rest follow).
+  const gap = INSTALMENT_GAP[frequency];
+  const firstChoice = (f: Frequency) => {
+    const saved = head?.dueMonth && head.frequency === f ? head.dueMonth : null;
+    const months = Array.from({ length: INSTALMENT_GAP[f] ?? 12 }, (_, i) => ((startMonth - 1 + i) % 12) + 1);
+    return saved && months.includes(saved) ? saved : startMonth;
+  };
+  const [dueMonth, setDueMonth] = useState(() => firstChoice(head?.frequency ?? "MONTHLY"));
   const [fill, setFill] = useState("");
   const amountsRef = useRef<HTMLDivElement>(null);
   const fillAll = () => {
@@ -64,7 +81,10 @@ export function FeeHeadForm({
                         name="frequency"
                         value={f}
                         checked={frequency === f}
-                        onChange={() => setFrequency(f)}
+                        onChange={() => {
+                          setFrequency(f);
+                          setDueMonth(firstChoice(f));
+                        }}
                         className="mt-0.5 accent-accent"
                       />
                       <span>
@@ -78,10 +98,16 @@ export function FeeHeadForm({
             )}
 
             <div className="grid gap-4 sm:grid-cols-3">
-              {frequency === "YEARLY" && (
-                <Field label="Due in" name="dueMonth" errors={e}>
-                  <select name="dueMonth" defaultValue={head?.dueMonth ?? 4} className={selectClass}>
-                    {[4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3].map((m) => (
+              {gap && (
+                <Field
+                  label={frequency === "YEARLY" ? "Due in" : "First instalment in"}
+                  name="dueMonth"
+                  errors={e}
+                  hint={frequency === "YEARLY" ? undefined : `Then every ${gap} months: ${listMonths(dueMonthsOf(frequency, dueMonth, startMonth))}.`}
+                >
+                  <select name="dueMonth" value={dueMonth} onChange={(ev) => setDueMonth(Number(ev.target.value))} className={selectClass}>
+                    {/* A quarter's instalment falls in that quarter, a half-year's in that half: the choices are its months. */}
+                    {Array.from({ length: gap }, (_, i) => ((startMonth - 1 + i) % 12) + 1).map((m) => (
                       <option key={m} value={m}>
                         {MONTH_NAMES[m - 1]}
                       </option>

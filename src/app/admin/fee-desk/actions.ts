@@ -9,7 +9,7 @@ import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { receiptLine, saveReceipt } from "@/lib/fee-receipts";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
-import { PAYMENT_MODES, payMonths } from "@/lib/fees-shared";
+import { PAYMENT_MODES, billOf, deskMonths, payMonths, rupees } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -79,11 +79,19 @@ const quickSchema = z.object({
   mode: z.enum(PAYMENT_MODES, "Choose how it was paid"),
   reference: z.string().trim().max(60).optional().transform((v) => v || null),
   remarks: z.string().trim().max(200).optional().transform((v) => v || null),
+  // Amount received; blank = the whole bill. Less is a part payment.
+  received: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? "").replace(/[,\s₹]/g, ""))
+    .refine((v) => /^\d{0,8}$/.test(v), "Whole rupees only")
+    .transform((v) => (v ? Number(v) : null)),
 });
 
 /**
- * The Fee desk's collection: one month's bill is paid in full, with its late
- * fee (see payMonths), then a receipt is made and opened.
+ * The Fee desk's collection: one month's bill (its fees, plus balances of
+ * part-paid months carried into it) is paid in full, or in part when less is
+ * received, then a receipt is made and opened.
  */
 export async function quickCollect(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const access = await getFeesAccess();
@@ -92,14 +100,18 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
   if (!account || account.student.status !== "ACTIVE") return { error: "Student not found." };
   const parsed = quickSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationError(parsed.error);
-  const { discount, discountNote, date, mode, reference, remarks } = parsed.data;
+  const { discount, discountNote, date, mode, reference, remarks, received } = parsed.data;
   const months = formData.getAll("month").map(String);
 
   if (date > today || date < session.startDate.toISOString().slice(0, 10)) {
     return { error: `The payment date must be in session ${session.name}, not in the future.`, fieldErrors: { date: ["Out of range"] } };
   }
-  // Each month is billed and collected on its own.
+  // Each month is billed on its own; a part-paid month's balance is collected on the next bill.
   if (months.length !== 1) return { error: "Collect one month at a time." };
+  const bill = billOf(deskMonths(account.dues, session.startDate.toISOString().slice(0, 10), today), months[0]);
+  if (!bill) return { error: "Month not found." };
+  if (bill.movedTo) return { error: `This month's balance is collected on the ${bill.movedTo.label} bill.` };
+  if (received != null && received <= 0) return { error: "Enter the amount received.", fieldErrors: { received: ["Enter the amount"] } };
   if ((mode === "CHEQUE" || mode === "UPI" || mode === "BANK_TRANSFER") && !reference) {
     return { error: "Enter the cheque / UPI / transaction number.", fieldErrors: { reference: ["Required for this payment mode"] } };
   }
@@ -112,9 +124,10 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
     ...formData.getAll("lateOff").map((k) => [String(k), false] as const),
     ...formData.getAll("lateOn").map((k) => [String(k), true] as const),
   ]);
-  const plan = payMonths(account.dues, months, { discount, waiveLate: formData.get("waiveLate") === "on", lateChoice, payDate: date });
-  if (plan.unusedDiscount > 0) return { error: "The discount is more than the fees of the ticked months.", fieldErrors: { discount: ["Too large"] } };
-  if (!plan.lines.length) return { error: "This month is already paid. Reload the page." };
+  const plan = payMonths(account.dues, bill.keys, { discount, waiveLate: formData.get("waiveLate") === "on", lateChoice, received: received ?? undefined, payDate: date });
+  if (plan.unusedDiscount > 0) return { error: "The discount is more than the fees on this bill.", fieldErrors: { discount: ["Too large"] } };
+  if (plan.excess > 0) return { error: `That is ${rupees(plan.excess)} more than the bill. Collect ${rupees(plan.full)} at most.`, fieldErrors: { received: ["More than the bill"] } };
+  if (!plan.lines.length) return { error: "This bill is already paid. Reload the page." };
 
   const saved = await saveReceipt({
     access,

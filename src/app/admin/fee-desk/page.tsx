@@ -4,7 +4,7 @@ import { Avatar, Badge, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
-import { MODE_LABELS, deskMonths, rupees, type DeskMonthStatus } from "@/lib/fees-shared";
+import { MODE_LABELS, billMonthFor, billOf, deskMonths, rupees, type DeskMonthStatus } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 import type { DeskStudent } from "./actions";
@@ -147,7 +147,11 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
   const name = fullName(student);
   const months = deskMonths(dues, session.startDate.toISOString().slice(0, 10), today);
   // The oldest month still owing (due by now), collected first.
-  const payNow = months.find((m) => m.status === "OVERDUE" || m.status === "DUE" || (m.status === "PARTIAL" && (m.key === "arrears" || m.key <= today.slice(0, 7))));
+  // The oldest month still owing (due by now); a part-paid one is collected on the bill its balance moved to.
+  const owing = months.find((m) => m.status === "OVERDUE" || m.status === "DUE" || (m.status === "PARTIAL" && (m.key === "arrears" || m.key <= today.slice(0, 7))));
+  const payBill = owing && billOf(months, billMonthFor(months, owing.key));
+  const payNow = payBill?.month;
+  const payAmount = payBill ? [...payBill.carried, payBill.month].reduce((n, m) => n + m.balance + m.late, 0) : 0;
   const unpaidCount = months.filter((m) => m.status === "OVERDUE" || m.status === "DUE" || m.status === "PARTIAL").length;
   const href = (month: string) => `/admin/fee-desk/${student.id}/${month}`;
 
@@ -175,7 +179,7 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
           {student.status === "ACTIVE" && payNow ? (
             <span className="flex flex-col items-end gap-1">
               <ButtonLink href={href(payNow.key)} icon={IndianRupee} size="lg">
-                Collect {payNow.key === "arrears" ? "arrears" : payNow.label.split(" ")[0]} · {rupees(payNow.balance + payNow.late)}
+                Collect {payNow.key === "arrears" ? "arrears" : payNow.label.split(" ")[0]} · {rupees(payAmount)}
               </ButtonLink>
               {unpaidCount > 1 && <span className="text-xs text-danger">{unpaidCount} months unpaid</span>}
             </span>
@@ -214,7 +218,10 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
                   <span className="mt-1 text-base font-semibold tabular-nums text-fg">
                     {m.status === "NONE" ? <span className="text-sm font-normal text-subtle">—</span> : rupees(m.status === "PAID" ? m.charged : m.balance + m.late)}
                   </span>
-                  <span className={`mt-0.5 text-xs font-medium ${s.text}`}>{s.label}</span>
+                  <span className={`mt-0.5 text-xs font-medium ${s.text}`}>
+                    {s.label}
+                    {m.status === "PARTIAL" && billMonthFor(months, m.key) !== m.key && ` · to ${months.find((n) => n.key === billMonthFor(months, m.key))!.label.split(" ")[0]}`}
+                  </span>
                 </Link>
               </li>
             );

@@ -29,7 +29,13 @@ const headSchema = z
       .refine((v) => !v || (/^\d{1,6}$/.test(v) && Number(v) <= MAX_AMOUNT), "Whole rupees only")
       .transform((v) => (v ? Number(v) : 0)),
   })
-  .transform((v) => ({ ...v, optional: v.optional === "on", lateFeeMonthly: v.lateFeeMonthly === "on", dueMonth: v.frequency === "YEARLY" ? (v.dueMonth ?? 4) : null }));
+  // The month a yearly fee falls due, or the first quarterly / half-yearly instalment (the rest follow).
+  .transform((v) => ({
+    ...v,
+    optional: v.optional === "on",
+    lateFeeMonthly: v.lateFeeMonthly === "on",
+    dueMonth: v.frequency === "YEARLY" ? (v.dueMonth ?? 4) : v.frequency === "QUARTERLY" || v.frequency === "HALF_YEARLY" ? (v.dueMonth ?? null) : null,
+  }));
 
 /** Class amounts from fields named `amount:<classId>`; blank means the class isn't charged. */
 function readAmounts(formData: FormData, classIds: Set<string>) {

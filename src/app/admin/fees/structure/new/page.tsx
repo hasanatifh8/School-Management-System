@@ -11,7 +11,7 @@ export default async function NewFeeHeadPage() {
     <>
       <Breadcrumbs items={[{ label: "Fee structure", href: "/admin/fees/structure" }, { label: "Add a fee" }]} />
       <Card title="Add a fee" description={`For session ${session.name}.`}>
-        <FeeHeadForm action={saveFeeHead.bind(null, null)} classes={classes} />
+        <FeeHeadForm action={saveFeeHead.bind(null, null)} classes={classes} startMonth={session.startDate.getUTCMonth() + 1} />
       </Card>
     </>
   );

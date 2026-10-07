@@ -4,7 +4,7 @@ import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, ButtonLink, Card, EmptyState, Table, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getFeesAccess, loadFeeHeads } from "@/lib/fees";
-import { FREQUENCY_META, MONTH_NAMES, rupees } from "@/lib/fees-shared";
+import { FREQUENCY_META, INSTALMENT_GAP, MONTH_NAMES, dueMonthsOf, rupees } from "@/lib/fees-shared";
 import { copyPreviousStructure, deleteFeeHead } from "../actions";
 
 /** Every fee of the session against every class, with the yearly total per student. */
@@ -100,8 +100,10 @@ export default async function FeeStructurePage() {
                   <Badge tone="indigo">{FREQUENCY_META[h.frequency].short}</Badge>
                   {h.transport ? <Badge tone="green">From Transport</Badge> : h.optional && <Badge tone="sky">Opt-in</Badge>}
                   <span className="text-xs text-muted">
-                    {h.frequency === "YEARLY"
-                      ? `due ${h.dueDay} ${MONTH_NAMES[(h.dueMonth ?? 4) - 1]}`
+                    {INSTALMENT_GAP[h.frequency]
+                      ? `due ${h.dueDay} ${dueMonthsOf(h.frequency, h.dueMonth, session.startDate.getUTCMonth() + 1)
+                          .map((m) => MONTH_NAMES[m - 1])
+                          .join(", ")}`
                       : h.frequency === "ONE_TIME"
                         ? "at admission"
                         : `due by the ${h.dueDay}${h.dueDay === 1 ? "st" : h.dueDay === 2 ? "nd" : h.dueDay === 3 ? "rd" : "th"}`}

@@ -18,13 +18,20 @@ export type BillData = {
   school: { name: string; address: string | null; phone: string | null; logoUrl: string | null };
   student: { name: string; className: string; code: string; father: string; roll: string; active: boolean };
   month: { key: string; label: string; items: DueItem[]; charged: number; balance: number };
+  /** Balances of part-paid earlier months, collected on this bill as previous dues. */
+  carried: { key: string; label: string; items: DueItem[]; balance: number }[];
+  /** This month was part paid; what is left is collected on that month's bill. */
+  movedTo: { key: string; label: string } | null;
+  /** Where a part payment's remainder would go: the next month with fees. */
+  nextBill: { key: string; label: string } | null;
   receipts: { id: string; number: string; date: string; mode: string }[];
 };
 
 /**
  * A month's fee bill that reads like the receipt it becomes: the month's fees,
- * one late fee per month each fee has stayed unpaid (tick or untick each), and
- * the total; underneath, how it was paid and Collect.
+ * any previous dues carried in from a part-paid month, one late fee per month
+ * each fee has stayed unpaid (tick or untick each), and the total; underneath,
+ * the amount received (less is a part payment), how it was paid and Collect.
  */
 export function FeeBill({
   data,
@@ -37,25 +44,32 @@ export function FeeBill({
   minDate: string;
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
 }) {
-  const { school, student, month, receipts } = data;
+  const { school, student, month, carried, movedTo, nextBill, receipts } = data;
   const [date, setDate] = useState(today);
   const [mode, setMode] = useState("CASH");
   const [discountText, setDiscountText] = useState("");
   const [extras, setExtras] = useState(false);
   const [lateChoice, setLateChoice] = useState<Record<string, boolean>>({});
+  const [receivedText, setReceivedText] = useState("");
   const [state, formAction, pending] = useActionState(action, {});
 
-  const unpaid = useMemo(() => month.items.filter((d) => d.balance > 0), [month]);
-  const paid = month.items.length > 0 && unpaid.length === 0;
+  // What this bill collects: previous dues carried in, then the month's own fees.
+  const billItems = useMemo(() => [...carried.flatMap((c) => c.items), ...month.items], [carried, month]);
+  const billKeys = useMemo(() => [...carried.map((c) => c.key), month.key], [carried, month]);
+  const unpaid = useMemo(() => billItems.filter((d) => d.balance > 0), [billItems]);
+  const paid = month.items.length > 0 && month.balance === 0 && carried.length === 0;
   // Every month's late fee on each unpaid fee, up to the payment date.
   const lateMonths = useMemo(() => unpaid.flatMap((d) => lateFeeMonths(d, date).map((l) => ({ ...l, fee: d.headName }))), [unpaid, date]);
   const isOn = (l: { key: string; onByDefault: boolean }) => lateChoice[l.key] ?? l.onByDefault;
   const discount = Number(discountText) || 0;
-  const plan = useMemo(() => payMonths(month.items, [month.key], { discount, lateChoice, payDate: date }), [month, discount, lateChoice, date]);
+  const received = receivedText ? Number(receivedText) : undefined;
+  const plan = useMemo(() => payMonths(billItems, billKeys, { discount, lateChoice, received, payDate: date }), [billItems, billKeys, discount, lateChoice, received, date]);
+  const part = received != null && received > 0 && received < plan.full;
+  const carriedTotal = carried.reduce((n, c) => n + c.balance, 0);
   const lateCollected = month.items.reduce((n, d) => n + d.lateFeePaid, 0);
   const discounted = month.items.reduce((n, d) => n + d.discount, 0);
   const paidSoFar = month.items.reduce((n, d) => n + d.paid, 0);
-  const canCollect = student.active && unpaid.length > 0;
+  const canCollect = student.active && unpaid.length > 0 && !movedTo;
 
   return (
     <form
@@ -131,6 +145,32 @@ export function FeeBill({
                 </tbody>
               </table>
 
+              {carried.length > 0 && (
+                <table className="mt-4 w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted">
+                      <th className="pb-2 font-medium">Previous dues</th>
+                      <th className="pb-2 font-medium">Left unpaid</th>
+                      <th className="pb-2 text-right font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {carried.map((c) => (
+                      <tr key={c.key} className="border-b border-line/60">
+                        <td className="py-2.5 text-fg">{c.label} (part paid)</td>
+                        <td className="py-2.5 text-xs text-muted">
+                          {c.items
+                            .filter((d) => d.balance > 0)
+                            .map((d) => `${d.headName} ${rupees(d.balance)}`)
+                            .join(", ")}
+                        </td>
+                        <td className="py-2.5 text-right tabular-nums text-fg">{rupees(c.balance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
               {/* Late fees: one per month a fee has stayed unpaid, each can be ticked off */}
               {lateMonths.length > 0 && (
                 <fieldset className="mt-4">
@@ -163,19 +203,30 @@ export function FeeBill({
               )}
 
               <div className="mt-4 space-y-1.5 text-sm">
-                {(discounted > 0 || discount > 0 || paidSoFar > 0) && <Row label="Fees" value={rupees(month.charged)} />}
+                {(discounted > 0 || discount > 0 || paidSoFar > 0 || carriedTotal > 0) && <Row label="Fees" value={rupees(month.charged)} />}
                 {discounted > 0 && <Row label="Discount" value={`− ${rupees(discounted)}`} tone="text-success" />}
                 {!paid && paidSoFar > 0 && <Row label="Paid so far" value={`− ${rupees(paidSoFar)}`} tone="text-success" />}
+                {movedTo && <Row label={`Moved to ${movedTo.label} bill`} value={`− ${rupees(month.balance)}`} tone="text-muted" />}
+                {carriedTotal > 0 && <Row label="Previous dues" value={rupees(carriedTotal)} />}
                 {paid
                   ? lateCollected > 0 && <Row label="Late fee" value={rupees(lateCollected)} tone="text-danger" />
                   : plan.late > 0 && <Row label={`Late fee (${lateMonths.filter(isOn).length} month${lateMonths.filter(isOn).length === 1 ? "" : "s"})`} value={rupees(plan.late)} tone="text-danger" />}
                 {!paid && discount > 0 && <Row label="Discount now" value={`− ${rupees(discount - plan.unusedDiscount)}`} tone="text-success" />}
                 <div className="flex items-baseline justify-between border-t-2 border-fg/80 pt-3">
-                  <span className="font-semibold text-fg">{paid ? "Paid in full" : "Total payable"}</span>
+                  <span className="font-semibold text-fg">{paid ? "Paid in full" : movedTo ? "Left on this bill" : "Total payable"}</span>
                   <span className={`text-2xl font-semibold tabular-nums ${paid ? "text-success" : "text-fg"}`}>
-                    {rupees(paid ? month.charged - discounted + lateCollected : plan.total)}
+                    {rupees(paid ? month.charged - discounted + lateCollected : movedTo ? 0 : plan.full)}
                   </span>
                 </div>
+                {movedTo && (
+                  <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
+                    Part paid. The {rupees(month.balance)} left is collected on the{" "}
+                    <Link href={`./${movedTo.key}`} className="font-semibold underline">
+                      {movedTo.label} bill
+                    </Link>{" "}
+                    as previous dues.
+                  </p>
+                )}
                 {!paid && lateMonths.length === 0 && unpaid.some((d) => d.lateFeeRate > 0) && (
                   <p className="text-xs text-muted">
                     A late fee of {rupees(unpaid.reduce((n, d) => n + d.lateFeeRate, 0))} applies if paid after {day(unpaid.map((d) => d.due).sort()[0])}
@@ -229,6 +280,27 @@ export function FeeBill({
             />
           )}
 
+          <label className="mt-4 block max-w-xs text-sm text-fg-2">
+            Amount received (₹)
+            <input
+              name="received"
+              inputMode="numeric"
+              value={receivedText}
+              onChange={(e) => setReceivedText(e.target.value.replace(/[^\d]/g, "").slice(0, 8))}
+              placeholder={String(plan.full)}
+              className={`${inputClass} mt-1 text-lg font-semibold tabular-nums`}
+            />
+          </label>
+          {part ? (
+            <p className="mt-1.5 text-sm text-warning">
+              Part payment: {rupees(plan.full - plan.total)} left
+              {nextBill ? ` moves to the ${nextBill.label} bill as previous dues.` : " stays due on this bill."}
+            </p>
+          ) : (
+            <p className="mt-1.5 text-xs text-muted">Leave it for the full {rupees(plan.full)}, or enter less for a part payment.</p>
+          )}
+          {plan.excess > 0 && <p className="mt-1 text-sm text-danger">That is {rupees(plan.excess)} more than the bill.</p>}
+
           {extras ? (
             <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-2">
               <label className="text-sm text-fg-2">
@@ -268,8 +340,8 @@ export function FeeBill({
               {plan.lateWaived > 0 && `Late fee ${rupees(plan.lateWaived)} waived`}
               {plan.unusedDiscount > 0 && <span className="block text-danger">The discount is more than the fees.</span>}
             </p>
-            <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={plan.unusedDiscount > 0 || plan.lines.length === 0}>
-              Collect {rupees(plan.total)}
+            <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={plan.unusedDiscount > 0 || plan.excess > 0 || plan.lines.length === 0}>
+              {part ? `Collect ${rupees(plan.total)} (part)` : `Collect ${rupees(plan.total)}`}
             </Button>
           </div>
         </div>

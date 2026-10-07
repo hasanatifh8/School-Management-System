@@ -29,7 +29,7 @@ export default async function EditFeeHeadPage({ params }: PageProps<"/admin/fees
         title={`Edit “${head.name}”`}
         description={head.transport ? "Charged monthly to every student on a bus. Changes apply to everything not yet paid." : "New amounts apply to everything not yet paid."}
       >
-        <FeeHeadForm action={saveFeeHead.bind(null, head.id)} classes={classes} head={head} routes={routes} />
+        <FeeHeadForm action={saveFeeHead.bind(null, head.id)} classes={classes} head={head} routes={routes} startMonth={session.startDate.getUTCMonth() + 1} />
       </Card>
     </>
   );

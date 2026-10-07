@@ -216,7 +216,9 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
     cols,
     [
       // Each fee at its full amount; the discount comes off the total, once.
-      ...receipt.items.map((i, n) => ({ cells: [String(n + 1), i.headName, i.periodLabel, rupees(i.amount + i.discount)] })),
+      ...receipt.items.map((i, n) => ({
+        cells: [String(n + 1), i.headName, i.charged > 0 && i.amount + i.discount < i.charged ? `${i.periodLabel} (part of ${rupees(i.charged)})` : i.periodLabel, rupees(i.amount + i.discount)],
+      })),
       // Late fees collected, as one line (the total already includes them).
       ...(lateFee ? [{ cells: [String(receipt.items.length + 1), "Late fee", `${lateCount} late instalment${lateCount === 1 ? "" : "s"}`, rupees(lateFee)] }] : []),
       ...(discount
