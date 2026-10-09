@@ -12,7 +12,8 @@ type Option = { id: string; name: string };
 type Props = {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   initial: PaperInput[];
-  classes: Option[];
+  /** The exam's classes, each with its sections in the exam. */
+  classes: (Option & { sections: Option[] })[];
   subjects: (Option & { code: string })[];
   /** Subjects allowed per class id ("" = a paper for every class). */
   allowed: Record<string, string[]>;
@@ -49,7 +50,8 @@ export function TimetableEditor(props: Props) {
   const [errors, setErrors] = useState<ActionState["fieldErrors"]>({});
   const [fillOpen, setFillOpen] = useState(false);
   const dirty = JSON.stringify(rows) !== saved;
-  const multiClass = classes.length > 1;
+  // The Class column shows when papers can differ by class or by section.
+  const multiClass = classes.length > 1 || classes.some((c) => c.sections.length > 1);
   const subjectName = useMemo(() => new Map(subjects.map((s) => [s.id, s.name])), [subjects]);
 
   // Fresh server data (e.g. new papers now have ids): follow it unless there are unsaved edits.
@@ -235,18 +237,33 @@ export function TimetableEditor(props: Props) {
                     </td>
                     {multiClass && (
                       <td className={cell}>
+                        {/* A paper is for every class, a whole class, or one section of it ("class|section"). */}
                         <select
-                          value={r.classId}
-                          onChange={(e) => update(i, { classId: e.target.value })}
+                          value={`${r.classId}|${r.sectionId}`}
+                          onChange={(e) => {
+                            const [classId, sectionId] = e.target.value.split("|");
+                            update(i, { classId, sectionId: sectionId ?? "" });
+                          }}
                           aria-label={`Row ${i + 1} class`}
-                          className={`${selectClass} !w-36 !py-2 ${bad(cellError(i, "classId"))}`}
+                          className={`${selectClass} !w-44 !py-2 ${bad(cellError(i, "classId"))}`}
                         >
-                          <option value="">All classes</option>
-                          {classes.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
+                          <option value="|">{classes.length > 1 ? "All classes" : "All sections"}</option>
+                          {classes.map((c) =>
+                            c.sections.length > 1 ? (
+                              <optgroup key={c.id} label={c.name}>
+                                {classes.length > 1 && <option value={`${c.id}|`}>{c.name} (all sections)</option>}
+                                {c.sections.map((s) => (
+                                  <option key={s.id} value={`${c.id}|${s.id}`}>
+                                    {c.name} – {s.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ) : (
+                              <option key={c.id} value={`${c.id}|`}>
+                                {c.name}
+                              </option>
+                            ),
+                          )}
                         </select>
                         {err(cellError(i, "classId"))}
                       </td>

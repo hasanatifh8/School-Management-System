@@ -54,23 +54,30 @@ export const getSignedInTeacher = cache(async () => {
   return teacher;
 });
 
+/** Cookie holding which of their classes a class teacher of several is working on. */
+export const TEACHER_CLASS_COOKIE = "teacher_class";
+
 /**
- * Everything a teacher may see: their class-teacher section (full access) and
- * the sections where they teach a subject (list view). Redirects to /login
- * when nobody is signed in. Call it at the top of every teacher page, action and route.
+ * Everything a teacher may see: the sections they are class teacher of (full
+ * access; `classSection` is the one chosen in the class switcher, the first by
+ * default) and the sections where they teach a subject (list view). Redirects
+ * to /login when nobody is signed in. Call it at the top of every teacher page, action and route.
  */
 export const requireTeacher = cache(async () => {
   const teacher = await getSignedInTeacher();
   if (!teacher) redirect("/login");
 
-  const [classSection, assignments] = await Promise.all([
-    db.section.findFirst({ where: { classTeacherId: teacher.id }, include: { class: true } }),
+  const [classSections, assignments, chosen] = await Promise.all([
+    db.section.findMany({ where: { classTeacherId: teacher.id }, include: { class: true }, orderBy: [{ class: { sortOrder: "asc" } }, { name: "asc" }] }),
     db.subjectTeacherAssignment.findMany({
       where: { teacherId: teacher.id },
       include: { subject: true, section: { include: { class: true } } },
       orderBy: [{ section: { class: { sortOrder: "asc" } } }, { section: { name: "asc" } }],
     }),
+    cookies().then((jar) => jar.get(TEACHER_CLASS_COOKIE)?.value),
   ]);
+  // "My class" pages work on this one; the switcher changes it.
+  const classSection = classSections.find((s) => s.id === chosen) ?? classSections[0] ?? null;
 
   // Group subject assignments by section.
   const subjectSections = new Map<string, { section: (typeof assignments)[number]["section"]; subjects: string[] }>();
@@ -84,18 +91,22 @@ export const requireTeacher = cache(async () => {
     teacher,
     school: teacher.school,
     classSection,
+    /** Every section they are class teacher of. */
+    classSections,
+    /** Whether they are class teacher of this section. */
+    isClassTeacherOf: (sectionId: string | null | undefined) => !!sectionId && classSections.some((s) => s.id === sectionId),
     subjectSections: [...subjectSections.values()],
     /** Sections whose student list the teacher may see. */
-    visibleSectionIds: new Set([...(classSection ? [classSection.id] : []), ...subjectSections.keys()]),
+    visibleSectionIds: new Set([...classSections.map((s) => s.id), ...subjectSections.keys()]),
   };
 });
 
 export type TeacherContext = Awaited<ReturnType<typeof requireTeacher>>;
 
-/** A student in the teacher's own (class-teacher) section, or null. */
+/** A student in one of the teacher's own (class-teacher) sections, or null. */
 export function findClassStudent(ctx: TeacherContext, studentId: string) {
-  if (!ctx.classSection) return null;
+  if (!ctx.classSections.length) return null;
   return db.student.findFirst({
-    where: { id: studentId, schoolId: ctx.school.id, sectionId: ctx.classSection.id, status: "ACTIVE" },
+    where: { id: studentId, schoolId: ctx.school.id, sectionId: { in: ctx.classSections.map((s) => s.id) }, status: "ACTIVE" },
   });
 }

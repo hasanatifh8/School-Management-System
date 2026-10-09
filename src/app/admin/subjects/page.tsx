@@ -1,7 +1,9 @@
-import { BookOpen, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, Plus, Trash2, UserCog } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import {
   Badge,
+  ButtonLink,
   Card,
   EmptyState,
   PageHeader,
@@ -14,6 +16,7 @@ import {
   trClass,
 } from "@/components/ui";
 import { db } from "@/lib/db";
+import { fullName } from "@/lib/queries";
 import { getCurrentSchool } from "@/lib/school";
 import { createSubject, deleteSubject } from "./actions";
 
@@ -38,8 +41,9 @@ export default async function SubjectsPage() {
     where: { schoolId: school.id },
     orderBy: { name: "asc" },
     include: {
-      classes: { include: { class: true }, orderBy: { class: { sortOrder: "asc" } } },
-      _count: { select: { students: true, teacherAssignments: true } },
+      classes: { include: { class: { include: { _count: { select: { sections: true } } } } }, orderBy: { class: { sortOrder: "asc" } } },
+      teacherAssignments: { select: { sectionId: true, teacher: { select: { id: true, firstName: true, middleName: true, lastName: true } } } },
+      _count: { select: { students: true, qualifiedTeachers: true } },
     },
   });
 
@@ -48,7 +52,12 @@ export default async function SubjectsPage() {
       <PageHeader
         title="Subjects"
         breadcrumbs={[{ label: "Settings", href: "/admin/settings" }, { label: "Subjects" }]}
-        subtitle="Subjects offered by the school. Add them to a class from the class's page."
+        subtitle="Subjects offered by the school, who teaches them and which sections still need a teacher."
+        action={
+          <ButtonLink href="/admin/classes/assign" variant="secondary" icon={UserCog}>
+            Assign teachers
+          </ButtonLink>
+        }
       />
       <div className="grid gap-6 xl:grid-cols-3">
         <Card
@@ -67,6 +76,7 @@ export default async function SubjectsPage() {
                   <th className={thClass}>Taught in</th>
                   <th className={thClass}>Students</th>
                   <th className={thClass}>Teachers</th>
+                  <th className={thClass}>Coverage</th>
                   <th className={thClass}>
                     <span className="sr-only">Actions</span>
                   </th>
@@ -102,7 +112,38 @@ export default async function SubjectsPage() {
                       )}
                     </td>
                     <td className={`${tdClass} tabular-nums`}>{s._count.students}</td>
-                    <td className={`${tdClass} tabular-nums`}>{s._count.teacherAssignments}</td>
+                    <td className={tdClass}>
+                      {(() => {
+                        const names = [...new Map(s.teacherAssignments.map((a) => [a.teacher.id, fullName(a.teacher)])).values()];
+                        return names.length ? (
+                          <div className="max-w-[16rem] text-sm text-fg-2">
+                            {names.join(", ")}
+                            {s._count.qualifiedTeachers > names.length && <span className="block text-xs text-muted">+{s._count.qualifiedTeachers - names.length} more can teach it</span>}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted">{s._count.qualifiedTeachers ? `${s._count.qualifiedTeachers} can teach it` : "None yet"}</span>
+                        );
+                      })()}
+                    </td>
+                    <td className={tdClass}>
+                      {(() => {
+                        // Sections that study the subject, and how many have its teacher.
+                        const needed = s.classes.reduce((n, c) => n + c.class._count.sections, 0);
+                        const covered = new Set(s.teacherAssignments.map((a) => a.sectionId)).size;
+                        if (!needed) return <span className="text-subtle">—</span>;
+                        return covered >= needed ? (
+                          <Badge tone="green" dot>
+                            All {needed} sections
+                          </Badge>
+                        ) : (
+                          <Link href="/admin/classes/assign" className="hover:opacity-80">
+                            <Badge tone="amber" dot>
+                              {covered} of {needed} sections
+                            </Badge>
+                          </Link>
+                        );
+                      })()}
+                    </td>
                     <td className={`${tdClass} text-right`}>
                       <ActionForm
                         action={deleteSubject.bind(null, s.id)}

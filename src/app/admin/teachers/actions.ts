@@ -9,6 +9,7 @@ import { createPhoto, readPhotoUpload, resolvePhotoChange } from "@/lib/photos";
 import { type ActionState, validationError } from "@/lib/action-state";
 import { generatePassword, hashPassword } from "@/lib/passwords";
 import { revokeTeacherSessions } from "@/lib/teacher-auth";
+import { setClassTeacher, setSubjectTeacher } from "@/lib/teaching";
 import type { Prisma } from "@/generated/prisma/client";
 import { teacherSchema } from "./schema";
 
@@ -206,4 +207,47 @@ export async function removeTeacherLogin(id: string): Promise<ActionState> {
   await revokeTeacherSessions(id);
   revalidatePath(`/admin/teachers/${id}`);
   return { ok: true, message: "Login removed." };
+}
+
+/* ───────────────────────── Classes and subjects (from the teacher's profile) ───────────────────────── */
+
+/** Makes the teacher class teacher of one more section (replacing that section's current one). */
+export async function addClassTeacherSection(teacherId: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const sectionId = String(formData.get("sectionId") ?? "");
+  if (!sectionId) return { error: "Choose a class.", fieldErrors: { sectionId: ["Choose a class"] } };
+  const result = await setClassTeacher(school.id, sectionId, teacherId);
+  if (result.ok) revalidatePath("/admin", "layout");
+  return result;
+}
+
+/** Stops the teacher being class teacher of a section (if they still are). */
+export async function removeClassTeacherSection(teacherId: string, sectionId: string): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const section = await db.section.findFirst({ where: { id: sectionId, classTeacherId: teacherId, class: { schoolId: school.id } } });
+  if (!section) return { error: "They aren't class teacher of that section." };
+  const result = await setClassTeacher(school.id, sectionId, null);
+  if (result.ok) revalidatePath("/admin", "layout");
+  return result;
+}
+
+/** Gives the teacher a subject in a section (replacing whoever taught it there). */
+export async function addSubjectAssignment(teacherId: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const sectionId = String(formData.get("sectionId") ?? "");
+  const subjectId = String(formData.get("subjectId") ?? "");
+  if (!sectionId || !subjectId) return { error: "Choose the class and the subject." };
+  const result = await setSubjectTeacher(school.id, sectionId, subjectId, teacherId);
+  if (result.ok) revalidatePath("/admin", "layout");
+  return result;
+}
+
+/** Takes a subject in a section off the teacher (if it is still theirs). */
+export async function removeSubjectAssignment(teacherId: string, sectionId: string, subjectId: string): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const mine = await db.subjectTeacherAssignment.findFirst({ where: { sectionId, subjectId, teacherId, section: { class: { schoolId: school.id } } } });
+  if (!mine) return { error: "That subject isn't theirs any more." };
+  const result = await setSubjectTeacher(school.id, sectionId, subjectId, null);
+  if (result.ok) revalidatePath("/admin", "layout");
+  return result;
 }

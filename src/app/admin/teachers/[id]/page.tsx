@@ -30,7 +30,7 @@ import { ActionForm, SubmitButton } from "@/components/forms";
 import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
-import { Avatar, Badge, ButtonLink, Card, IconTile, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, Card, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
@@ -40,9 +40,14 @@ import { fullName, sectionLabel } from "@/lib/queries";
 import { loadTeacherTimetable } from "@/lib/timetable";
 import { DAY_NAMES, periodTime } from "@/lib/timetable-shared";
 import { TimetableGrid } from "@/components/timetable/timetable-grid";
+import { TeachingCard, type SectionChoice } from "@/components/teaching/teaching-card";
 import {
+  addClassTeacherSection,
+  addSubjectAssignment,
   changeTeacherUsername,
   issueTeacherLogin,
+  removeClassTeacherSection,
+  removeSubjectAssignment,
   removeTeacher,
   removeTeacherLogin,
   restoreTeacher,
@@ -82,7 +87,29 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
   const requested = (await searchParams).tab;
   const tab: Tab = TABS.find((t) => t === requested) ?? "overview";
   const school = await getCurrentSchool();
-  const allSubjects = await db.subject.findMany({ where: { schoolId: school.id }, orderBy: { name: "asc" }, select: { id: true, name: true, code: true } });
+  const [allSubjects, schoolSections] = await Promise.all([
+    db.subject.findMany({ where: { schoolId: school.id }, orderBy: { name: "asc" }, select: { id: true, name: true, code: true } }),
+    // Every section with its class teacher, curriculum and subject teachers, for "Classes & subjects".
+    db.section.findMany({
+      where: { class: { schoolId: school.id } },
+      orderBy: [{ class: { sortOrder: "asc" } }, { class: { name: "asc" } }, { name: "asc" }],
+      include: {
+        class: { include: { subjects: { include: { subject: { select: { id: true, name: true } } }, orderBy: { subject: { name: "asc" } } } } },
+        classTeacher: { select: { id: true, firstName: true, middleName: true, lastName: true } },
+        subjectAssignments: { include: { teacher: { select: { id: true, firstName: true, middleName: true, lastName: true } } } },
+      },
+    }),
+  ]);
+  const teachingSections: SectionChoice[] = schoolSections.map((sec) => ({
+    id: sec.id,
+    classId: sec.classId,
+    label: sectionLabel(sec),
+    classTeacher: sec.classTeacher && { id: sec.classTeacher.id, name: fullName(sec.classTeacher) },
+    subjects: sec.class.subjects.map((cs) => {
+      const a = sec.subjectAssignments.find((x) => x.subjectId === cs.subjectId);
+      return { id: cs.subject.id, name: cs.subject.name, teacher: a ? { id: a.teacher.id, name: fullName(a.teacher) } : null };
+    }),
+  }));
   const teacher = await db.teacher.findFirst({
     where: { id, schoolId: school.id },
     include: {
@@ -140,10 +167,10 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
           <>
             <span>{[teacher.specialization, teacher.qualification].filter(Boolean).join(" · ") || "Teacher"}</span>
             <span className="mt-2 flex flex-wrap items-center gap-2">
-              {teacher.classTeacherOf && (
+              {teacher.classTeacherOf.length > 0 && (
                 <Badge tone="indigo">
                   <Crown className="h-3 w-3" />
-                  Class teacher · {sectionLabel(teacher.classTeacherOf)}
+                  Class teacher · {teacher.classTeacherOf.map(sectionLabel).join(", ")}
                 </Badge>
               )}
               {[...subjects.values()].slice(0, 3).map((s) => (
@@ -338,54 +365,17 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                 </DetailList>
               </Card>
 
-              <Card
-                title="Subjects taught"
-                icon={BookOpen}
-                description="Assigned from each class's page."
-                padded={false}
-              >
-                {subjects.size === 0 ? (
-                  <p className="p-6 text-sm text-muted">No subjects assigned yet.</p>
-                ) : (
-                  <ul className="grid gap-3 p-6 sm:grid-cols-2">
-                    {[...subjects.values()].map((s) => (
-                      <li key={s.code} className="rounded-xl border border-line p-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-fg">{s.name}</p>
-                          <span className="font-mono text-xs text-subtle">{s.code}</span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {s.sections.map((sec) => (
-                            <Link key={sec.id} href={`/admin/classes/${sec.classId}`} className="transition hover:opacity-80">
-                              <Badge tone="indigo">{sec.label}</Badge>
-                            </Link>
-                          ))}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
+              <TeachingCard
+                teacherId={teacher.id}
+                sections={teachingSections}
+                addClass={addClassTeacherSection.bind(null, teacher.id)}
+                removeClass={removeClassTeacherSection.bind(null, teacher.id)}
+                addSubject={addSubjectAssignment.bind(null, teacher.id)}
+                removeSubject={removeSubjectAssignment.bind(null, teacher.id)}
+              />
             </div>
 
             <div className="space-y-6 self-start">
-              <Card title="Class teacher" icon={Crown} description="Assigned from the class's page.">
-                {teacher.classTeacherOf ? (
-                  <Link
-                    href={`/admin/classes/${teacher.classTeacherOf.classId}`}
-                    className="group flex items-center gap-3 rounded-xl border border-line p-3 transition hover:-translate-y-px hover:border-accent-line hover:bg-accent-soft"
-                  >
-                    <IconTile icon={GraduationCap} tone="indigo" size="sm" />
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-fg">{sectionLabel(teacher.classTeacherOf)}</p>
-                      <p className="text-xs text-muted">{teacher.classTeacherOf._count.students} active students</p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-subtle group-hover:text-accent-text" />
-                  </Link>
-                ) : (
-                  <p className="text-sm text-muted">Not a class teacher.</p>
-                )}
-              </Card>
 
               <TeacherLoginCard
                 username={teacher.username}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { NavTracker } from "@/components/nav-tracker";
-import { BookOpen, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Plane, Users } from "lucide-react";
+import { ArrowLeftRight, BookOpen, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Plane, Users } from "lucide-react";
 import { SchoolLogo } from "@/components/school-logo";
 import { AccountCard, AppShell, type NavGroup } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -48,6 +48,10 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
             label: "My class",
             items: [
               { href: "/teacher/class", label: "My class", icon: <Users />, sub: myClass },
+              // Class teacher of several sections: one link each to switch "My class" to it.
+              ...ctx.classSections
+                .filter((s) => s.id !== ctx.classSection?.id)
+                .map((s) => ({ href: `/teacher/switch-class?id=${s.id}&to=/teacher/class`, label: `Switch to ${sectionLabel(s)}`, icon: <ArrowLeftRight /> })),
               { href: "/teacher/attendance", label: "Attendance", icon: <CalendarCheck /> },
               { href: "/teacher/notices", label: "Notices", icon: <Megaphone /> },
               { href: "/teacher/id-cards", label: "ID cards", icon: <IdCard /> },

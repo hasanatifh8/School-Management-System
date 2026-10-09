@@ -377,7 +377,7 @@ model Teacher {
 
   school             School                     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   photo              Photo?                     @relation(fields: [photoId], references: [id], onDelete: SetNull)
-  classTeacherOf     Section?
+  classTeacherOf     Section[] // the sections they are class teacher of
   subjectAssignments SubjectTeacherAssignment[]
   documents          Document[]
   sessions           TeacherSession[]
@@ -416,7 +416,7 @@ model Section {
   id             String  @id @default(cuid())
   classId        String
   name           String // e.g. "A"
-  classTeacherId String? @unique // a teacher can be class teacher of only one section
+  classTeacherId String? // a teacher can be class teacher of several sections
 
   class              SchoolClass                @relation(fields: [classId], references: [id], onDelete: Cascade)
   classTeacher       Teacher?                   @relation(fields: [classTeacherId], references: [id], onDelete: SetNull)
@@ -428,8 +428,10 @@ model Section {
   examResults        ExamResult[]
   timetable          Timetable?
   timetableSlots     TimetableSlot[]
+  examPapers         ExamPaper[]
 
   @@unique([classId, name])
+  @@index([classTeacherId])
 }
 
 model Subject {
@@ -1086,6 +1088,7 @@ model ExamPaper {
   startTime String // "09:00" (24-hour)
   endTime   String
   classId   String?
+  sectionId String? // only this section of the class (null = every section of it)
   subjectId String?
   title     String? // custom paper name, e.g. "Practical" or "Drawing"
   maxMarks  Int?
@@ -1096,6 +1099,7 @@ model ExamPaper {
 
   exam    Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
   class   SchoolClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section Section?     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   subject Subject?     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   marks   ExamMark[]
 

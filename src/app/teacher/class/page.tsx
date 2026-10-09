@@ -11,6 +11,7 @@ import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { requireTeacher } from "@/lib/teacher-auth";
 import { assignMyClassRollNumbers } from "../actions";
+import { ClassSwitcher } from "@/components/teaching/class-switcher";
 
 const dob = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const GENDER: Record<string, string> = { MALE: "M", FEMALE: "F", OTHER: "O" };
@@ -50,6 +51,7 @@ export default async function MyClassPage({ searchParams }: PageProps<"/teacher/
 
   return (
     <>
+      <ClassSwitcher sections={ctx.classSections} current={ctx.classSection?.id} here="/teacher/class" />
       <PageHeader
         title={`My class · ${sectionLabel(ctx.classSection)}`}
         subtitle={`${total} student(s)${q ? " matching your search" : ""}`}

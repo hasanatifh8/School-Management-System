@@ -83,15 +83,15 @@ export async function ExamWorkspace({
         icon={Table2}
         description={
           classes.length > 1
-            ? "Set a paper for all classes, or pick a class for class-wise papers. Papers for the same class can't overlap."
-            : "One row per paper. Papers can't overlap."
+            ? "Set a paper for all classes, a class, or one section. Papers may run at the same time (e.g. Maths and Biology for students who take one or the other)."
+            : "One row per paper. Papers may run at the same time, e.g. electives."
         }
         padded={false}
       >
         <TimetableEditor
           action={saveTimetable}
           initial={paperInputs(exam)}
-          classes={classes.map((c) => ({ id: c.id, name: c.name }))}
+          classes={classes.map((c) => ({ id: c.id, name: c.name, sections: c.sections }))}
           subjects={options.subjects}
           allowed={options.allowed}
           curricula={options.curricula}

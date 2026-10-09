@@ -12,7 +12,7 @@ export default async function TeacherNewLeavePage() {
     <>
       <PageHeader
         title="Apply for leave"
-        subtitle={ctx.classSection ? "For yourself, or for a student of your class (for example, from a parent's note)." : undefined}
+        subtitle={ctx.classSection ? `For yourself, or for a student of your class${ctx.classSections.length > 1 ? "es" : ""} (for example, from a parent's note).` : undefined}
         breadcrumbs={[{ label: "Leave", href: "/teacher/leave" }, { label: "New request" }]}
       />
       <Card className="max-w-2xl">

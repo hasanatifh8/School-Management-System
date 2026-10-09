@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Bus, CalendarClock, ClipboardList, Download, FileBarChart, Megaphone, Paperclip, Phone, Printer, Ticket, UserRound } from "lucide-react";
 import { AdmitCardPages } from "@/components/exams/admit-card";
 import { PdfDownloadButton } from "@/components/pdf-download";
+import { ResultsTable, type ResultSummary } from "@/components/student-profile/results-table";
 import { ReportCard } from "@/components/exams/report-card";
 import { TimetableGrid } from "@/components/timetable/timetable-grid";
 import { Badge, Card, EmptyState, buttonVariants } from "@/components/ui";
@@ -81,7 +82,10 @@ export function ExamsPanel({ exams, reportHref }: { exams: StudentExam[]; report
   );
 }
 
-/** The chosen exam's report card (published results only), with print and download. */
+/**
+ * Every published result in a filterable table, and the chosen exam's report
+ * card below it (published results only), with print and download.
+ */
 export async function ReportCardPanel({
   actor,
   studentId,
@@ -101,12 +105,35 @@ export async function ReportCardPanel({
   const published = exams.filter((e) => e.resultPublishedAt);
   if (!published.length) return <EmptyState icon={FileBarChart} title="No published results yet" description="Report cards appear here once a class's results are published." />;
   const current = published.find((e) => e.id === selected) ?? published[0];
-  const exam = await loadExam(actor.schoolId, current.id);
-  const sheet = exam && (await loadSheet(actor, exam, current.sectionId));
-  const row = sheet ? computeResults(sheet).find((r) => r.student.id === studentId) : undefined;
+  // Each published exam's sheet, for the student's line in the table (and the chosen one's card).
+  const sheets = await Promise.all(
+    published.map(async (e) => {
+      const loaded = await loadExam(actor.schoolId, e.id);
+      const s = loaded && (await loadSheet(actor, loaded, e.sectionId));
+      return { e, sheet: s, row: s ? computeResults(s).find((r) => r.student.id === studentId) : undefined };
+    }),
+  );
+  const summaries: ResultSummary[] = sheets.map(({ e, sheet: s, row: r }) => ({
+    id: e.id,
+    name: e.name,
+    kind: e.kind,
+    session: e.session,
+    sectionLabel: e.sectionLabel,
+    dates: e.papers.length ? dateSpan(e.papers.map((p) => p.date)) : "",
+    obtained: r?.obtained ?? 0,
+    max: r?.max ?? 0,
+    percent: r?.percent ?? 0,
+    grade: r?.grade ?? "—",
+    rank: r?.rank ?? null,
+    outOf: s?.students.length ?? 0,
+    result: r?.result ?? null,
+    href: tabHref(e.id),
+  }));
+  const { sheet, row } = sheets.find((x) => x.e.id === current.id)!;
   return (
     <div className="space-y-4">
-      <ExamPicker exams={published} current={current.id} href={tabHref} />
+      <ResultsTable rows={summaries} current={current.id} />
+      <h3 className="pt-2 text-sm font-semibold text-fg">Report card · {current.name}</h3>
       {sheet && row ? (
         <>
           <div className="flex flex-wrap justify-end gap-2">

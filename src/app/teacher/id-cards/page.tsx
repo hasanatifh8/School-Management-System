@@ -6,6 +6,7 @@ import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { MAX_CARDS_PER_BATCH, loadIdCardRoster } from "@/lib/id-cards";
 import { sectionLabel } from "@/lib/queries";
 import { requireTeacher } from "@/lib/teacher-auth";
+import { ClassSwitcher } from "@/components/teaching/class-switcher";
 
 /** Pick students of the teacher's own class to make ID cards for. */
 export default async function TeacherIdCardsPage() {
@@ -14,6 +15,7 @@ export default async function TeacherIdCardsPage() {
   const students = await loadIdCardRoster(ctx.school.id, ctx.classSection.id);
   return (
     <>
+      <ClassSwitcher sections={ctx.classSections} current={ctx.classSection?.id} here="/teacher/id-cards" />
       <PageHeader title="ID cards" subtitle={`${sectionLabel(ctx.classSection)} · ${students.length} students`} />
       <IdCardSteps steps={[{ label: "Pick students", href: "/teacher/id-cards" }, { label: "Download or print" }]} current={0} />
       {students.length ? (

@@ -250,7 +250,7 @@ export async function loadStaffIdCards(schoolId: string, keys: string[]) {
         teaching: true,
         name: fullName(t),
         employeeCode: t.employeeCode,
-        designation: t.classTeacherOf ? `Class teacher, ${t.classTeacherOf.class.name}-${t.classTeacherOf.name}` : "Teacher",
+        designation: t.classTeacherOf.length ? `Class teacher, ${t.classTeacherOf.map((s) => `${s.class.name}-${s.name}`).join(", ")}` : "Teacher",
         department: t.specialization || "Teaching",
         bloodGroup: t.bloodGroup ? BLOOD_GROUP_LABELS[t.bloodGroup] : "",
         contact: t.phone ?? "",

@@ -48,7 +48,7 @@ const classStudentSchema = z
 export async function updateClassStudent(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const ctx = await requireTeacher();
   const student = await findClassStudent(ctx, studentId);
-  if (!student || !ctx.classSection) return { error: "You can only edit students in your own class." };
+  if (!student || !student.sectionId) return { error: "You can only edit students in your own class." };
 
   const parsed = classStudentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationError(parsed.error);
@@ -57,7 +57,7 @@ export async function updateClassStudent(studentId: string, _: ActionState, form
 
   const { rollNumber, ...contact } = parsed.data;
   if (rollNumber != null) {
-    const clash = await findRollNumberClash(db, ctx.classSection.id, rollNumber, studentId);
+    const clash = await findRollNumberClash(db, student.sectionId, rollNumber, studentId);
     if (clash) {
       const message = `Roll number ${rollNumber} is already used by ${fullName(clash)}`;
       return { error: message, fieldErrors: { rollNumber: [message] } };

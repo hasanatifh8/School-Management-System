@@ -2,7 +2,7 @@ import "server-only";
 // Data for the tabs of a student's profile: exams, results, notices and admit cards.
 import { isoDate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { paperName } from "@/lib/exams-shared";
+import { paperName, paperIsFor } from "@/lib/exams-shared";
 import { sectionLabel } from "@/lib/queries";
 
 type ProfileStudent = {
@@ -38,7 +38,7 @@ export async function studentExams(student: ProfileStudent) {
   return exams.map((e) => {
     const section = e.sections[0].section;
     const papers = e.papers
-      .filter((p) => (!p.classId || p.classId === section.classId) && (!p.subjectId || !taken.length || taken.includes(p.subjectId)))
+      .filter((p) => paperIsFor(p, section) && (!p.subjectId || !taken.length || taken.includes(p.subjectId)))
       .map((p) => ({
         id: p.id,
         date: isoDate(p.date),

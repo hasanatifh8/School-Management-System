@@ -93,11 +93,11 @@ export type TeacherFilters = ReturnType<typeof parseTeacherFilters>;
 export function teacherWhere(schoolId: string, f: TeacherFilters): Prisma.TeacherWhereInput {
   const role: Prisma.TeacherWhereInput =
     f.role === "class"
-      ? { classTeacherOf: { isNot: null } }
+      ? { classTeacherOf: { some: {} } }
       : f.role === "subject"
         ? { subjectAssignments: { some: {} } }
         : f.role === "none"
-          ? { classTeacherOf: { is: null }, subjectAssignments: { none: {} } }
+          ? { classTeacherOf: { none: {} }, subjectAssignments: { none: {} } }
           : {};
   return {
     schoolId,

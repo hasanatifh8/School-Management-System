@@ -96,10 +96,14 @@ export function ExamDetailsForm({
                           />
                           {c.name}
                         </label>
-                        {c.sections.length > 1 && (
-                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 pl-6">
+                        {c.sections.length > 0 && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-6">
+                            <span className="mr-0.5 text-xs text-muted">Sections</span>
                             {c.sections.map((s) => (
-                              <label key={s.id} className="flex cursor-pointer items-center gap-1.5 text-sm text-fg-2">
+                              <label
+                                key={s.id}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-0.5 text-sm text-fg-2 transition has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft has-[:checked]:text-accent-text"
+                              >
                                 <input
                                   type="checkbox"
                                   checked={selected.has(s.id)}

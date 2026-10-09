@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RemovedCleanupBar } from "@/components/delete-permanently";
 import { deletePermanently } from "../permanent-delete-actions";
-import { ChevronRight, Crown, Download, FileSpreadsheet, Phone, Presentation, SearchX, UserPlus } from "lucide-react";
+import { ChevronRight, Crown, Download, FileSpreadsheet, Phone, Presentation, SearchX, UserCog, UserPlus } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
@@ -52,7 +52,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
     skip: paging.skip,
     take: paging.take,
     include: {
-      classTeacherOf: { include: { class: true } },
+      classTeacherOf: { include: { class: true }, orderBy: [{ class: { sortOrder: "asc" } }, { name: "asc" }] },
       subjectAssignments: { include: { subject: true } },
     },
   });
@@ -75,6 +75,9 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
         subtitle="Teaching staff, class teachers and subject assignments"
         action={
           <>
+            <ButtonLink href="/admin/classes/assign" variant="secondary" icon={UserCog}>
+              Assign classes & subjects
+            </ButtonLink>
             <ExportDialog kind="teachers" count={paging.total} noun="teachers" />
             <MoreMenu>
               <MenuLink href="/admin/teachers/import" icon={<FileSpreadsheet />}>
@@ -166,7 +169,7 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
               <tr>
                 <th className={thClass}>Teacher</th>
                 <th className={thClass}>Class teacher</th>
-                <th className={`${thClass} hidden lg:table-cell`}>Subjects taught</th>
+                <th className={`${thClass} hidden lg:table-cell`}>Teaches</th>
                 <th className={`${thClass} hidden md:table-cell`}>Contact</th>
                 <th className={thClass}>
                   <span className="sr-only">Open</span>
@@ -175,7 +178,8 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
             </thead>
             <tbody className={tbodyClass}>
               {teachers.map((t) => {
-                const subjects = [...new Set(t.subjectAssignments.map((a) => a.subject.name))];
+                // Each subject with how many sections they teach it in, e.g. "Maths ×3".
+                const subjects = [...Map.groupBy(t.subjectAssignments, (a) => a.subject.name)].map(([name, list]) => ({ name, sections: list.length }));
                 return (
                   <tr key={t.id} className={`${trClass} group`}>
                     <td className={tdClass}>
@@ -192,11 +196,15 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
                       />
                     </td>
                     <td className={tdClass}>
-                      {t.classTeacherOf ? (
-                        <Badge tone="indigo">
-                          <Crown className="h-3 w-3" />
-                          {sectionLabel(t.classTeacherOf)}
-                        </Badge>
+                      {t.classTeacherOf.length ? (
+                        <div className="flex max-w-[14rem] flex-wrap gap-1">
+                          {t.classTeacherOf.map((s) => (
+                            <Badge key={s.id} tone="indigo">
+                              <Crown className="h-3 w-3" />
+                              {sectionLabel(s)}
+                            </Badge>
+                          ))}
+                        </div>
                       ) : (
                         <Dash />
                       )}
@@ -205,8 +213,14 @@ export default async function TeachersPage({ searchParams }: PageProps<"/admin/t
                       {subjects.length ? (
                         <div className="flex max-w-xs flex-wrap gap-1">
                           {subjects.map((s) => (
-                            <Badge key={s}>{s}</Badge>
+                            <Badge key={s.name}>
+                              {s.name}
+                              {s.sections > 1 && <span className="text-muted">×{s.sections}</span>}
+                            </Badge>
                           ))}
+                          <span className="w-full text-xs text-muted">
+                            In {new Set(t.subjectAssignments.map((a) => a.sectionId)).size} section{new Set(t.subjectAssignments.map((a) => a.sectionId)).size === 1 ? "" : "s"}
+                          </span>
                         </div>
                       ) : (
                         <Dash />

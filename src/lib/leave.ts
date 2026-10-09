@@ -45,7 +45,7 @@ function visibleWhere(actor: LeaveActor): Prisma.LeaveRequestWhereInput {
     schoolId: actor.schoolId,
     OR: [
       { teacherId: ctx.teacher.id },
-      ...(ctx.classSection ? [{ applicant: "STUDENT" as const, student: { sectionId: ctx.classSection.id } }] : []),
+      ...(ctx.classSections.length ? [{ applicant: "STUDENT" as const, student: { sectionId: { in: ctx.classSections.map((s) => s.id) } } }] : []),
     ],
   };
 }
@@ -53,7 +53,7 @@ function visibleWhere(actor: LeaveActor): Prisma.LeaveRequestWhereInput {
 /** Whether the actor may approve or reject this request. Nobody decides their own. */
 function canDecide(actor: LeaveActor, r: { applicant: LeaveApplicantKey; teacherId: string | null; student: { sectionId: string | null } | null }) {
   if (actor.kind === "admin") return true;
-  return r.applicant === "STUDENT" && !!actor.ctx.classSection && r.student?.sectionId === actor.ctx.classSection.id;
+  return r.applicant === "STUDENT" && actor.ctx.isClassTeacherOf(r.student?.sectionId);
 }
 
 const include = {
@@ -136,7 +136,7 @@ export async function listLeave(actor: LeaveActor, filters: ReturnType<typeof le
 
 /** People the actor may enter a request for (a teacher also always applies for themselves). */
 export async function leavePeople(actor: LeaveActor): Promise<LeavePerson[]> {
-  const sectionWhere = actor.kind === "teacher" ? (actor.ctx.classSection ? { sectionId: actor.ctx.classSection.id } : { id: "" }) : {};
+  const sectionWhere = actor.kind === "teacher" ? (actor.ctx.classSections.length ? { sectionId: { in: actor.ctx.classSections.map((s) => s.id) } } : { id: "" }) : {};
   const [students, teachers, staff] = await Promise.all([
     db.student.findMany({
       where: { schoolId: actor.schoolId, status: "ACTIVE", ...sectionWhere },

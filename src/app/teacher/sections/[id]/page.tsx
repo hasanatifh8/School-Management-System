@@ -13,7 +13,8 @@ export default async function SubjectSectionPage({ params, searchParams }: PageP
   const { id } = await params;
   const query = await searchParams;
   const ctx = await requireTeacher();
-  if (ctx.classSection?.id === id) redirect("/teacher/class");
+  // Their own class opens as "My class", switched to this one.
+  if (ctx.isClassTeacherOf(id)) redirect(`/teacher/switch-class?id=${id}&to=/teacher/class`);
   const entry = ctx.subjectSections.find((s) => s.section.id === id);
   if (!entry) notFound();
 

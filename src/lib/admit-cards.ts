@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { paperViews, schoolHeader, type LoadedExam } from "@/lib/exams";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { paperIsFor } from "@/lib/exams-shared";
 
 export async function loadAdmitCards(exam: LoadedExam, sectionId: string) {
   const section = exam.sections.find((s) => s.sectionId === sectionId)?.section;
@@ -33,7 +34,7 @@ export async function loadAdmitCards(exam: LoadedExam, sectionId: string) {
 
   // The class's papers, in date order; a subject paper only for students who take that subject.
   const views = new Map(paperViews(exam).map((v) => [v.id, v]));
-  const papers = exam.papers.filter((p) => !p.classId || p.classId === section.classId);
+  const papers = exam.papers.filter((p) => paperIsFor(p, section));
   const forStudent = (taken: string[]) =>
     papers.filter((p) => !p.subjectId || !taken.length || taken.includes(p.subjectId)).map((p) => views.get(p.id)!);
 

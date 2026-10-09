@@ -572,8 +572,8 @@ function LeaveCard({ requests, studentPending }: { requests: { id: string; fromD
 /** The teacher's class and the subjects they teach in each section. */
 function ClassesSubjectsCard({ ctx, counts }: { ctx: Awaited<ReturnType<typeof requireTeacher>>; counts: Map<string | null, number> }) {
   const rows = [
-    ...(ctx.classSection ? [{ id: ctx.classSection.id, label: sectionLabel(ctx.classSection), text: "Class teacher", href: "/teacher/class" }] : []),
-    ...ctx.subjectSections.map((s) => ({ id: s.section.id, label: sectionLabel(s.section), text: s.subjects.join(", "), href: `/teacher/sections/${s.section.id}` })),
+    ...ctx.classSections.map((s) => ({ id: s.id, label: sectionLabel(s), text: "Class teacher", href: `/teacher/switch-class?id=${s.id}&to=/teacher/class` })),
+    ...ctx.subjectSections.filter((s) => !ctx.isClassTeacherOf(s.section.id)).map((s) => ({ id: s.section.id, label: sectionLabel(s.section), text: s.subjects.join(", "), href: `/teacher/sections/${s.section.id}` })),
   ];
   return (
     <Card title="Classes & subjects" icon={BookOpen} padded={false}>

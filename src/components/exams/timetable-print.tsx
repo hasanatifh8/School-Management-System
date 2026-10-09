@@ -120,7 +120,10 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
               <td className={`${cellPad} whitespace-nowrap font-medium`}>{formatExamDate(p.date)}</td>
               {s.showDay && <td className={cellPad}>{formatDay(p.date)}</td>}
               {s.showTime && <td className={`${cellPad} whitespace-nowrap`}>{timeRange(p.startTime, p.endTime)}</td>}
-              <td className={`${cellPad} font-semibold`}>{p.subject}</td>
+              <td className={`${cellPad} font-semibold`}>
+                {p.subject}
+                {p.sectionName && <span className="font-normal text-slate-600"> (Section {p.sectionName} only)</span>}
+              </td>
               {s.showMarks && <td className={`${cellPad} text-center tabular-nums`}>{p.maxMarks ?? "—"}</td>}
               {s.showRoom && <td className={cellPad}>{p.room ?? ""}</td>}
               {s.showNotes && <td className={cellPad}>{p.notes ?? ""}</td>}
@@ -139,7 +142,10 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
   }));
   const gridCell = (p: PaperView) => (
     <div key={p.id}>
-      <p className="font-semibold">{p.subject}</p>
+      <p className="font-semibold">
+        {p.subject}
+        {p.sectionName && <span className="font-normal text-slate-600"> (Sec {p.sectionName})</span>}
+      </p>
       {(s.showMarks && p.maxMarks != null) || (s.showRoom && p.room) ? (
         <p className="text-[0.85em] text-slate-600">{[s.showMarks && p.maxMarks != null && `MM ${p.maxMarks}`, s.showRoom && p.room].filter(Boolean).join(" · ")}</p>
       ) : null}

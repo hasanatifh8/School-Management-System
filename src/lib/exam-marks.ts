@@ -11,7 +11,7 @@ import "server-only";
 import type { ActionState } from "@/lib/action-state";
 import { isoDate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { formatMarks, gradeFor, paperName, parseMark, passes, type ResultStatus } from "@/lib/exams-shared";
+import { formatMarks, gradeFor, paperName, parseMark, passes, type ResultStatus, paperIsFor } from "@/lib/exams-shared";
 import type { ExamActor, LoadedExam } from "@/lib/exams";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -24,7 +24,7 @@ export async function sectionAccess(actor: ExamActor, exam: LoadedExam, section:
   if (actor.kind === "admin") return { enterAll: true, subjectIds: new Set(), canPublish: true, canPreview: true };
   const { ctx } = actor;
   if (exam.kind === "EXAM" && !exam.published) return null;
-  const isClassTeacher = ctx.classSection?.id === section.id;
+  const isClassTeacher = ctx.isClassTeacherOf(section.id);
   const isCreator = exam.kind === "TEST" && exam.teacherId === ctx.teacher.id;
   const taught = await db.subjectTeacherAssignment.findMany({ where: { teacherId: ctx.teacher.id, sectionId: section.id }, select: { subjectId: true } });
   if (!isClassTeacher && !isCreator && !taught.length) return null;
@@ -46,7 +46,7 @@ export async function loadSheet(actor: ExamActor, exam: LoadedExam, sectionId: s
   const access = await sectionAccess(actor, exam, section);
   if (!access) return null;
 
-  const forClass = exam.papers.filter((p) => !p.classId || p.classId === section.classId);
+  const forClass = exam.papers.filter((p) => paperIsFor(p, section));
   const graded = forClass.filter((p) => p.maxMarks != null);
   const [students, marks, result] = await Promise.all([
     db.student.findMany({

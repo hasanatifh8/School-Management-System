@@ -342,5 +342,6 @@ export async function setFeesFrom(studentId: string, _: ActionState, formData: F
   const backHeads = picked.length === offered.length ? [] : picked.filter((id) => valid.has(id));
   await db.student.update({ where: { id: studentId }, data: { feesFrom: month ? parseISODate(`${month}-01`) : null, feesFromHeadIds: month ? backHeads : [] } });
   revalidatePath("/admin/fees", "layout");
+  revalidatePath("/admin/fee-desk", "layout");
   return { ok: true, message: month ? `Fees are now charged from ${monthLabel(month)}.` : "Fees are charged from the admission month again." };
 }

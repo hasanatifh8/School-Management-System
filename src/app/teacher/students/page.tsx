@@ -14,7 +14,10 @@ import { requireTeacher } from "@/lib/teacher-auth";
 export default async function TeacherStudentsPage({ searchParams }: PageProps<"/teacher/students">) {
   const params = await searchParams;
   const ctx = await requireTeacher();
-  const sections = [...(ctx.classSection ? [{ section: ctx.classSection, subjects: ["Class teacher"] }] : []), ...ctx.subjectSections.filter((s) => s.section.id !== ctx.classSection?.id)];
+  const sections = [
+    ...ctx.classSections.map((section) => ({ section, subjects: ["Class teacher"] })),
+    ...ctx.subjectSections.filter((s) => !ctx.isClassTeacherOf(s.section.id)),
+  ];
   const allowed = sections.map((s) => s.section.id);
   const section = typeof params.section === "string" && allowed.includes(params.section) ? params.section : null;
   const q = typeof params.q === "string" ? params.q.trim() : "";
@@ -65,7 +68,7 @@ export default async function TeacherStudentsPage({ searchParams }: PageProps<"/
           ) : (
             <ul className="divide-y divide-line">
               {students.map((s) => {
-                const mine = s.sectionId === ctx.classSection?.id;
+                const mine = ctx.isClassTeacherOf(s.sectionId);
                 return (
                   <li key={s.id}>
                     <Link

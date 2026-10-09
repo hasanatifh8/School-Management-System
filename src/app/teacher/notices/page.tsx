@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { loadMessaging } from "@/lib/messaging/server";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { requireTeacher } from "@/lib/teacher-auth";
+import { ClassSwitcher } from "@/components/teaching/class-switcher";
 
 /** A class teacher messages their class's parents. */
 export default async function TeacherNoticesPage({ searchParams }: PageProps<"/teacher/notices">) {
@@ -25,6 +26,7 @@ export default async function TeacherNoticesPage({ searchParams }: PageProps<"/t
     : [];
   return (
     <>
+      <ClassSwitcher sections={ctx.classSections} current={ctx.classSection?.id} here="/teacher/notices" />
       <PageHeader title="Notices" subtitle={ctx.classSection ? `Notices from the school, and messages to the parents of ${sectionLabel(ctx.classSection)} by WhatsApp or SMS.` : "Notices from the school."} />
       <div className="mb-8">
         <NoticeBoard schoolId={ctx.school.id} audience="teachers" title="Notice board" empty="No notices for teachers right now." />

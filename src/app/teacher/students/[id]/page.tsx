@@ -37,9 +37,9 @@ export default async function TeacherStudentPage({ params, searchParams }: PageP
   const tab: Tab = TABS.find((t) => t.key === sp.tab)?.key ?? "overview";
   const selectedExam = typeof sp.exam === "string" ? sp.exam : undefined;
   const ctx = await requireTeacher();
-  if (!ctx.classSection) notFound();
+  if (!ctx.classSections.length) notFound();
   const student = await db.student.findFirst({
-    where: { id, schoolId: ctx.school.id, sectionId: ctx.classSection.id, status: "ACTIVE" },
+    where: { id, schoolId: ctx.school.id, sectionId: { in: ctx.classSections.map((s) => s.id) }, status: "ACTIVE" },
     include: {
       section: { include: { class: true } },
       house: true,

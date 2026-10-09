@@ -12,7 +12,7 @@ const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 import { fullName, sectionLabel } from "@/lib/queries";
 import { collectFee, setFeesFrom, setOptionalFee, setOptionalFeeFrom } from "../../actions";
 import { CollectForm } from "./collect-form";
-import { FeesFromForm } from "./fees-from-form";
+import { FeesFromForm } from "@/components/fees/fees-from-form";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 

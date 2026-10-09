@@ -85,7 +85,7 @@ function teacherValues(t: TeacherForExport) {
     experienceYears: t.experienceYears,
     joiningDate: t.joiningDate,
     monthlySalary: t.monthlySalary,
-    classTeacherOf: t.classTeacherOf ? sectionLabel(t.classTeacherOf) : null,
+    classTeacherOf: t.classTeacherOf.length ? t.classTeacherOf.map(sectionLabel).join(", ") : null,
     subjectsTaught: t.subjectAssignments.map((a) => `${a.subject.name} (${sectionLabel(a.section)})`).join(", "),
   };
   return values;

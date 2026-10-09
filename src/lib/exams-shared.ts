@@ -9,6 +9,8 @@ export type PaperInput = {
   startTime: string; // HH:MM
   endTime: string;
   classId: string; // "" = every class in the exam
+  /** One section of the class only; "" = every section of it. */
+  sectionId: string;
   subjectId: string; // "" = use the title only
   title: string;
   maxMarks: string;
@@ -21,12 +23,18 @@ export type PaperInput = {
 
 export const MAX_PAPERS = 200;
 
+/** Whether a paper is sat by a section: a paper for every class, its class, or that section only. */
+export function paperIsFor(p: { classId: string | null; sectionId?: string | null }, section: { id: string; classId: string }) {
+  return (!p.classId || p.classId === section.classId) && (!p.sectionId || p.sectionId === section.id);
+}
+
 export const emptyPaper = (): PaperInput => ({
   id: "",
   date: "",
   startTime: "09:00",
   endTime: "12:00",
   classId: "",
+  sectionId: "",
   subjectId: "",
   title: "",
   maxMarks: "",
@@ -131,6 +139,9 @@ export type PaperView = {
   startTime: string;
   endTime: string;
   classId: string | null;
+  /** One section only (its id and name), or null for the whole class. */
+  sectionId: string | null;
+  sectionName: string | null;
   subject: string; // subject name and/or title
   maxMarks: number | null;
   optional: boolean;

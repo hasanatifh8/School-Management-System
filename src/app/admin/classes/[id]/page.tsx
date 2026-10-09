@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, CalendarCheck, CalendarClock, Crown, Hash, LayoutGrid, Layers, Plus, Rocket, Trash2, Users } from "lucide-react";
+import { BookOpen, CalendarCheck, CalendarClock, Crown, Hash, Layers, LayoutGrid, Plus, Rocket, Trash2, UserCog, Users } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DialogButton } from "@/components/dialog-button";
 import { SectionAttendance, SectionTimetable } from "./section-views";
 import { Select } from "@/components/select";
+import { TeacherOptions, type TeacherChoice } from "@/components/teaching/teacher-options";
 import {
   Badge,
   ButtonLink,
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
-import { fullName, sectionLabel } from "@/lib/queries";
+import { sectionLabel } from "@/lib/queries";
 import {
   addSection,
   assignClassTeacher,
@@ -78,6 +79,9 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
         subtitle="Manage sections, curriculum and teacher assignments."
         action={
           <>
+            <ButtonLink href="/admin/classes/assign" variant="secondary" icon={UserCog}>
+              Assign teachers
+            </ButtonLink>
             <ButtonLink href={`/admin/students?classId=${schoolClass.id}`} variant="secondary" icon={Users}>
               Students
             </ButtonLink>
@@ -227,15 +231,7 @@ const VIEWS = [
   { key: "attendance", label: "Attendance", icon: CalendarCheck },
 ] as const;
 
-type Teacher = {
-  id: string;
-  firstName: string;
-  middleName: string | null;
-  lastName: string;
-  employeeCode: string;
-  classTeacherOf: { id: string; name: string; class: { name: string } } | null;
-  canTeach: { subjectId: string }[];
-};
+type Teacher = TeacherChoice;
 
 /** One section: roll numbers, class teacher and its subject teachers. */
 function SectionPanel({
@@ -260,7 +256,6 @@ function SectionPanel({
 }) {
   const assignedBySubject = new Map(section.subjectAssignments.map((a) => [a.subjectId, a.teacherId]));
   const unassigned = curriculum.filter((s) => !assignedBySubject.has(s.id)).length;
-  const bySubject = (subjectId: string) => teachers.filter((t) => t.canTeach.some((c) => c.subjectId === subjectId));
 
   return (
     <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
@@ -295,15 +290,7 @@ function SectionPanel({
         </div>
         <ActionForm syncKey={section.classTeacherId ?? ""} action={assignClassTeacher.bind(null, section.id)} compact className="flex flex-wrap items-center gap-2">
           <Select name="teacherId" defaultValue={section.classTeacherId ?? ""} className={`${selectClass} max-w-sm !py-2`}>
-            <option value="">— No class teacher —</option>
-            {teachers.map((t) => {
-              const elsewhere = t.classTeacherOf && t.classTeacherOf.id !== section.id;
-              return (
-                <option key={t.id} value={t.id} disabled={!!elsewhere}>
-                  {fullName(t)} ({t.employeeCode}){elsewhere ? ` — class teacher of ${sectionLabel(t.classTeacherOf!)}` : ""}
-                </option>
-              );
-            })}
+            <TeacherOptions teachers={teachers} forSection={section.id} empty="— No class teacher —" />
           </Select>
           <SubmitButton variant="secondary" size="sm">
             Save
@@ -315,7 +302,7 @@ function SectionPanel({
       <div className="flex flex-wrap items-center justify-between gap-2 px-6 pb-2 pt-4">
         <div>
           <h3 className="text-sm font-medium text-fg-2">Subject teachers</h3>
-          <p className="text-xs text-muted">Each subject lists only teachers who teach it (set under &ldquo;Subjects they teach&rdquo; on a teacher&apos;s profile).</p>
+          <p className="text-xs text-muted">Teachers who teach a subject are listed first; choosing anyone else adds the subject to their profile.</p>
         </div>
         {curriculum.length > 0 &&
           (unassigned ? (
@@ -342,9 +329,6 @@ function SectionPanel({
             <tbody className={tbodyClass}>
               {curriculum.map((subject) => {
                 const current = assignedBySubject.get(subject.id) ?? "";
-                const options = bySubject(subject.id);
-                // Keep showing a teacher assigned before this rule, so the row isn't silently blank.
-                const legacy = current && !options.some((t) => t.id === current) ? teachers.find((t) => t.id === current) : undefined;
                 return (
                   <tr key={subject.id}>
                     <td className={`${tdClass} w-1/3`}>
@@ -352,37 +336,18 @@ function SectionPanel({
                       <div className="font-mono text-[11px] text-subtle">{subject.code}</div>
                     </td>
                     <td className={tdClass}>
-                      {options.length === 0 && !legacy ? (
-                        <p className="text-xs text-warning">
-                          No teacher teaches {subject.name} yet.{" "}
-                          <Link href="/admin/teachers" className="font-medium text-accent-text hover:underline">
-                            Tick it on a teacher&apos;s profile
-                          </Link>
-                        </p>
-                      ) : (
                         <ActionForm syncKey={current} action={assignSubjectTeacher.bind(null, section.id, subject.id)} compact className="flex flex-wrap items-center gap-2">
                           <Select
                             name="teacherId"
                             defaultValue={current}
                             className={`${selectClass} max-w-xs !py-2 ${current ? "" : "!border-warning-line !bg-warning-soft/40"}`}
                           >
-                            <option value="">— Not assigned —</option>
-                            {options.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {fullName(t)} ({t.employeeCode})
-                              </option>
-                            ))}
-                            {legacy && (
-                              <option value={legacy.id} disabled>
-                                {fullName(legacy)} — doesn&apos;t teach {subject.name}
-                              </option>
-                            )}
+                            <TeacherOptions teachers={teachers} subject={subject} empty="— Not assigned —" />
                           </Select>
                           <SubmitButton variant="secondary" size="sm">
                             Save
                           </SubmitButton>
                         </ActionForm>
-                      )}
                     </td>
                   </tr>
                 );

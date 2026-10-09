@@ -399,7 +399,7 @@ const TOOLS: Tool[] = [
           experienceYears: t.experienceYears,
           monthlySalary: t.monthlySalary,
           joined: d(t.joiningDate),
-          classTeacherOf: t.classTeacherOf ? sectionLabel(t.classTeacherOf) : null,
+          classTeacherOf: t.classTeacherOf.length ? t.classTeacherOf.map(sectionLabel).join(", ") : null,
           teaches: t.subjectAssignments.map((s) => `${s.subject.name} (${sectionLabel(s.section)})`),
         })),
         60,

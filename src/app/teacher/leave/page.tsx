@@ -13,8 +13,8 @@ export default async function TeacherLeavePage({ searchParams }: PageProps<"/tea
       params={await searchParams}
       base="/teacher/leave"
       subtitle={
-        ctx.classSection
-          ? `Your leave, and leave for students of ${sectionLabel(ctx.classSection)}, which you approve.`
+        ctx.classSections.length
+          ? `Your leave, and leave for students of ${ctx.classSections.map(sectionLabel).join(", ")}, which you approve.`
           : "Apply for leave and follow its status. The school admin approves it."
       }
       whoOptions={ctx.classSection ? [{ value: "mine", label: "My leave" }, { value: "student", label: "My students" }] : []}

@@ -5,7 +5,7 @@ import { requireTeacher } from "@/lib/teacher-auth";
 import { TeacherPasswordForm } from "./password-form";
 
 export default async function TeacherAccountPage() {
-  const { teacher, school, classSection, subjectSections } = await requireTeacher();
+  const { teacher, school, classSections, subjectSections } = await requireTeacher();
   // Subject → sections, e.g. "Mathematics: Class 5 – A, Class 6 – B".
   const bySubject = new Map<string, string[]>();
   for (const s of subjectSections) for (const name of s.subjects) bySubject.set(name, [...(bySubject.get(name) ?? []), sectionLabel(s.section)]);
@@ -29,7 +29,7 @@ export default async function TeacherAccountPage() {
         <Card title="My classes & subjects" icon={BookOpen} description="Assigned by your school admin." className="self-start xl:col-span-2 xl:order-last">
           <dl className="space-y-4">
             <InfoItem icon={Crown} label="Class teacher of">
-              {classSection ? sectionLabel(classSection) : "Not a class teacher"}
+              {classSections.length ? classSections.map(sectionLabel).join(", ") : "Not a class teacher"}
             </InfoItem>
             <InfoItem icon={BookOpen} label="Subject teacher of">
               {bySubject.size ? (

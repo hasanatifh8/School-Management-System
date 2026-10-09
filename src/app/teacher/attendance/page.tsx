@@ -8,6 +8,7 @@ import { formatISO } from "@/lib/attendance-shared";
 import { sectionLabel } from "@/lib/queries";
 import { requireTeacher } from "@/lib/teacher-auth";
 import { clearClassHoliday, saveAttendance, setClassHoliday } from "../../admin/attendance/actions";
+import { ClassSwitcher } from "@/components/teaching/class-switcher";
 
 export default async function TeacherAttendancePage({ searchParams }: PageProps<"/teacher/attendance">) {
   const ctx = await requireTeacher();
@@ -32,6 +33,7 @@ export default async function TeacherAttendancePage({ searchParams }: PageProps<
 
   return (
     <>
+      <ClassSwitcher sections={ctx.classSections} current={ctx.classSection?.id} here="/teacher/attendance" />
       <PageHeader
         title="Attendance"
         subtitle={`${sectionLabel(section)} · ${formatISO(date)}`}

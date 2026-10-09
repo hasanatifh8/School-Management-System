@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Plus, School, Users } from "lucide-react";
+import { ArrowRight, BookOpen, Plus, School, UserCog, Users } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { Avatar, Badge, ButtonLink, EmptyState, IconTile, PageHeader, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -31,9 +31,14 @@ export default async function ClassesPage() {
         title="Classes"
         subtitle="Sections, curriculum, class teachers and subject teachers"
         action={
-          <ButtonLink href="#add-class" icon={Plus} className="lg:hidden">
-            Add class
-          </ButtonLink>
+          <>
+            <ButtonLink href="/admin/classes/assign" variant="secondary" icon={UserCog}>
+              Assign teachers
+            </ButtonLink>
+            <ButtonLink href="#add-class" icon={Plus} className="lg:hidden">
+              Add class
+            </ButtonLink>
+          </>
         }
       />
 

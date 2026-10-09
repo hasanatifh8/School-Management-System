@@ -12,7 +12,6 @@ import {
   TIME,
   paperName,
   readPrintSettings,
-  timeRange,
   type PaperInput,
   type PaperView,
 } from "@/lib/exams-shared";
@@ -35,7 +34,7 @@ export function teacherActor(ctx: TeacherContext): ExamActor {
 
 const examInclude = {
   sections: { include: { section: { include: { class: true } } } },
-  papers: { include: { subject: { select: { name: true } } }, orderBy: [{ date: "asc" }, { startTime: "asc" }] },
+  papers: { include: { subject: { select: { name: true } }, section: { select: { name: true } } }, orderBy: [{ date: "asc" }, { startTime: "asc" }] },
   session: { select: { name: true, startDate: true, endDate: true } },
 } satisfies Prisma.ExamInclude;
 
@@ -72,6 +71,8 @@ export function paperViews(exam: LoadedExam): PaperView[] {
     startTime: p.startTime,
     endTime: p.endTime,
     classId: p.classId,
+    sectionId: p.sectionId,
+    sectionName: p.section?.name ?? null,
     subject: paperName(p.subject?.name, p.title) + (p.optional ? " (Optional)" : ""),
     maxMarks: p.maxMarks,
     optional: p.optional,
@@ -88,6 +89,7 @@ export function paperInputs(exam: LoadedExam): PaperInput[] {
     startTime: p.startTime,
     endTime: p.endTime,
     classId: p.classId ?? "",
+    sectionId: p.sectionId ?? "",
     subjectId: p.subjectId ?? "",
     title: p.title ?? "",
     maxMarks: p.maxMarks == null ? "" : String(p.maxMarks),
@@ -161,7 +163,7 @@ export async function subjectOptions(actor: ExamActor, sectionIds: string[]) {
   for (const s of sections) {
     const curriculum = s.class.subjects.map((cs) => cs.subjectId);
     if (actor.kind === "admin") perSection.set(s.id, new Set(subjects.map((x) => x.id)));
-    else if (actor.ctx.classSection?.id === s.id) perSection.set(s.id, new Set(curriculum));
+    else if (actor.ctx.isClassTeacherOf(s.id)) perSection.set(s.id, new Set(curriculum));
     else {
       const taught = await db.subjectTeacherAssignment.findMany({ where: { teacherId: actor.ctx.teacher.id, sectionId: s.id }, select: { subjectId: true } });
       perSection.set(s.id, new Set(taught.map((t) => t.subjectId)));
@@ -287,6 +289,7 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
       startTime: String(r?.startTime ?? "").trim(),
       endTime: String(r?.endTime ?? "").trim(),
       classId: String(r?.classId ?? ""),
+      sectionId: r?.classId ? String(r?.sectionId ?? "") : "",
       subjectId: String(r?.subjectId ?? ""),
       title: String(r?.title ?? "").trim(),
       maxMarks: String(r?.maxMarks ?? "").trim(),
@@ -303,6 +306,9 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
   const classes = examClasses(exam);
   const classIds = new Set(classes.map((c) => c.id));
   const className = new Map(classes.map((c) => [c.id, c.name]));
+  // The exam's sections, and their class, for papers set for one section.
+  const sectionClass = new Map(exam.sections.map((s) => [s.sectionId, s.section.classId]));
+  const sectionName = new Map(exam.sections.map((s) => [s.sectionId, `${s.section.class.name} – ${s.section.name}`]));
   const { subjects, allowed } = await subjectOptions(actor, exam.sections.map((s) => s.sectionId));
   const subjectName = new Map(subjects.map((s) => [s.id, s.name]));
   const start = isoDate(exam.session.startDate);
@@ -320,6 +326,7 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     if (!TIME.test(r.endTime)) fail(i, "endTime", "Choose an end time");
     else if (TIME.test(r.startTime) && minutes(r.endTime) <= minutes(r.startTime)) fail(i, "endTime", "Must be after the start time");
     if (r.classId && !classIds.has(r.classId)) fail(i, "classId", "This class isn't in the exam");
+    else if (r.sectionId && sectionClass.get(r.sectionId) !== r.classId) fail(i, "classId", "This section isn't in the exam");
     if (!r.subjectId && !r.title) fail(i, "subjectId", "Choose a subject or type a paper name");
     if (r.subjectId) {
       if (!subjectName.has(r.subjectId)) fail(i, "subjectId", "Subject not found");
@@ -340,17 +347,17 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     if (r.notes.length > 120) fail(i, "notes", "Keep it under 120 characters");
   });
 
-  // A class can't sit two papers at once. A paper for every class clashes with all of them.
+  // Papers may run at the same time for the same class (e.g. Maths and Biology for
+  // students who take one or the other), but a subject is set only once for the same students.
   if (!Object.keys(errors).length) {
+    const overlaps = (a: PaperInput, b: PaperInput) =>
+      (!a.classId || !b.classId || a.classId === b.classId) && (!a.sectionId || !b.sectionId || a.sectionId === b.sectionId);
+    const scope = (r: PaperInput) => (r.sectionId ? sectionName.get(r.sectionId) : r.classId ? className.get(r.classId) : "every class");
     for (let i = 0; i < rows.length; i++) {
       for (let j = 0; j < i; j++) {
         const [a, b] = [rows[i], rows[j]];
-        if (a.date !== b.date) continue;
-        if (a.classId && b.classId && a.classId !== b.classId) continue;
-        if (minutes(a.startTime) >= minutes(b.endTime) || minutes(b.startTime) >= minutes(a.endTime)) continue;
-        const who = a.classId || b.classId ? className.get(a.classId || b.classId) : "every class";
-        const other = paperName(subjectName.get(b.subjectId), b.title);
-        fail(i, "startTime", `Clashes with row ${j + 1} (${other}, ${timeRange(b.startTime, b.endTime)}) for ${who}`);
+        if (!a.subjectId || a.subjectId !== b.subjectId || (a.title || "") !== (b.title || "") || !overlaps(a, b)) continue;
+        fail(i, "subjectId", `${paperName(subjectName.get(a.subjectId), a.title)} is already on row ${j + 1} for ${scope(b)}`);
         break;
       }
     }
@@ -376,7 +383,7 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     kept.add(r.id);
     const m = marked.get(r.id);
     if (!m) return;
-    if ((r.classId || null) !== before.classId) fail(i, "classId", "Marks are entered for this paper, so its class can't change");
+    if ((r.classId || null) !== before.classId || (r.sectionId || null) !== before.sectionId) fail(i, "classId", "Marks are entered for this paper, so its class can't change");
     if ((r.subjectId || null) !== before.subjectId) fail(i, "subjectId", "Marks are entered for this paper, so its subject can't change");
     const max = r.maxMarks ? Number(r.maxMarks) : null;
     if (max !== before.maxMarks) {
@@ -404,6 +411,7 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     startTime: r.startTime,
     endTime: r.endTime,
     classId: r.classId || null,
+    sectionId: r.sectionId || null,
     subjectId: r.subjectId || null,
     title: r.title || null,
     maxMarks: r.maxMarks ? Number(r.maxMarks) : null,

@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { setClassTeacher, setSubjectTeacher } from "@/lib/teaching";
 import { getCurrentSchool } from "@/lib/school";
-import { fullName, sectionLabel } from "@/lib/queries";
+import { sectionLabel } from "@/lib/queries";
 import { type ActionState, requiredText, validationError } from "@/lib/action-state";
 import { autoAssignRollNumbers } from "@/lib/enrollments";
 import { getCurrentSession } from "@/lib/sessions";
@@ -166,70 +167,18 @@ export async function setClassSubjects(
   };
 }
 
-export async function assignClassTeacher(
-  sectionId: string,
-  _: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
+export async function assignClassTeacher(sectionId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const school = await getCurrentSchool();
-  await findSection(school.id, sectionId);
-  const teacherId = String(formData.get("teacherId") ?? "") || null;
-
-  if (teacherId) {
-    const teacher = await db.teacher.findFirst({
-      where: { id: teacherId, schoolId: school.id, status: "ACTIVE" },
-      include: { classTeacherOf: { include: { class: true } } },
-    });
-    if (!teacher) return { error: "Teacher not found." };
-    if (teacher.classTeacherOf && teacher.classTeacherOf.id !== sectionId) {
-      return {
-        error: `${fullName(teacher)} is already class teacher of ${sectionLabel(teacher.classTeacherOf)}. Unassign them there first.`,
-      };
-    }
-  }
-
-  await db.section.update({ where: { id: sectionId }, data: { classTeacherId: teacherId } });
-  revalidatePath("/admin", "layout");
-  return { ok: true, message: teacherId ? "Class teacher assigned." : "Class teacher removed." };
+  const result = await setClassTeacher(school.id, sectionId, String(formData.get("teacherId") ?? "") || null);
+  if (result.ok) revalidatePath("/admin", "layout");
+  return result;
 }
 
-export async function assignSubjectTeacher(
-  sectionId: string,
-  subjectId: string,
-  _: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
+export async function assignSubjectTeacher(sectionId: string, subjectId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const school = await getCurrentSchool();
-  const section = await findSection(school.id, sectionId);
-  const teacherId = String(formData.get("teacherId") ?? "") || null;
-
-  const taught = await db.classSubject.findUnique({
-    where: { classId_subjectId: { classId: section.classId, subjectId } },
-  });
-  if (!taught) return { error: "This subject is not part of the class curriculum." };
-
-  if (!teacherId) {
-    await db.subjectTeacherAssignment.deleteMany({ where: { sectionId, subjectId } });
-  } else {
-    const teacher = await db.teacher.findFirst({
-      where: { id: teacherId, schoolId: school.id, status: "ACTIVE" },
-      include: { canTeach: { where: { subjectId }, include: { subject: { select: { name: true } } } } },
-    });
-    if (!teacher) return { error: "Teacher not found." };
-    // Only teachers who teach this subject (set on their profile) can be its teacher here.
-    if (!teacher.canTeach.length) {
-      const subject = await db.subject.findUnique({ where: { id: subjectId }, select: { name: true } });
-      return { error: `${fullName(teacher)} doesn't teach ${subject?.name ?? "this subject"}. Add it under "Subjects they teach" on their profile first.` };
-    }
-    await db.subjectTeacherAssignment.upsert({
-      where: { sectionId_subjectId: { sectionId, subjectId } },
-      create: { sectionId, subjectId, teacherId },
-      update: { teacherId },
-    });
-  }
-
-  revalidatePath("/admin", "layout");
-  return { ok: true, message: "Saved." };
+  const result = await setSubjectTeacher(school.id, sectionId, subjectId, String(formData.get("teacherId") ?? "") || null);
+  if (result.ok) revalidatePath("/admin", "layout");
+  return result;
 }
 
 /** Numbers the section's active students A–Z from 1 ("all"), or only those without a number ("missing"). */
@@ -249,4 +198,12 @@ export async function assignRollNumbers(sectionId: string, mode: "all" | "missin
         ? `Numbered ${count} student(s) in ${sectionLabel(section)} from 1 (A–Z).`
         : `Gave roll numbers to ${count} student(s) without one.`,
   };
+}
+
+/** One cell of the Assign teachers grid: a section's class teacher (no subject) or a subject's teacher; blank = none. */
+export async function saveTeacherCell(sectionId: string, subjectId: string | null, teacherId: string): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const result = subjectId ? await setSubjectTeacher(school.id, sectionId, subjectId, teacherId || null) : await setClassTeacher(school.id, sectionId, teacherId || null);
+  if (result.ok) revalidatePath("/admin", "layout");
+  return result;
 }

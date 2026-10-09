@@ -6,6 +6,7 @@ import { sectionLabel } from "@/lib/queries";
 import { requireTeacher } from "@/lib/teacher-auth";
 import { loadSectionTimetable } from "@/lib/timetable";
 import { saveClassTimetable } from "../actions";
+import { ClassSwitcher } from "@/components/teaching/class-switcher";
 
 /** The class teacher's editor for their own section. */
 export default async function EditClassTimetablePage() {
@@ -17,6 +18,7 @@ export default async function EditClassTimetablePage() {
 
   return (
     <>
+      <ClassSwitcher sections={ctx.classSections} current={ctx.classSection?.id} here="/teacher/timetable/class" />
       <PageHeader
         title={`${label} timetable`}
         subtitle="Choose a subject for each period; its teacher is filled in for you."

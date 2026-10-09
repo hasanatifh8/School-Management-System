@@ -1,16 +1,20 @@
 import Link from "next/link";
-import { ArrowLeft, Check, CircleCheck, HandCoins, IndianRupee, LayoutList, Phone, Receipt, SearchCheck, Wallet } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, ChevronDown, CircleCheck, HandCoins, IndianRupee, LayoutList, Phone, Receipt, SearchCheck, Wallet } from "lucide-react";
+import { FeesFromForm } from "@/components/fees/fees-from-form";
 import { Avatar, Badge, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
-import { MODE_LABELS, billMonthFor, billOf, deskMonths, rupees, type DeskMonthStatus } from "@/lib/fees-shared";
+import { MODE_LABELS, billMonthFor, billOf, deskMonths, monthLabel, rupees, sessionMonths, type DeskMonthStatus } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { setFeesFrom } from "../fees/actions";
 import type { DeskStudent } from "./actions";
 import { DeskSearch } from "./desk-search";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+const longDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
  * The Fee desk: a cashier's one-screen counter. Find a student on the left;
@@ -146,6 +150,12 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
   const { student, dues, totals, receipts, session } = account;
   const name = fullName(student);
   const months = deskMonths(dues, session.startDate.toISOString().slice(0, 10), today);
+  // Admitted after the session's first month: fees can start from an earlier month, for chosen fees.
+  const admittedLate = isoDay(student.admissionDate).slice(0, 7) > isoDay(session.startDate).slice(0, 7);
+  const classId = student.section?.classId;
+  const backChoices = account.heads
+    .filter((h) => h.frequency !== "ONE_TIME" && (h.optional ? account.optionalHeads.some((o) => o.id === h.id && o.added) : classId && h.amounts[classId]))
+    .map((h) => ({ id: h.id, name: h.name }));
   // The oldest month still owing (due by now), collected first.
   // The oldest month still owing (due by now); a part-paid one is collected on the bill its balance moved to.
   const owing = months.find((m) => m.status === "OVERDUE" || m.status === "DUE" || (m.status === "PARTIAL" && (m.key === "arrears" || m.key <= today.slice(0, 7))));
@@ -192,6 +202,40 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
           )}
         </div>
       </section>
+
+      {/* A mid-session admission is charged from the admission month, unless changed here (as on the classic fees page). */}
+      {student.status === "ACTIVE" && (admittedLate || student.feesFrom) && (
+        <details className="group rounded-xl border border-line bg-surface px-4 py-2.5 text-sm shadow-card">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 text-muted [&::-webkit-details-marker]:hidden">
+            <CalendarClock className="h-4 w-4 shrink-0 text-subtle" aria-hidden />
+            <span>
+              Admitted {longDate.format(student.admissionDate)} · fees charged from{" "}
+              <strong className="font-medium text-fg">{student.feesFrom ? monthLabel(isoDay(student.feesFrom).slice(0, 7)) : "the admission month"}</strong>
+              {student.feesFrom &&
+                student.feesFromHeadIds.length > 0 &&
+                ` (${backChoices
+                  .filter((h) => student.feesFromHeadIds.includes(h.id))
+                  .map((h) => h.name)
+                  .join(", ")} only before admission)`}
+            </span>
+            <span className="ml-auto inline-flex items-center gap-1 font-medium text-accent-text">
+              <span className="group-open:hidden">Change</span>
+              <span className="hidden group-open:inline">Close</span>
+              <ChevronDown className="h-4 w-4 transition group-open:rotate-180" aria-hidden />
+            </span>
+          </summary>
+          <div className="mt-3 border-t border-line pt-3">
+            <FeesFromForm
+              action={setFeesFrom.bind(null, student.id)}
+              months={sessionMonths(isoDay(session.startDate))}
+              admissionMonth={isoDay(student.admissionDate).slice(0, 7)}
+              current={student.feesFrom ? isoDay(student.feesFrom).slice(0, 7) : ""}
+              heads={backChoices}
+              picked={student.feesFromHeadIds}
+            />
+          </div>
+        </details>
+      )}
 
       {student.status !== "ACTIVE" && (
         <Card>
