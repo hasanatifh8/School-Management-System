@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import { MapPin, Trash2, Users } from "lucide-react";
+import { MapPin, Printer, Trash2, Users } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Card, EmptyState, PageHeader, PersonCell } from "@/components/ui";
+import { ButtonLink, Card, EmptyState, PageHeader, PersonCell } from "@/components/ui";
 import { db } from "@/lib/db";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
@@ -37,6 +37,11 @@ export default async function RoutePage({ params }: PageProps<"/admin/transport/
         title={`Route ${route.routeNumber}`}
         subtitle={route.name ?? undefined}
         breadcrumbs={[{ label: "Transport", href: "/admin/transport" }, { label: route.routeNumber }]}
+        action={
+          <ButtonLink href={`/admin/transport/${route.id}/print`} variant="secondary" icon={Printer}>
+            Print route
+          </ButtonLink>
+        }
       />
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
