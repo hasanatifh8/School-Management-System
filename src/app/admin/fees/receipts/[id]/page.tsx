@@ -47,7 +47,8 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
   let run: { first: string; last: string; count: number } | null = null;
   // A fee paid only in part on this receipt says so: "Oct 2026 (part of ₹2,000)".
   const isPart = (i: { amount: number; discount: number; charged: number }) => i.charged > 0 && i.amount + i.discount < i.charged;
-  for (const item of receipt.items) {
+  // A line that only pays (or waives) a late fee left from a part payment shows in the late fee line.
+  for (const item of receipt.items.filter((i) => i.amount + i.discount > 0)) {
     const prev = lines.at(-1);
     if (prev && prev.name === item.headName && run && !isPart(item) && !prev.period.includes("part of")) {
       run.last = item.periodLabel;
@@ -91,7 +92,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
           <p className="text-[8pt] text-slate-600">{[school.phone, school.email].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="text-right">
-          <p className="rounded bg-slate-900 px-2 py-0.5 text-[8pt] font-semibold uppercase tracking-wider text-white">Fee receipt</p>
+          <p className="rounded bg-slate-900 px-2 py-0.5 text-[8pt] font-semibold uppercase tracking-wider text-white">{receipt.waiver ? "Dues waived" : "Fee receipt"}</p>
           <p className="mt-1 text-[7.5pt] uppercase tracking-wider text-slate-500">{label}</p>
         </div>
       </header>
@@ -181,7 +182,11 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
         <div className="space-y-[0.5mm]">
           <p>
             <span className="text-slate-500">Paid by:</span>{" "}
-            {receipt.total ? `${MODE_LABELS[receipt.mode]}${receipt.reference ? ` · ${receipt.reference}` : ""}` : "Nothing to pay (fully discounted)"}
+            {receipt.waiver
+              ? "Not a payment: dues waived by the school"
+              : receipt.total
+                ? `${MODE_LABELS[receipt.mode]}${receipt.reference ? ` · ${receipt.reference}` : ""}`
+                : "Nothing to pay (fully discounted)"}
           </p>
           {receipt.lateWaived > 0 && (
             <p>
@@ -193,13 +198,15 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               <span className="text-slate-500">Remarks:</span> {receipt.remarks}
             </p>
           )}
-          {discount > 0 && (
+          {(discount > 0 || receipt.waiver) && (
             <p>
-              <span className="text-slate-500">Discount of {rupees(discount)}:</span> {receipt.discountNote}
+              <span className="text-slate-500">
+                {receipt.waiver ? "Waived" : "Discount of"} {rupees(discount + (receipt.waiver ? receipt.lateWaived : 0))}:
+              </span> {receipt.discountNote}
             </p>
           )}
           <p>
-            <span className="text-slate-500">Received by:</span> {receipt.collectedBy}
+            <span className="text-slate-500">{receipt.waiver ? "Waived by" : "Received by"}:</span> {receipt.collectedBy}
           </p>
           {receipt.cancelledAt && (
             <p className="font-semibold text-rose-600">

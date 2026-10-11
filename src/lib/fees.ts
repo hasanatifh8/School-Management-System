@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { MODE_LABELS, MONTH_NAMES, deskMonths, dueKey, dueTotals, headAmount, rupees, stopFare, studentDues, type DueItem, type FeeHeadInfo } from "@/lib/fees-shared";
+import { MODE_LABELS, MONTH_NAMES, deskMonths, dueKey, dueTotals, headAmount, rupees, stopFare, studentDues, type DueItem, type FeeHeadInfo, type LateLog } from "@/lib/fees-shared";
 import { getPortalSchool, getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 import { ensureTransportFee } from "@/lib/transport-fees";
@@ -71,13 +71,26 @@ async function paidByStudent(sessionId: string, studentIds?: string[]) {
       head: { sessionId },
       receipt: { cancelledAt: null, ...(studentIds ? { studentId: { in: studentIds } } : { studentId: { not: null } }) },
     },
-    select: { headId: true, period: true, amount: true, discount: true, lateFee: true, charged: true, receipt: { select: { studentId: true } } },
+    select: {
+      headId: true,
+      period: true,
+      amount: true,
+      discount: true,
+      lateFee: true,
+      lateCharged: true,
+      lateWaived: true,
+      lateMonths: true,
+      charged: true,
+      receipt: { select: { studentId: true, waiver: true } },
+    },
   });
   /** The price each instalment was paid at (the latest payment's), so it isn't repriced later. */
   const priced = new Map<string, Map<string, number>>();
   const paid = new Map<string, Map<string, number>>();
   const discounts = new Map<string, Map<string, number>>();
   const lateFees = new Map<string, Map<string, number>>();
+  const lateLog = new Map<string, Map<string, LateLog>>();
+  const waived = new Map<string, Map<string, number>>();
   const add = (map: Map<string, Map<string, number>>, sid: string, k: string, n: number) => {
     if (!map.has(sid)) map.set(sid, new Map());
     map.get(sid)!.set(k, (map.get(sid)!.get(k) ?? 0) + n);
@@ -87,12 +100,18 @@ async function paidByStudent(sessionId: string, studentIds?: string[]) {
     add(paid, i.receipt.studentId!, k, i.amount);
     if (i.discount) add(discounts, i.receipt.studentId!, k, i.discount);
     if (i.lateFee) add(lateFees, i.receipt.studentId!, k, i.lateFee);
+    if (i.receipt.waiver && i.discount + i.lateWaived) add(waived, i.receipt.studentId!, k, i.discount + i.lateWaived);
+    if (i.lateCharged || i.lateWaived || i.lateMonths) {
+      if (!lateLog.has(i.receipt.studentId!)) lateLog.set(i.receipt.studentId!, new Map());
+      const log = lateLog.get(i.receipt.studentId!)!.get(k) ?? { charged: 0, waived: 0, months: 0 };
+      lateLog.get(i.receipt.studentId!)!.set(k, { charged: log.charged + i.lateCharged, waived: log.waived + i.lateWaived, months: Math.max(log.months, i.lateMonths) });
+    }
     if (i.charged) {
       if (!priced.has(i.receipt.studentId!)) priced.set(i.receipt.studentId!, new Map());
       priced.get(i.receipt.studentId!)!.set(k, i.charged);
     }
   }
-  return { paid, discounts, lateFees, priced };
+  return { paid, discounts, lateFees, lateLog, waived, priced };
 }
 
 async function optInsByStudent(sessionId: string, studentIds?: string[]) {
@@ -145,6 +164,8 @@ export async function loadStudentAccount(schoolId: string, studentId: string) {
     paid: paid.paid.get(student.id) ?? new Map(),
     discounts: paid.discounts.get(student.id),
     lateFeesPaid: paid.lateFees.get(student.id),
+    lateLog: paid.lateLog.get(student.id),
+    waived: paid.waived.get(student.id),
     priced: paid.priced.get(student.id),
     backHeadIds: student.feesFromHeadIds,
     session: { start: isoDate(session.startDate), name: session.name },
@@ -220,11 +241,13 @@ async function previousSessionArrears(
     paid: paid.paid.get(student.id) ?? new Map(),
     discounts: paid.discounts.get(student.id),
     lateFeesPaid: paid.lateFees.get(student.id),
+    lateLog: paid.lateLog.get(student.id),
+    waived: paid.waived.get(student.id),
     priced: paid.priced.get(student.id),
     session: { start, name: previous.name },
     today,
   })
-    .filter((d) => d.balance > 0)
+    .filter((d) => d.balance + d.lateLeft > 0)
     .map((d) => ({ ...d, arrears: previous.name, label: `${d.label} · ${previous.name}` }));
 }
 
@@ -262,6 +285,8 @@ export async function outstandingByStudent(schoolId: string, where: Prisma.Stude
       paid: paid.paid.get(s.id) ?? new Map(),
       discounts: paid.discounts.get(s.id),
       lateFeesPaid: paid.lateFees.get(s.id),
+      lateLog: paid.lateLog.get(s.id),
+      waived: paid.waived.get(s.id),
       priced: paid.priced.get(s.id),
       backHeadIds: s.feesFromHeadIds,
       session: { start: isoDate(session.startDate), name: session.name },
@@ -314,6 +339,8 @@ export async function monthlyFeeTrend(schoolId: string) {
       paid: paid.paid.get(s.id) ?? new Map(),
       discounts: paid.discounts.get(s.id),
       lateFeesPaid: paid.lateFees.get(s.id),
+      lateLog: paid.lateLog.get(s.id),
+      waived: paid.waived.get(s.id),
       priced: paid.priced.get(s.id),
       backHeadIds: s.feesFromHeadIds,
       session: { start, name: session.name },
@@ -343,14 +370,15 @@ export async function monthlyFeeTrend(schoolId: string) {
   return months;
 }
 
-/** Next receipt number for the session, e.g. "2026-27/0001". */
-export async function nextReceiptNumber(tx: Prisma.TransactionClient, schoolId: string, sessionName: string) {
+/** Next receipt number for the session, e.g. "2026-27/0001"; dues waivers count on their own, "2026-27/W0001". */
+export async function nextReceiptNumber(tx: Prisma.TransactionClient, schoolId: string, sessionName: string, waiver = false) {
+  const key = `${waiver ? "waiver" : "receipt"}:${sessionName}`;
   const counter = await tx.counter.upsert({
-    where: { schoolId_key: { schoolId, key: `receipt:${sessionName}` } },
-    create: { schoolId, key: `receipt:${sessionName}`, value: 1 },
+    where: { schoolId_key: { schoolId, key } },
+    create: { schoolId, key, value: 1 },
     update: { value: { increment: 1 } },
   });
-  return `${sessionName}/${String(counter.value).padStart(4, "0")}`;
+  return `${sessionName}/${waiver ? "W" : ""}${String(counter.value).padStart(4, "0")}`;
 }
 
 /**
@@ -412,9 +440,9 @@ export async function loadLedger(schoolId: string, studentId: string) {
     const late = r.items.reduce((n, i) => n + i.lateFee, 0);
     const discount = r.items.reduce((n, i) => n + i.discount, 0);
     if (late) entries.push({ date, kind: "LATE", particulars: "Late fee", detail: r.lateWaived ? `${rupees(late + r.lateWaived)} due, ${rupees(r.lateWaived)} waived` : undefined, debit: late, credit: 0, receipt });
-    if (r.lateWaived) entries.push({ date, kind: "WAIVER", particulars: `Late fee waived · ${rupees(r.lateWaived)}`, detail: `By ${r.collectedBy}`, debit: 0, credit: 0, receipt });
+    if (r.lateWaived) entries.push({ date, kind: "WAIVER", particulars: `Late fee waived · ${rupees(r.lateWaived)}`, detail: r.waiver && r.discountNote ? `By ${r.collectedBy}: ${r.discountNote}` : `By ${r.collectedBy}`, debit: 0, credit: 0, receipt });
     if (r.total) entries.push({ date, kind: "PAYMENT", particulars: `Payment received · ${MODE_LABELS[r.mode]}`, detail: r.reference ? `Ref ${r.reference}` : undefined, debit: 0, credit: r.total, receipt });
-    if (discount) entries.push({ date, kind: "DISCOUNT", particulars: "Discount", detail: r.discountNote ?? undefined, debit: 0, credit: discount, receipt });
+    if (discount) entries.push({ date, kind: "DISCOUNT", particulars: r.waiver ? "Dues waived" : "Discount", detail: r.discountNote ?? undefined, debit: 0, credit: discount, receipt });
   }
   // Late fee owed today on what is still unpaid.
   const lateDue = dues.reduce((n, d) => n + d.lateFee, 0);

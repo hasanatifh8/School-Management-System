@@ -8,7 +8,7 @@ import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { type ReceiptLine, receiptLine, saveReceipt } from "@/lib/fee-receipts";
 import { getFeesAccess, loadStudentAccount, requireFeesManager } from "@/lib/fees";
-import { FREQUENCIES, PAYMENT_MODES, dueKey, lateFeeOwed, rupees, monthLabel, sessionMonths } from "@/lib/fees-shared";
+import { FREQUENCIES, PAYMENT_MODES, dueKey, lateFeeOwed, lateMonthCount, rupees, monthLabel, sessionMonths } from "@/lib/fees-shared";
 
 const MAX_AMOUNT = 10_000_000; // ₹1 crore per instalment is plenty
 
@@ -285,11 +285,16 @@ export async function collectFee(studentId: string, _: ActionState, formData: Fo
     if (!Number.isInteger(amount) || amount < 0 || !Number.isInteger(discount) || discount < 0) return { error: `Enter whole rupees for ${item.headName} (${item.label}).` };
     if (amount + discount > item.balance) return { error: `${item.headName} (${item.label}): only ${rupees(item.balance)} is left, including any discount.` };
     if (amount + discount > 0) {
-      // Late only if paid after the due date (or admission), going by the payment date entered.
+      // Late only if paid after the due date (or admission), going by the payment date entered;
+      // a late fee left from an earlier part payment is taken (or waived) with it.
       const due = lateFeeOwed(item, date);
-      const lateFee = waiveLateFee ? 0 : due;
-      if (waiveLateFee) lateWaived += due;
-      lines.push(receiptLine(item, amount, discount, lateFee));
+      const months = lateMonthCount(item, date);
+      if (waiveLateFee) {
+        lateWaived += due + item.lateLeft;
+        lines.push(receiptLine(item, amount, discount, 0, { charged: 0, waived: item.lateLeft, months }));
+      } else {
+        lines.push(receiptLine(item, amount, discount, due + item.lateLeft, { charged: due, months }));
+      }
     }
   }
   if (!lines.length) return { error: "Choose at least one fee and enter the amount paid." };

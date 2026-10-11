@@ -191,7 +191,7 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
   if (!receipt) return null;
   const { doc, regular, bold } = await newDoc(`Fee receipt ${receipt.number}`);
   const logo = await schoolLogo(doc, schoolId);
-  const w = new Writer(doc, regular, bold, letterhead(receipt.school, logo, "Fee receipt"));
+  const w = new Writer(doc, regular, bold, letterhead(receipt.school, logo, receipt.waiver ? "Dues waived" : "Fee receipt"));
 
   details(w, [
     ["Receipt no.", receipt.number],
@@ -206,6 +206,7 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
   const discount = receipt.items.reduce((n, i) => n + i.discount, 0);
   const lateFee = receipt.items.reduce((n, i) => n + i.lateFee, 0);
   const lateCount = receipt.items.filter((i) => i.lateFee > 0).length;
+  const feeItems = receipt.items.filter((i) => i.amount + i.discount > 0);
   const cols = [
     { label: "#", w: 26 },
     { label: "Fee", w: 235 },
@@ -216,15 +217,16 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
     cols,
     [
       // Each fee at its full amount; the discount comes off the total, once.
-      ...receipt.items.map((i, n) => ({
+      // A line that only pays (or waives) a late fee left from a part payment shows in the late fee line.
+      ...feeItems.map((i, n) => ({
         cells: [String(n + 1), i.headName, i.charged > 0 && i.amount + i.discount < i.charged ? `${i.periodLabel} (part of ${rupees(i.charged)})` : i.periodLabel, rupees(i.amount + i.discount)],
       })),
       // Late fees collected, as one line (the total already includes them).
-      ...(lateFee ? [{ cells: [String(receipt.items.length + 1), "Late fee", `${lateCount} late instalment${lateCount === 1 ? "" : "s"}`, rupees(lateFee)] }] : []),
+      ...(lateFee ? [{ cells: [String(feeItems.length + 1), "Late fee", `${lateCount} late instalment${lateCount === 1 ? "" : "s"}`, rupees(lateFee)] }] : []),
       ...(discount
         ? [
             { cells: ["", "Subtotal", "", rupees(receipt.total + discount)] },
-            { cells: ["", "Discount", "", `- ${rupees(discount)}`] },
+            { cells: ["", receipt.waiver ? "Waived" : "Discount", "", `- ${rupees(discount)}`] },
           ]
         : []),
     ],
@@ -248,10 +250,10 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
   }
   w.y -= 4;
 
-  const notes: [string, string][] = [["Paid by", receipt.total ? `${MODE_LABELS[receipt.mode]}${receipt.reference ? ` · ${receipt.reference}` : ""}` : "Nothing to pay (fully discounted)"]];
+  const notes: [string, string][] = [["Paid by", receipt.waiver ? "Not a payment: dues waived by the school" : receipt.total ? `${MODE_LABELS[receipt.mode]}${receipt.reference ? ` · ${receipt.reference}` : ""}` : "Nothing to pay (fully discounted)"]];
   if (receipt.lateWaived) notes.push(["Late fee waived", rupees(receipt.lateWaived)]);
   if (receipt.remarks) notes.push(["Remarks", receipt.remarks]);
-  if (discount) notes.push([`Discount ${rupees(discount)}`, receipt.discountNote ?? ""]);
+  if (discount || receipt.waiver) notes.push([`${receipt.waiver ? "Waived" : "Discount"} ${rupees(discount + (receipt.waiver ? receipt.lateWaived : 0))}`, receipt.discountNote ?? ""]);
   notes.push(["Received by", receipt.collectedBy]);
   for (const [k, v] of notes) {
     w.text(`${k}:`, M, { size: 8.5, color: MUTED });
@@ -275,7 +277,7 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
 
 /* ───────────────────────── Ledger ───────────────────────── */
 
-const STATUS_LABEL = { PAID: "Paid", PARTIAL: "Part paid", OVERDUE: "Overdue", DUE: "Due", UPCOMING: "Upcoming", NONE: "—" } as const;
+const STATUS_LABEL = { PAID: "Paid", WAIVED: "Waived", PARTIAL: "Part paid", OVERDUE: "Overdue", DUE: "Due", UPCOMING: "Upcoming", NONE: "—" } as const;
 const KIND_TAG: Partial<Record<Ledger["statement"][number]["kind"], string>> = {
   OPENING: "Brought forward",
   LATE: "Late fee",

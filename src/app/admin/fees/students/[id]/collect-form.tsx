@@ -66,7 +66,7 @@ export function CollectForm({
   const [payDate, setPayDate] = useState(today);
   const [state, formAction, pending] = useActionState(action, {});
   /** Late fee for an instalment if paid on the payment date entered (as the server works it out). */
-  const lateOf = (d: DueItem) => lateFeeOwed(d, payDate);
+  const lateOf = (d: DueItem) => d.lateLeft + lateFeeOwed(d, payDate);
   const lateIn = (items: DueItem[]) => items.reduce((n, d) => n + lateOf(d), 0);
 
   const chosen = open.filter((d) => selected.has(key(d)));

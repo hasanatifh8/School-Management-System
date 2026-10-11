@@ -818,6 +818,7 @@ model FeeReceipt {
   discountNote String? // why a discount was given (required when any line has one)
   lateWaived   Int         @default(0) // late fee the collector chose not to charge (whole or some months)
   feeNote      String? // how fees before a mid-session admission were handled, as at this payment
+  waiver       Boolean     @default(false) // not a payment: an admin wrote off dues (total 0, reason in discountNote)
 
   school  School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   session AcademicSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -840,6 +841,9 @@ model FeeReceiptItem {
   discount    Int     @default(0) // waived off this instalment; it counts as settled
   lateFee     Int     @default(0) // late fee collected with this instalment (on top of `amount`)
   charged     Int     @default(0) // the instalment's full amount when this was paid; it keeps that price later (0 = not recorded)
+  lateCharged Int     @default(0) // late fee fixed on the instalment by this payment; owed until paid (lateFee) or waived (lateWaived)
+  lateWaived  Int     @default(0) // late fee already fixed on the instalment that this receipt wrote off
+  lateMonths  Int     @default(0) // late months counted from the due date up to this payment (charged or waived), so none is charged twice
 
   receipt FeeReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   head    FeeHead?   @relation(fields: [headId], references: [id], onDelete: SetNull)

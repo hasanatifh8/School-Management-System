@@ -11,10 +11,32 @@ import { fullName, sectionLabel } from "@/lib/queries";
 type Account = NonNullable<Awaited<ReturnType<typeof loadStudentAccount>>>;
 type Access = Awaited<ReturnType<typeof getFeesAccess>>;
 
-export type ReceiptLine = { headId: string; headName: string; period: string; periodLabel: string; amount: number; discount: number; lateFee: number; charged: number };
+export type ReceiptLine = {
+  headId: string;
+  headName: string;
+  period: string;
+  periodLabel: string;
+  amount: number;
+  discount: number;
+  lateFee: number;
+  charged: number;
+  lateCharged: number;
+  lateWaived: number;
+  lateMonths: number;
+};
 
-/** One receipt line for an instalment. */
-export function receiptLine(item: DueItem, amount: number, discount: number, lateFee: number): ReceiptLine {
+/**
+ * One receipt line for an instalment. `late` books its late fee: the new late
+ * fee fixed now (owed until paid), late fee fixed earlier written off now, and
+ * the late months counted so far, so none is charged twice.
+ */
+export function receiptLine(
+  item: DueItem,
+  amount: number,
+  discount: number,
+  lateFee: number,
+  late: { charged: number; waived?: number; months: number },
+): ReceiptLine {
   return {
     headId: item.headId,
     headName: item.headName,
@@ -24,6 +46,9 @@ export function receiptLine(item: DueItem, amount: number, discount: number, lat
     amount,
     discount,
     lateFee,
+    lateCharged: late.charged,
+    lateWaived: late.waived ?? 0,
+    lateMonths: late.months,
     // The instalment keeps this price from now on (a later fee or class change won't reprice it).
     charged: item.amount,
   };
@@ -43,6 +68,7 @@ export async function saveReceipt({
   remarks,
   discountNote,
   lateWaived,
+  waiver = false,
 }: {
   access: Access;
   account: Account;
@@ -53,6 +79,8 @@ export async function saveReceipt({
   remarks: string | null;
   discountNote: string | null;
   lateWaived: number;
+  /** Dues written off by an admin, not a payment: numbered apart, total 0. */
+  waiver?: boolean;
 }): Promise<{ id: string; number: string } | { error: string }> {
   const { school, session, who } = access;
   const { student } = account;
@@ -63,20 +91,27 @@ export async function saveReceipt({
         const fresh = await tx.feeReceiptItem.groupBy({
           by: ["headId", "period"],
           where: { receipt: { studentId: student.id, cancelledAt: null }, OR: lines.map((l) => ({ headId: l.headId, period: l.period })) },
-          _sum: { amount: true, discount: true, lateFee: true },
+          _sum: { amount: true, discount: true, lateFee: true, lateCharged: true, lateWaived: true },
         });
         const now = new Map(fresh.map((f) => [dueKey(f.headId!, f.period), f._sum]));
         for (const l of lines) {
           const item = byKey.get(dueKey(l.headId, l.period))!;
           const f = now.get(dueKey(l.headId, l.period));
-          if ((f?.amount ?? 0) + (f?.discount ?? 0) !== item.paid + item.discount || (f?.lateFee ?? 0) !== item.lateFeePaid) throw new PaymentChanged();
+          if (
+            (f?.amount ?? 0) + (f?.discount ?? 0) !== item.paid + item.discount ||
+            (f?.lateFee ?? 0) !== item.lateFeePaid ||
+            (f?.lateCharged ?? 0) !== item.lateCharged ||
+            (f?.lateWaived ?? 0) !== item.lateCharged - item.lateFeePaid - item.lateLeft
+          )
+            throw new PaymentChanged();
         }
         return tx.feeReceipt.create({
           data: {
             schoolId: school.id,
             sessionId: session.id,
             studentId: student.id,
-            number: await nextReceiptNumber(tx, school.id, session.name),
+            number: await nextReceiptNumber(tx, school.id, session.name, waiver),
+            waiver,
             date: parseISODate(date)!,
             mode,
             reference,

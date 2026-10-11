@@ -9,7 +9,7 @@ import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { receiptLine, saveReceipt } from "@/lib/fee-receipts";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
-import { PAYMENT_MODES, billOf, deskMonths, payMonths, rupees } from "@/lib/fees-shared";
+import { PAYMENT_MODES, billOf, deskMonths, isOwing, lateFeeOwed, lateMonthCount, payMonths, rupees } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -132,7 +132,7 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
   const saved = await saveReceipt({
     access,
     account,
-    lines: plan.lines.map((l) => receiptLine(l.item, l.amount, l.discount, l.lateFee)),
+    lines: plan.lines.map((l) => receiptLine(l.item, l.amount, l.discount, l.lateFee, { charged: l.lateCharged, months: l.lateMonths })),
     date,
     mode,
     reference,
@@ -145,4 +145,51 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
   revalidatePath("/admin/fee-desk");
   // Straight to the receipt, which confirms the payment and is ready to print.
   redirect(`/admin/fees/receipts/${saved.id}?new=1&from=desk`);
+}
+
+const waiveSchema = z.object({
+  month: z.string().min(1),
+  reason: z.string().trim().min(3, "Say why the dues are waived").max(200),
+});
+
+/**
+ * Writes off the previous dues carried into a month's bill (what part-paid
+ * earlier months left: fees and late fees), without collecting money. Admins
+ * only; the reason and who did it are kept on a numbered waiver ("…/W0001")
+ * that shows in the ledger and can be cancelled like a receipt to undo it.
+ */
+export async function waiveDues(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const access = await getFeesAccess();
+  if (!access.canManage) return { error: "Only an admin can waive dues." };
+  const { school, session, today } = access;
+  const account = await loadStudentAccount(school.id, studentId);
+  if (!account || account.student.status !== "ACTIVE") return { error: "Student not found." };
+  const parsed = waiveSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return validationError(parsed.error);
+  const { month, reason } = parsed.data;
+  const bill = billOf(deskMonths(account.dues, session.startDate.toISOString().slice(0, 10), today), month);
+  if (!bill) return { error: "Month not found." };
+  const items = bill.carried.flatMap((m) => m.items).filter(isOwing);
+  if (!items.length) return { error: "There are no previous dues on this bill. Reload the page." };
+
+  // Each fee's balance comes off as a discount; a late fee fixed earlier, and any run up since, is waived.
+  const lines = items.map((d) => receiptLine(d, 0, d.balance, 0, { charged: 0, waived: d.lateLeft, months: lateMonthCount(d, today) }));
+  const lateWaived = items.reduce((n, d) => n + d.lateLeft + lateFeeOwed(d, today), 0);
+  const total = items.reduce((n, d) => n + d.balance, 0) + lateWaived;
+  const saved = await saveReceipt({
+    access,
+    account,
+    lines,
+    date: today,
+    mode: "OTHER",
+    reference: null,
+    remarks: null,
+    discountNote: reason,
+    lateWaived,
+    waiver: true,
+  });
+  if ("error" in saved) return { error: saved.error };
+  revalidatePath("/admin/fees", "layout");
+  revalidatePath("/admin/fee-desk", "layout");
+  return { ok: true, message: `${rupees(total)} of previous dues waived (${saved.number}).` };
 }

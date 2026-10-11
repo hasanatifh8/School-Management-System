@@ -14,6 +14,7 @@ const fmt = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
 
 const STATUS = {
   PAID: { tone: "green", label: "Paid" },
+  WAIVED: { tone: "green", label: "Waived" },
   PARTIAL: { tone: "amber", label: "Part paid" },
   OVERDUE: { tone: "red", label: "Overdue" },
   DUE: { tone: "amber", label: "Due" },
@@ -312,6 +313,7 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
 
 const MONTH_BORDER: Record<keyof typeof STATUS, string> = {
   PAID: "border-success-line",
+  WAIVED: "border-success-line",
   PARTIAL: "border-warning-line",
   OVERDUE: "border-danger-line",
   DUE: "border-warning-line",

@@ -257,10 +257,10 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
                 <Link href={href(m.key)} className={`group flex h-full flex-col rounded-xl border px-3 py-2.5 transition hover:-translate-y-px hover:shadow-card ${s.box}`}>
                   <span className="flex items-center justify-between gap-2 text-sm font-medium text-fg">
                     {m.key === "arrears" ? m.label : m.label.split(" ")[0]}
-                    {m.status === "PAID" && <Check className="h-4 w-4 text-success" aria-hidden />}
+                    {(m.status === "PAID" || m.status === "WAIVED") && <Check className="h-4 w-4 text-success" aria-hidden />}
                   </span>
                   <span className="mt-1 text-base font-semibold tabular-nums text-fg">
-                    {m.status === "NONE" ? <span className="text-sm font-normal text-subtle">—</span> : rupees(m.status === "PAID" ? m.charged : m.balance + m.late)}
+                    {m.status === "NONE" ? <span className="text-sm font-normal text-subtle">—</span> : rupees(m.status === "PAID" || m.status === "WAIVED" ? m.charged : m.balance + m.late)}
                   </span>
                   <span className={`mt-0.5 text-xs font-medium ${s.text}`}>
                     {s.label}
@@ -308,6 +308,7 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
 
 const MONTH_STYLE: Record<DeskMonthStatus, { label: string; box: string; text: string }> = {
   PAID: { label: "Paid", box: "border-success-line bg-success-soft/50", text: "text-success" },
+  WAIVED: { label: "Waived", box: "border-success-line bg-success-soft/50", text: "text-success" },
   PARTIAL: { label: "Part paid", box: "border-warning-line bg-warning-soft/50", text: "text-warning" },
   OVERDUE: { label: "Overdue", box: "border-danger-line bg-danger-soft/50", text: "text-danger" },
   DUE: { label: "Due", box: "border-warning-line bg-warning-soft/40", text: "text-warning" },

@@ -142,6 +142,9 @@ export function stopFare(student: { transportStop: string | null; transportRoute
 
 export type DueStatus = "PAID" | "PARTIAL" | "OVERDUE" | "UPCOMING";
 
+/** Late fee booked on an instalment by earlier payments (dueKey → totals across its receipts). */
+export type LateLog = { charged: number; waived: number; months: number };
+
 export type DueItem = {
   headId: string;
   headName: string;
@@ -155,10 +158,18 @@ export type DueItem = {
   discount: number;
   balance: number;
   status: DueStatus;
-  /** Late fee owed as of today (see lateFeeMonths), and no late fee taken yet. */
+  /** Late fee owed as of today: what is left of the late fee already fixed (lateLeft), plus months since (see lateFeeMonths). */
   lateFee: number;
   /** The head's late fee, if one can still be charged on this instalment (0 if none or already paid). */
   lateFeeRate: number;
+  /** Late fee fixed on this instalment by earlier payments (charged on its bill). */
+  lateCharged: number;
+  /** Of the fixed late fee, what is still unpaid: owed even once the fee itself is paid. */
+  lateLeft: number;
+  /** Late months already counted (charged or waived) by earlier payments; later months start from here. */
+  lateFrom: number;
+  /** Written off by an admin (dues waived), fee and late fee. */
+  waived: number;
   /** The late fee repeats for each month unpaid (else it is charged once). */
   lateFeeMonthly: boolean;
   /** Late fees fall due by default only after this day: the due date, or the first due day after admission for a student who joined later. */
@@ -200,6 +211,8 @@ export function studentDues({
   paid,
   discounts = new Map(),
   lateFeesPaid = new Map(),
+  lateLog = new Map(),
+  waived = new Map(),
   priced = new Map(),
   session,
   today,
@@ -219,6 +232,8 @@ export function studentDues({
   paid: Map<string, number>; // dueKey → rupees
   discounts?: Map<string, number>; // dueKey → rupees waived
   lateFeesPaid?: Map<string, number>; // dueKey → late fee collected
+  lateLog?: Map<string, LateLog>; // dueKey → late fee fixed, waived and months counted
+  waived?: Map<string, number>; // dueKey → written off by an admin (fee and late fee)
   priced?: Map<string, number>; // dueKey → instalment amount when it was paid
   session: { start: string; name: string };
   today: string;
@@ -253,10 +268,13 @@ export function studentDues({
       const due = charged ? priced.get(k) || amount! : paidSoFar + discount;
       const balance = Math.max(0, due - paidSoFar - discount);
       const lateFeePaid = lateFeesPaid.get(k) ?? 0;
+      const log = lateLog.get(k);
+      const lateLeft = Math.max(0, (log?.charged ?? 0) - lateFeePaid - (log?.waived ?? 0));
       // Nobody is late for a month before they joined (even when charged for it): those
       // instalments fall late only after the first due day on or after admission.
       const lateAfter = p.due >= admissionDate ? p.due : firstDueOnOrAfter(admissionDate, head.dueDay);
-      const lateFeeRate = charged && balance > 0 && head.lateFee > 0 && lateFeePaid === 0 ? head.lateFee : 0;
+      // Months already counted by a payment are not charged again (see lateFrom).
+      const lateFeeRate = charged && balance > 0 && head.lateFee > 0 ? head.lateFee : 0;
       items.push({
         headId: head.id,
         headName: head.name,
@@ -268,19 +286,24 @@ export function studentDues({
         paid: paidSoFar,
         discount,
         balance,
-        status: balance === 0 ? "PAID" : paidSoFar + discount > 0 ? "PARTIAL" : dueOn <= today ? "OVERDUE" : "UPCOMING",
+        // A fee paid but its late fee only in part stays part paid until the rest is paid or waived.
+        status: balance + lateLeft === 0 ? "PAID" : paidSoFar + discount > 0 ? "PARTIAL" : dueOn <= today ? "OVERDUE" : "UPCOMING",
         // Charged once per instalment, only after the due date has passed.
         lateFee: 0, // set below, once the item is complete
         lateFeeRate,
         lateFeeMonthly: head.lateFeeMonthly,
         lateAfter,
         lateFeePaid,
+        lateCharged: log?.charged ?? 0,
+        lateLeft,
+        lateFrom: log?.months ?? 0,
+        waived: waived.get(k) ?? 0,
         beforeAdmission: beforeAdmission && head.frequency !== "ONE_TIME",
         arrears: null,
       });
     }
   }
-  for (const d of items) d.lateFee = lateFeeOwed(d, today);
+  for (const d of items) d.lateFee = d.lateLeft + lateFeeOwed(d, today);
   return items.sort((a, b) => a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName));
 }
 
@@ -295,11 +318,23 @@ function addMonths(date: string, n: number) {
   return iso(yy, mm, Math.min(d, lastDay(yy, mm)));
 }
 
+/** What is still owed on an instalment: its fee and any late fee fixed on it earlier. */
+export const isOwing = (d: DueItem) => d.balance > 0 || d.lateLeft > 0;
+
+/** How many late months an unpaid instalment has run up by `payDate`, counted from its due date (earlier payments' months included). */
+export function lateMonthCount(d: DueItem, payDate: string) {
+  if (d.balance <= 0 || d.lateFeeRate <= 0) return d.lateFrom;
+  let n = 0;
+  while (n < 120 && payDate > addMonths(d.due, n) && (d.lateFeeMonthly || n === 0)) n++;
+  return Math.max(n, d.lateFrom);
+}
+
 /**
- * The late fees on an unpaid instalment if paid on `payDate`: one for the month
- * it falls late, then (monthly late fees) one more for each further month it
- * stays unpaid, all charged unless fees staff untick them. Months before the
- * student's admission are flagged so staff can see them.
+ * The new late fees on an unpaid instalment if paid on `payDate`: one for the
+ * month it falls late, then (monthly late fees) one more for each further month
+ * it stays unpaid, all charged unless fees staff untick them. Months an earlier
+ * payment already counted are left out. Months before the student's admission
+ * are flagged so staff can see them.
  */
 export function lateFeeMonths(d: DueItem, payDate: string): LateMonth[] {
   if (d.balance <= 0 || d.lateFeeRate <= 0) return [];
@@ -307,13 +342,13 @@ export function lateFeeMonths(d: DueItem, payDate: string): LateMonth[] {
   for (let n = 0; n < 120; n++) {
     const from = addMonths(d.due, n);
     if (payDate <= from) break;
-    out.push({ key: `${dueKey(d.headId, d.period)}@${n}`, label: monthLabel(from.slice(0, 7)), from, amount: d.lateFeeRate, onByDefault: true, beforeAdmission: from < d.lateAfter });
+    if (n >= d.lateFrom) out.push({ key: `${dueKey(d.headId, d.period)}@${n}`, label: monthLabel(from.slice(0, 7)), from, amount: d.lateFeeRate, onByDefault: true, beforeAdmission: from < d.lateAfter });
     if (!d.lateFeeMonthly) break;
   }
   return out;
 }
 
-/** Late fee owed on an instalment paid on `payDate`: the months charged by default, or as `choice` (key → charged) says. */
+/** New late fee on an instalment paid on `payDate` (not counting lateLeft): the months charged by default, or as `choice` (key → charged) says. */
 export function lateFeeOwed(d: DueItem, payDate: string, choice?: Record<string, boolean>) {
   return lateFeeMonths(d, payDate).reduce((n, l) => n + ((choice?.[l.key] ?? l.onByDefault) ? l.amount : 0), 0);
 }
@@ -335,6 +370,8 @@ export function dueTotals(items: DueItem[], today: string) {
     total += i.amount;
     paid += i.paid;
     discount += i.discount;
+    // A late fee fixed by a part payment is owed now.
+    dueNow += i.lateLeft;
     if (i.due <= today) dueNow += i.balance;
     else upcoming += i.balance;
   }
@@ -370,7 +407,7 @@ function groupMonths(items: DueItem[]): MonthDues[] {
  * unpaid months, and later months that may be paid in advance.
  */
 export function feeSummary(dues: DueItem[], targetMonth: string) {
-  const open = dues.filter((d) => d.balance > 0);
+  const open = dues.filter(isOwing);
   const current = open.filter((d) => d.due.slice(0, 7) === targetMonth);
   const previous = groupMonths(open.filter((d) => d.due.slice(0, 7) < targetMonth));
   const advance = groupMonths(open.filter((d) => d.due.slice(0, 7) > targetMonth));
@@ -423,53 +460,71 @@ export function allocateDiscount(chosen: { key: string; balance: number; month: 
 
 /* ───────────────────────── Paying an amount (Fee desk) ───────────────────────── */
 
-export type PaymentLine = { item: DueItem; amount: number; discount: number; lateFee: number; full: boolean };
+export type PaymentLine = {
+  item: DueItem;
+  amount: number;
+  discount: number;
+  /** Late fee paid now (fixed now or earlier). */
+  lateFee: number;
+  /** New late fee fixed on the instalment by this payment (paid now or owed). */
+  lateCharged: number;
+  /** Late months counted from the due date as of this payment. */
+  lateMonths: number;
+  full: boolean;
+};
 
 /**
  * Applies an amount received to a student's unpaid instalments, oldest first
- * (last session's arrears, then earlier months, this month, then months ahead).
- * A discount comes off the bill as a whole: it is shared across the instalments
- * in proportion to what each owes (so no one fee looks cut), to settle them in
- * the books. An instalment's late
- * fee (by the payment date) is collected when that instalment is paid in full;
- * a part payment leaves the late fee owing. Shared by the Fee desk's preview
- * and its server action, so both always agree.
+ * (last session's arrears, then earlier months, this month, then months ahead):
+ * first their fees, then their late fees. A discount comes off the bill's fees
+ * as a whole: it is shared across the instalments in proportion to what each
+ * owes (so no one fee looks cut), to settle them in the books.
+ *
+ * Every instalment on the bill has its late fee (by the payment date, as
+ * ticked) fixed by the payment, so a part payment leaves exactly the bill's
+ * total less the amount received owing, late fee included, and those months
+ * are never charged again. Shared by the Fee desk's preview and its server
+ * action, so both always agree.
  */
 export function allocatePayment(
   items: DueItem[],
   { amount, discount = 0, waiveLate = false, lateChoice, payDate }: { amount: number; discount?: number; waiveLate?: boolean; lateChoice?: Record<string, boolean>; payDate: string },
 ) {
   const open = items
-    .filter((d) => d.balance > 0)
+    .filter(isOwing)
     .sort((a, b) => (a.arrears ? 0 : 1) - (b.arrears ? 0 : 1) || a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName));
   let cash = Math.max(0, amount);
   const share = shareDiscount(open, Math.max(0, discount));
   // Discount beyond everything owed is left over (unusedDiscount).
   const disc = Math.max(0, discount) - [...share.values()].reduce((n, v) => n + v, 0);
   let lateWaived = 0;
-  const lines: PaymentLine[] = [];
-  for (const d of open) {
-    if (cash <= 0 && !share.get(d)) continue;
-    // The usual late fee, and what is charged after any months were ticked off (or on).
-    const late = lateFeeOwed(d, payDate);
+  // Fees first, oldest first.
+  const rows = open.map((d) => {
     const dsc = share.get(d) ?? 0;
-    const base = d.balance - dsc;
-    const lateDue = waiveLate ? 0 : lateFeeOwed(d, payDate, lateChoice);
-    let pay = 0;
-    let lateFee = 0;
-    let full = false;
-    if (cash >= base + lateDue) {
-      pay = base;
-      lateFee = lateDue;
-      cash -= base + lateDue;
-      full = true;
-      lateWaived += Math.max(0, late - lateDue);
-    } else {
-      pay = Math.min(cash, base);
-      cash -= pay;
-    }
-    if (pay + dsc > 0) lines.push({ item: d, amount: pay, discount: dsc, lateFee, full });
+    const pay = Math.min(cash, d.balance - dsc);
+    cash -= pay;
+    // The usual new late fee, and what is charged after any months were ticked off (or on).
+    const usual = lateFeeOwed(d, payDate);
+    const lateCharged = waiveLate ? 0 : lateFeeOwed(d, payDate, lateChoice);
+    lateWaived += Math.max(0, usual - lateCharged);
+    return { d, dsc, pay, lateCharged, lateOwed: d.lateLeft + lateCharged, lateFee: 0 };
+  });
+  // Then late fees, oldest first; what the cash doesn't reach stays owing.
+  for (const r of rows) {
+    r.lateFee = Math.min(cash, r.lateOwed);
+    cash -= r.lateFee;
   }
+  const lines: PaymentLine[] = rows
+    .filter((r) => r.pay + r.dsc + r.lateFee + r.lateCharged > 0 || lateMonthCount(r.d, payDate) > r.d.lateFrom)
+    .map((r) => ({
+      item: r.d,
+      amount: r.pay,
+      discount: r.dsc,
+      lateFee: r.lateFee,
+      lateCharged: r.lateCharged,
+      lateMonths: lateMonthCount(r.d, payDate),
+      full: r.pay + r.dsc === r.d.balance && r.lateFee === r.lateOwed,
+    }));
   return {
     lines,
     /** Received but more than everything owed for the session. */
@@ -484,25 +539,29 @@ export function allocatePayment(
 /** The Fee desk row an instalment belongs to: its due month ("2026-07"), or "arrears" for last session's. */
 export const deskMonth = (d: DueItem) => (d.arrears ? "arrears" : d.due.slice(0, 7));
 
-export type DeskMonthStatus = "PAID" | "PARTIAL" | "OVERDUE" | "DUE" | "UPCOMING" | "NONE";
+export type DeskMonthStatus = "PAID" | "WAIVED" | "PARTIAL" | "OVERDUE" | "DUE" | "UPCOMING" | "NONE";
 
 /**
  * A student's fees as Fee desk months: one per month of the session (and one
- * for last session's arrears, first), each with its instalments, what is left,
- * the late fee owing by `payDate`, and a status.
+ * for last session's arrears, first), each with its instalments, what is left
+ * (fees, and late fee fixed by a part payment), the new late fee owing by
+ * `payDate`, and a status. A month stays part paid until all of it is paid or
+ * an admin waives the rest.
  */
 export function deskMonths(dues: DueItem[], sessionStart: string, payDate: string) {
   const keys = [...(dues.some((d) => d.arrears) ? ["arrears"] : []), ...sessionMonths(sessionStart)];
   return keys.map((key) => {
     const items = dues.filter((d) => deskMonth(d) === key);
     const charged = items.reduce((n, d) => n + d.amount, 0);
-    const balance = items.reduce((n, d) => n + d.balance, 0);
+    const balance = items.reduce((n, d) => n + d.balance + d.lateLeft, 0);
     const late = items.reduce((n, d) => n + lateFeeOwed(d, payDate), 0);
     const status: DeskMonthStatus = !items.length
       ? "NONE"
       : balance === 0
-        ? "PAID"
-        : items.some((d) => d.paid + d.discount > 0)
+        ? items.some((d) => d.waived > 0)
+          ? "WAIVED"
+          : "PAID"
+        : items.some((d) => d.paid + d.discount + d.lateFeePaid > 0)
           ? "PARTIAL"
           : items.some((d) => d.balance > 0 && d.due < payDate)
             ? "OVERDUE"
@@ -560,9 +619,10 @@ export function payMonths(
   }: { discount?: number; waiveLate?: boolean; lateChoice?: Record<string, boolean>; received?: number; payDate: string },
 ) {
   const chosen = new Set(months);
-  const open = items.filter((d) => d.balance > 0 && chosen.has(deskMonth(d)));
+  const open = items.filter((d) => isOwing(d) && chosen.has(deskMonth(d)));
   const fees = open.reduce((n, d) => n + d.balance, 0);
-  const late = waiveLate ? 0 : open.reduce((n, d) => n + lateFeeOwed(d, payDate, lateChoice), 0);
+  // Late fee fixed by earlier part payments, plus the new months (as ticked).
+  const late = open.reduce((n, d) => n + d.lateLeft + (waiveLate ? 0 : lateFeeOwed(d, payDate, lateChoice)), 0);
   const full = Math.max(0, fees - discount) + late;
   const amount = received == null ? full : Math.min(received, full);
   return { ...allocatePayment(open, { amount, discount, waiveLate, lateChoice, payDate }), fees, late, full, excess: received == null ? 0 : Math.max(0, received - full) };
@@ -591,8 +651,8 @@ function shareDiscount(items: DueItem[], discount: number) {
 
 /** What a student owes, three ways, for the Fee desk's quick amounts (late fees as of `payDate`). */
 export function quickAmounts(items: DueItem[], payDate: string) {
-  const open = items.filter((d) => d.balance > 0);
-  const owe = (d: DueItem) => d.balance + lateFeeOwed(d, payDate);
+  const open = items.filter(isOwing);
+  const owe = (d: DueItem) => d.balance + d.lateLeft + lateFeeOwed(d, payDate);
   const sum = (list: DueItem[]) => list.reduce((n, d) => n + owe(d), 0);
   return {
     dueNow: sum(open.filter((d) => d.arrears || d.due <= payDate)),

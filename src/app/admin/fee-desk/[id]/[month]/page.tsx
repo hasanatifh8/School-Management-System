@@ -7,7 +7,7 @@ import { getFeesAccess, loadStudentAccount } from "@/lib/fees";
 import { MODE_LABELS, billOf, deskMonths, dueKey } from "@/lib/fees-shared";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { schoolLogoUrl } from "@/lib/school";
-import { quickCollect } from "../../actions";
+import { quickCollect, waiveDues } from "../../actions";
 import { FeeBill } from "./fee-bill";
 
 /**
@@ -17,7 +17,7 @@ import { FeeBill } from "./fee-bill";
  */
 export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk/[id]/[month]">) {
   const { id, month } = await params;
-  const { school } = await getFeesAccess();
+  const { school, canManage } = await getFeesAccess();
   const account = await loadStudentAccount(school.id, id);
   if (!account) notFound();
   const { student, session, today } = account;
@@ -35,7 +35,7 @@ export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk
       ? db.feeReceiptItem.findMany({
           where: { receipt: { schoolId: school.id, studentId: student.id, cancelledAt: null }, OR: bill.items.map((d) => ({ headId: d.headId, period: d.period })) },
           orderBy: { receipt: { date: "asc" } },
-          select: { receipt: { select: { id: true, number: true, date: true, mode: true } } },
+          select: { receipt: { select: { id: true, number: true, date: true, mode: true, waiver: true } } },
         })
       : [],
   ]);
@@ -82,11 +82,12 @@ export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk
           carried: carried.map((c) => ({ key: c.key, label: c.label, items: c.items, balance: c.balance })),
           movedTo: movedTo && { key: movedTo.key, label: movedTo.label },
           nextBill: nextBill ? { key: nextBill.key, label: nextBill.label } : null,
-          receipts: receipts.map((r) => ({ id: r.id, number: r.number, date: r.date.toISOString().slice(0, 10), mode: MODE_LABELS[r.mode] })),
+          receipts: receipts.map((r) => ({ id: r.id, number: r.number, date: r.date.toISOString().slice(0, 10), mode: r.waiver ? "Dues waived" : MODE_LABELS[r.mode] })),
         }}
         today={today}
         minDate={session.startDate.toISOString().slice(0, 10)}
         action={quickCollect.bind(null, student.id)}
+        waive={canManage ? waiveDues.bind(null, student.id) : undefined}
       />
     </div>
   );

@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { startTransition, useActionState, useMemo, useState } from "react";
-import { Banknote, Building2, CreditCard, FileCheck2, GraduationCap, IndianRupee, Printer, QrCode, Wallet } from "lucide-react";
+import { Banknote, BadgeMinus, Building2, CreditCard, FileCheck2, GraduationCap, IndianRupee, Printer, QrCode, Wallet } from "lucide-react";
 import { FormMessage } from "@/components/forms";
 import { Button, SegmentedControl, checkboxClass, inputClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { MODE_LABELS, PAYMENT_MODES, dueKey, lateFeeMonths, payMonths, rupees, type DueItem } from "@/lib/fees-shared";
+import { MODE_LABELS, PAYMENT_MODES, dueKey, isOwing, lateFeeMonths, lateFeeOwed, payMonths, rupees, type DueItem } from "@/lib/fees-shared";
 
 const MODE_ICONS = { CASH: Banknote, UPI: QrCode, CARD: CreditCard, CHEQUE: FileCheck2, BANK_TRANSFER: Building2, OTHER: Wallet };
 const NEEDS_REF = new Set(["CHEQUE", "UPI", "BANK_TRANSFER"]);
@@ -31,18 +31,23 @@ export type BillData = {
  * A month's fee bill that reads like the receipt it becomes: the month's fees,
  * any previous dues carried in from a part-paid month, one late fee per month
  * each fee has stayed unpaid (tick or untick each), and the total; underneath,
- * the amount received (less is a part payment), how it was paid and Collect.
+ * the amount received (less is a part payment: what is left, late fee
+ * included, moves to the next bill), how it was paid and Collect. Admins can
+ * also waive the previous dues, with a reason.
  */
 export function FeeBill({
   data,
   today,
   minDate,
   action,
+  waive,
 }: {
   data: BillData;
   today: string;
   minDate: string;
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
+  /** Admins only: writes off the previous dues on this bill. */
+  waive?: (state: ActionState, formData: FormData) => Promise<ActionState>;
 }) {
   const { school, student, month, carried, movedTo, nextBill, receipts } = data;
   const [date, setDate] = useState(today);
@@ -56,8 +61,9 @@ export function FeeBill({
   // What this bill collects: previous dues carried in, then the month's own fees.
   const billItems = useMemo(() => [...carried.flatMap((c) => c.items), ...month.items], [carried, month]);
   const billKeys = useMemo(() => [...carried.map((c) => c.key), month.key], [carried, month]);
-  const unpaid = useMemo(() => billItems.filter((d) => d.balance > 0), [billItems]);
+  const unpaid = useMemo(() => billItems.filter(isOwing), [billItems]);
   const paid = month.items.length > 0 && month.balance === 0 && carried.length === 0;
+  const waivedOff = paid && month.items.some((d) => d.waived > 0);
   // Every month's late fee on each unpaid fee, up to the payment date.
   const lateMonths = useMemo(() => unpaid.flatMap((d) => lateFeeMonths(d, date).map((l) => ({ ...l, fee: d.headName }))), [unpaid, date]);
   const isOn = (l: { key: string; onByDefault: boolean }) => lateChoice[l.key] ?? l.onByDefault;
@@ -67,28 +73,21 @@ export function FeeBill({
   const part = received != null && received > 0 && received < plan.full;
   const carriedTotal = carried.reduce((n, c) => n + c.balance, 0);
   const lateCollected = month.items.reduce((n, d) => n + d.lateFeePaid, 0);
+  // Late fee fixed on this month's fees by earlier payments, and what of it was waived since.
+  const lateFixed = month.items.reduce((n, d) => n + d.lateCharged, 0);
+  const lateWrittenOff = month.items.reduce((n, d) => n + d.lateCharged - d.lateFeePaid - d.lateLeft, 0);
+  // Late fee for the months since: the bill's late fee less what was fixed earlier (in the dues above).
+  const newLate = plan.late - unpaid.reduce((n, d) => n + d.lateLeft, 0);
   const discounted = month.items.reduce((n, d) => n + d.discount, 0);
-  const paidSoFar = month.items.reduce((n, d) => n + d.paid, 0);
+  const paidSoFar = month.items.reduce((n, d) => n + d.paid + d.lateFeePaid, 0);
   const canCollect = student.active && unpaid.length > 0 && !movedTo;
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        startTransition(() => formAction(new FormData(e.currentTarget)));
-      }}
-      className="space-y-4"
-    >
-      <input type="hidden" name="month" value={month.key} />
-      <input type="hidden" name="date" value={date} />
-      {lateMonths.map((l) => (
-        <input key={l.key} type="hidden" name={isOn(l) ? "lateOn" : "lateOff"} value={l.key} />
-      ))}
-
+    <div className="space-y-4">
       <article className="relative overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
         {paid && (
           <span className="pointer-events-none absolute right-6 top-24 -rotate-12 rounded-lg border-4 border-success/60 px-4 py-1 text-3xl font-black uppercase tracking-widest text-success/60">
-            Paid
+            {waivedOff ? "Waived" : "Paid"}
           </span>
         )}
         <header className="flex items-start gap-4 border-b border-line px-6 py-5">
@@ -160,8 +159,8 @@ export function FeeBill({
                         <td className="py-2.5 text-fg">{c.label} (part paid)</td>
                         <td className="py-2.5 text-xs text-muted">
                           {c.items
-                            .filter((d) => d.balance > 0)
-                            .map((d) => `${d.headName} ${rupees(d.balance)}`)
+                            .flatMap((d) => [d.balance > 0 && `${d.headName} ${rupees(d.balance)}`, d.lateLeft > 0 && `${d.headName} late fee ${rupees(d.lateLeft)}`])
+                            .filter(Boolean)
                             .join(", ")}
                         </td>
                         <td className="py-2.5 text-right tabular-nums text-fg">{rupees(c.balance)}</td>
@@ -203,14 +202,16 @@ export function FeeBill({
               )}
 
               <div className="mt-4 space-y-1.5 text-sm">
-                {(discounted > 0 || discount > 0 || paidSoFar > 0 || carriedTotal > 0) && <Row label="Fees" value={rupees(month.charged)} />}
-                {discounted > 0 && <Row label="Discount" value={`− ${rupees(discounted)}`} tone="text-success" />}
+                {(discounted > 0 || discount > 0 || paidSoFar > 0 || carriedTotal > 0 || lateFixed > 0) && <Row label="Fees" value={rupees(month.charged)} />}
+                {discounted > 0 && <Row label={month.items.some((d) => d.waived > 0) ? "Discount / waived" : "Discount"} value={`− ${rupees(discounted)}`} tone="text-success" />}
+                {lateFixed > 0 && <Row label="Late fee" value={rupees(lateFixed)} tone="text-danger" />}
+                {lateWrittenOff > 0 && <Row label="Late fee waived" value={`− ${rupees(lateWrittenOff)}`} tone="text-success" />}
                 {!paid && paidSoFar > 0 && <Row label="Paid so far" value={`− ${rupees(paidSoFar)}`} tone="text-success" />}
                 {movedTo && <Row label={`Moved to ${movedTo.label} bill`} value={`− ${rupees(month.balance)}`} tone="text-muted" />}
                 {carriedTotal > 0 && <Row label="Previous dues" value={rupees(carriedTotal)} />}
-                {paid
-                  ? lateCollected > 0 && <Row label="Late fee" value={rupees(lateCollected)} tone="text-danger" />
-                  : plan.late > 0 && <Row label={`Late fee (${lateMonths.filter(isOn).length} month${lateMonths.filter(isOn).length === 1 ? "" : "s"})`} value={rupees(plan.late)} tone="text-danger" />}
+                {!paid && !movedTo && newLate > 0 && (
+                  <Row label={`Late fee (${lateMonths.filter(isOn).length} month${lateMonths.filter(isOn).length === 1 ? "" : "s"})`} value={rupees(newLate)} tone="text-danger" />
+                )}
                 {!paid && discount > 0 && <Row label="Discount now" value={`− ${rupees(discount - plan.unusedDiscount)}`} tone="text-success" />}
                 <div className="flex items-baseline justify-between border-t-2 border-fg/80 pt-3">
                   <span className="font-semibold text-fg">{paid ? "Paid in full" : movedTo ? "Left on this bill" : "Total payable"}</span>
@@ -260,8 +261,21 @@ export function FeeBill({
         )}
       </article>
 
+      {waive && student.active && carriedTotal > 0 && <WaiveDues month={month.key} total={carriedTotal + carried.reduce((n, c) => n + c.items.reduce((m, d) => m + lateFeeOwed(d, today), 0), 0)} action={waive} />}
+
       {canCollect && (
-        <div className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-6 print:hidden">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            startTransition(() => formAction(new FormData(e.currentTarget)));
+          }}
+          className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-6 print:hidden"
+        >
+          <input type="hidden" name="month" value={month.key} />
+          <input type="hidden" name="date" value={date} />
+          {lateMonths.map((l) => (
+            <input key={l.key} type="hidden" name={isOn(l) ? "lateOn" : "lateOff"} value={l.key} />
+          ))}
           <SegmentedControl
             name="mode"
             label="Paid by"
@@ -344,8 +358,51 @@ export function FeeBill({
               {part ? `Collect ${rupees(plan.total)} (part)` : `Collect ${rupees(plan.total)}`}
             </Button>
           </div>
-        </div>
+        </form>
       )}
+    </div>
+  );
+}
+
+/** Admins: write off the previous dues carried into this bill, with a reason; nothing is collected. */
+function WaiveDues({ month, total, action }: { month: string; total: number; action: (state: ActionState, formData: FormData) => Promise<ActionState> }) {
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState(action, {});
+  if (!open) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line bg-surface px-4 py-3 text-sm shadow-card sm:px-6 print:hidden">
+        <span className="text-muted">Previous dues of {rupees(total)} can be waived instead of collected.</span>
+        <button type="button" onClick={() => setOpen(true)} className="font-medium text-accent-text hover:underline">
+          Waive previous dues
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        startTransition(() => formAction(new FormData(e.currentTarget)));
+      }}
+      className="space-y-3 rounded-2xl border border-warning-line bg-warning-soft/40 p-4 shadow-card sm:p-6 print:hidden"
+    >
+      <input type="hidden" name="month" value={month} />
+      <p className="text-sm text-fg">
+        Waive <b>{rupees(total)}</b> of previous dues (fees and late fees left by part payments). Nothing is collected; the earlier months are closed as waived. It is recorded with your name and the reason, and can be undone by cancelling the waiver.
+      </p>
+      <label className="block max-w-md text-sm text-fg-2">
+        Reason
+        <input name="reason" required minLength={3} maxLength={200} placeholder="e.g. hardship, approved by principal" className={`${inputClass} mt-1`} />
+      </label>
+      <FormMessage state={state} />
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" variant="danger" loading={pending} icon={BadgeMinus}>
+          Waive {rupees(total)}
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
     </form>
   );
 }
