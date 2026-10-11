@@ -46,6 +46,7 @@ import { db } from "@/lib/db";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { getCurrentSession } from "@/lib/sessions";
 import { requireTeacher } from "@/lib/teacher-auth";
+import { myProxies } from "@/lib/proxy";
 import { loadTeacherTimetable } from "@/lib/timetable";
 import { formatTime, slotKey, type PeriodInfo } from "@/lib/timetable-shared";
 
@@ -170,10 +171,16 @@ export default async function TeacherDashboard() {
   const notTaken = !!cls && attendanceDue && !holidayName && !records.length;
   const attendanceEmpty = holidayName ? "Holiday" : !attendanceDue ? "Day off" : "Not taken";
 
-  /* ── Timetable ── */
+  /* ── Timetable (with any proxy periods the office gave this teacher today) ── */
   const schoolDay = timetable.days.includes(weekday) && !holidayName;
-  const todaysPeriods = schoolDay ? timetable.periods.filter((p) => p.isBreak || timetable.cells[slotKey(weekday, p.id)]) : [];
-  const periodsToday = schoolDay ? timetable.periods.filter((p) => !p.isBreak && timetable.cells[slotKey(weekday, p.id)]).length : 0;
+  const proxies = schoolDay ? await myProxies(ctx.teacher.id, win.today) : [];
+  const cellFor = (periodId: string) => {
+    const proxy = proxies.find((x) => x.period.id === periodId);
+    if (proxy) return { title: `Proxy · ${proxy.subject || proxy.section}`, sub: `${proxy.section} · for ${proxy.forTeacher}` };
+    return timetable.cells[slotKey(weekday, periodId)];
+  };
+  const todaysPeriods = schoolDay ? timetable.periods.filter((p) => p.isBreak || cellFor(p.id)) : [];
+  const periodsToday = schoolDay ? timetable.periods.filter((p) => !p.isBreak && cellFor(p.id)).length : 0;
   const now = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Asia/Kolkata" }).format(new Date());
   const next = todaysPeriods.find((p) => !p.isBreak && p.startTime > now);
 
@@ -218,7 +225,7 @@ export default async function TeacherDashboard() {
 
   /* ── Self attendance ── */
   const todayMark = myAttendance.find((a) => isoDate(a.date) === win.today);
-  const monthMarks = { PRESENT: 0, ABSENT: 0, HALF_DAY: 0, ON_LEAVE: 0 };
+  const monthMarks = { PRESENT: 0, ABSENT: 0, LATE: 0, HALF_DAY: 0, ON_LEAVE: 0 };
   for (const a of myAttendance) monthMarks[a.status]++;
 
   return (
@@ -360,7 +367,7 @@ export default async function TeacherDashboard() {
             <Card
               title="Today's schedule"
               icon={CalendarClock}
-              description={schoolDay ? `${periodsToday} period(s) to teach` : "No classes today"}
+              description={schoolDay ? `${periodsToday} period(s) to teach${proxies.length ? ` · ${proxies.length} proxy` : ""}` : "No classes today"}
               action={<TextLink href="/teacher/timetable">Full week</TextLink>}
               padded={false}
             >
@@ -376,7 +383,7 @@ export default async function TeacherDashboard() {
               ) : (
                 <ol className="divide-y divide-line">
                   {todaysPeriods.map((p) => (
-                    <ScheduleRow key={p.id} period={p} cell={timetable.cells[slotKey(weekday, p.id)]} now={now} next={next?.id === p.id} />
+                    <ScheduleRow key={p.id} period={p} cell={cellFor(p.id)} now={now} next={next?.id === p.id} />
                   ))}
                 </ol>
               )}
@@ -483,6 +490,7 @@ function ClassesCard({ ctx, counts }: { ctx: Awaited<ReturnType<typeof requireTe
 const SELF_STATUS = {
   PRESENT: { label: "Present", tone: "green" },
   ABSENT: { label: "Absent", tone: "red" },
+  LATE: { label: "Late", tone: "amber" },
   HALF_DAY: { label: "Half day", tone: "sky" },
   ON_LEAVE: { label: "On leave", tone: "slate" },
 } as const;
@@ -520,7 +528,7 @@ function SelfAttendanceCard({
           </SubmitButton>
         </ActionForm>
       )}
-      <dl className="mt-4 grid grid-cols-4 gap-2 border-t border-line pt-3 text-center">
+      <dl className="mt-4 grid grid-cols-5 gap-2 border-t border-line pt-3 text-center">
         {(Object.keys(SELF_STATUS) as (keyof typeof SELF_STATUS)[]).map((k) => (
           <div key={k}>
             <dt className="text-[11px] text-muted">{SELF_STATUS[k].label}</dt>

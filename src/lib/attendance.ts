@@ -19,6 +19,7 @@ import {
 import { onLeave } from "@/lib/leave";
 import { photoUrl } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
+import { getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 
 /** Dates attendance can be taken for: the current session up to today. */
@@ -156,7 +157,11 @@ export async function loadAttendanceSheet(schoolId: string, sectionId: string, d
 
 /** Props for <AttendanceSheet> (everything except the bound actions). */
 export async function attendanceSheetProps(schoolId: string, sectionId: string, date: string) {
-  const [{ students, day, holiday }, leave] = await Promise.all([loadAttendanceSheet(schoolId, sectionId, date), onLeave(schoolId, parseISODate(date)!)]);
+  const [{ students, day, holiday }, leave, viewer] = await Promise.all([
+    loadAttendanceSheet(schoolId, sectionId, date),
+    onLeave(schoolId, parseISODate(date)!),
+    getViewer(),
+  ]);
   const marked = day && !day.holiday && day.records.length > 0;
   return {
     students: students.map((s) => ({
@@ -171,6 +176,8 @@ export async function attendanceSheetProps(schoolId: string, sectionId: string, 
       : null,
     /** Students on approved leave this day: they start as Leave on an unmarked day. */
     onLeave: students.filter((s) => leave.has(s.id)).map((s) => s.id),
+    /** Those students are locked to Leave for teachers; school admins and Power Admin can change them. */
+    leaveLocked: !viewer,
     markedBy: day?.markedBy ?? null,
     schoolHoliday: holiday?.name ?? null,
     classHoliday: day?.holiday ?? null,

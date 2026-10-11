@@ -21,7 +21,8 @@ async function imagesLoaded(root: HTMLElement) {
  * Renders every `[data-pdf-page]` element inside `[data-pdf-root="<root>"]` to
  * one A4 page each (scaled to fit) and saves the PDF.
  */
-export async function downloadPdf(root: string, fileName: string) {
+export async function downloadPdf(root: string, fileName: string, landscape = false) {
+  const page = landscape ? { w: A4.h, h: A4.w } : A4;
   const container = document.querySelector<HTMLElement>(`[data-pdf-root="${root}"]`);
   const pages = container ? [...container.querySelectorAll<HTMLElement>("[data-pdf-page]")] : [];
   if (!pages.length) throw new Error("Nothing to download");
@@ -31,10 +32,10 @@ export async function downloadPdf(root: string, fileName: string) {
   for (const node of pages) {
     const png = await toPng(node, { pixelRatio: 2, backgroundColor: "#ffffff", style: { boxShadow: "none", margin: "0" } });
     const image = await pdf.embedPng(png);
-    const scale = Math.min(A4.w / image.width, A4.h / image.height);
+    const scale = Math.min(page.w / image.width, page.h / image.height);
     const w = image.width * scale;
     const h = image.height * scale;
-    pdf.addPage([A4.w, A4.h]).drawImage(image, { x: (A4.w - w) / 2, y: A4.h - h, width: w, height: h });
+    pdf.addPage([page.w, page.h]).drawImage(image, { x: (page.w - w) / 2, y: page.h - h, width: w, height: h });
   }
   const bytes = await pdf.save();
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
@@ -53,11 +54,14 @@ export function PdfDownloadButton({
   fileName,
   label = "Download PDF",
   variant = "secondary",
+  landscape = false,
 }: {
   root: string;
   fileName: string;
   label?: string;
   variant?: ButtonVariant;
+  /** A4 landscape pages instead of portrait. */
+  landscape?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -70,7 +74,7 @@ export function PdfDownloadButton({
           setBusy(true);
           setError("");
           try {
-            await downloadPdf(root, fileName);
+            await downloadPdf(root, fileName, landscape);
           } catch {
             setError("Couldn't create the PDF. Try printing instead.");
           } finally {

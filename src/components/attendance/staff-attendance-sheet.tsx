@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useMemo, useRef, useState } from "react";
 import { CheckCheck, CircleCheck, Save } from "lucide-react";
 import { FormMessage } from "@/components/forms";
+import { SheetFilter, matchesQuery } from "@/components/attendance/sheet-filter";
 import { Avatar, Button, useToast } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { STAFF_STATUSES, STAFF_STATUS_META, type StaffStatusKey } from "@/lib/staff-attendance-shared";
@@ -36,6 +37,8 @@ export function StaffAttendanceSheet({
     }
     return result;
   }, {});
+  const [query, setQuery] = useState("");
+  const [only, setOnly] = useState<StaffStatusKey | null>(null);
   const set = (id: string, patch: Partial<Mark>) => setMarks((m) => ({ ...m, [id]: { ...m[id], ...patch } }));
   const dirty = !saved || people.some((p) => marks[p.id].status !== saved[p.id].status || marks[p.id].remark !== saved[p.id].remark);
   const counts = useMemo(() => {
@@ -81,12 +84,22 @@ export function StaffAttendanceSheet({
         </Button>
       </div>
 
+      <SheetFilter
+        query={query}
+        onQuery={setQuery}
+        only={only}
+        onOnly={setOnly}
+        statuses={STAFF_STATUSES.map((st) => ({ value: st, label: STAFF_STATUS_META[st].label }))}
+        counts={counts}
+        placeholder="Search name, ID or department"
+      />
       <ul className="divide-y divide-line">
         {people.map((p, i) => {
           const mark = marks[p.id];
           return (
             <li
               key={p.id}
+              hidden={(only != null && mark.status !== only) || !matchesQuery(query, p.name, p.sub)}
               ref={(el) => {
                 rows.current[i] = el;
               }}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CalendarCheck, CalendarOff, Megaphone, PartyPopper, Phone, School, Sun, Table2, UserRoundX, Users } from "lucide-react";
 import { DateNav } from "@/components/attendance/date-nav";
+import { DayKpis } from "@/components/attendance/day-kpis";
 import { UpcomingHolidays } from "@/components/attendance/upcoming-holidays";
 import {
   Badge,
@@ -13,13 +14,10 @@ import {
   PagedList,
   PageHeader,
   PersonCell,
-  StatCard,
-  StatGrid,
 } from "@/components/ui";
 import { attendanceWindow, pickDate } from "@/lib/attendance";
+import { dayRoster } from "@/lib/attendance-day";
 import {
-  ATTENDANCE_STATUSES,
-  attendancePercent,
   emptyCounts,
   formatISO,
   isSunday,
@@ -38,7 +36,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
   const date = pickDate((await searchParams).date, win);
   const d = parseISODate(date)!;
 
-  const [classes, days, holiday] = await Promise.all([
+  const [classes, days, holiday, roster] = await Promise.all([
     db.schoolClass.findMany({
       where: { schoolId: school.id },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -67,6 +65,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
       },
     }),
     db.holiday.findUnique({ where: { schoolId_date: { schoolId: school.id, date: d } } }),
+    dayRoster(school.id, "students", date),
   ]);
 
   const dayBySection = new Map(days.map((x) => [x.sectionId, x]));
@@ -79,8 +78,6 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
     for (const r of marked ? day.records : []) counts[r.status]++;
     return { section: s, day, counts, marked };
   });
-  const total = emptyCounts();
-  for (const r of rows) for (const st of ATTENDANCE_STATUSES) total[st] += r.counts[st];
   const markedCount = rows.filter((r) => r.marked).length;
   const classOff = rows.filter((r) => r.day?.holiday).length;
   const toMark = withStudents.length - markedCount - rows.filter((r) => r.day?.holiday && r.section._count.students > 0).length;
@@ -91,14 +88,15 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
         .flatMap((x) =>
           x.records.filter((r) => r.status === "ABSENT").map((r) => ({ ...r, section: sections.find((s) => s.id === x.sectionId)! })),
         );
-  const percent = attendancePercent(total);
   const nextToMark = holiday ? null : rows.find((r) => !r.marked && !r.day?.holiday && r.section._count.students > 0);
 
   return (
     <>
       <PageHeader
         title="Attendance"
-        subtitle={`${formatISO(date)} · Session ${win.session.name}`}
+        subtitle={`${formatISO(date)} · Session ${win.session.name} · ${
+          holiday ? "School holiday" : `${markedCount} of ${withStudents.length} classes marked${toMark > 0 ? ` · ${toMark} still to mark` : ""}${classOff ? ` · ${classOff} off` : ""}`
+        }`}
         action={
           <>
             <MoreMenu>
@@ -139,12 +137,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
         )
       )}
 
-      <StatGrid>
-        <StatCard icon={CalendarCheck} tone="indigo" label="Classes marked" value={`${markedCount} / ${withStudents.length}`} detail={holiday ? "School holiday" : toMark > 0 ? `${toMark} still to mark` : "All done"} />
-        <StatCard icon={Users} tone="emerald" label="Attending" value={total.PRESENT + total.LATE + total.HALF_DAY} detail={percent == null ? "Nothing marked yet" : `${percent}% attendance`} />
-        <StatCard icon={UserRoundX} tone="rose" label="Absent" value={total.ABSENT} detail={total.LEAVE ? `${total.LEAVE} on leave` : "Across marked classes"} />
-        <StatCard icon={CalendarOff} tone="violet" label="Classes off" value={classOff} detail={holiday ? holiday.name : "Class holidays today"} />
-      </StatGrid>
+      <DayKpis group="students" date={date} roster={roster} today={date === win.today} />
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">

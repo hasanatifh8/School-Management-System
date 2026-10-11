@@ -19,6 +19,7 @@ export function StatCard({
   detail,
   href,
   size = "md",
+  active = false,
 }: {
   label: string;
   value: number | string;
@@ -30,6 +31,8 @@ export function StatCard({
   detail?: ReactNode;
   href?: string;
   size?: "md" | "lg";
+  /** Highlights the card as the current filter (with `href`). */
+  active?: boolean;
 }) {
   const body = (
     <>
@@ -65,7 +68,11 @@ export function StatCard({
   );
   const cls = "block rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-6";
   return href ? (
-    <Link href={href} className={cx(cls, "group transition duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lift")}>
+    <Link
+      href={href}
+      aria-current={active ? "true" : undefined}
+      className={cx(cls, "group transition duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lift", active && "border-accent ring-2 ring-accent/30")}
+    >
       {body}
     </Link>
   ) : (

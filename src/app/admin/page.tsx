@@ -36,6 +36,7 @@ import {
   upcomingBirthdays,
   type Activity,
 } from "@/components/dashboard/widgets";
+import { LeaveWidget } from "@/components/dashboard/leave-widget";
 import { ActiveNoticesCard } from "@/components/dashboard/notices-widget";
 import { ButtonLink, Callout, Card, EmptyState, PageHeader, TextLink } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -45,9 +46,11 @@ import { getCurrentSession, getUpcomingSession, pendingPromotions } from "@/lib/
 import { attendanceWindow } from "@/lib/attendance";
 import { attendancePercent, emptyCounts, isSunday, parseISODate } from "@/lib/attendance-shared";
 import { loadCalendar } from "@/lib/calendar";
+import { leaveOverview } from "@/lib/leave";
 import { monthlyFeeTrend } from "@/lib/fees";
 import { rupees } from "@/lib/fees-shared";
 import { loadActiveNotices } from "@/lib/messaging/server";
+import { decideLeave } from "./leave/actions";
 
 const shortDay = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 
@@ -84,6 +87,7 @@ export default async function DashboardPage() {
     recentResults,
     activeNotices,
     publishedResults,
+    leave,
   ] = await Promise.all([
     db.student.count({ where: active }),
     db.teacher.count({ where: active }),
@@ -133,6 +137,7 @@ export default async function DashboardPage() {
       take: 5,
       include: { exam: { select: { id: true, name: true, kind: true } }, section: { include: { class: true } } },
     }),
+    leaveOverview({ kind: "admin", schoolId: school.id, who: viewer?.kind === "admin" ? viewer.admin.name : "Power Admin" }, win.today),
   ]);
   const deliveries = activeNotices.length
     ? await db.noticeRecipient.groupBy({ by: ["noticeId", "status"], where: { noticeId: { in: activeNotices.map((n) => n.id) } }, _count: true })
@@ -268,13 +273,14 @@ export default async function DashboardPage() {
         </Callout>
       )}
 
-      {(toMark.length > 0 || unassignedStudents > 0 || sectionsWithoutTeacher > 0) && (
+      {(toMark.length > 0 || leave.pending.total > 0 || unassignedStudents > 0 || sectionsWithoutTeacher > 0) && (
         <div className="mb-6 flex flex-wrap gap-2">
           {toMark.length > 0 && (
             <AttentionChip href={`/admin/attendance/${toMark[0].id}?date=${win.today}`}>
               {toMark.length} class(es) haven&apos;t taken attendance today
             </AttentionChip>
           )}
+          {leave.pending.total > 0 && <AttentionChip href="/admin/leave?status=pending">{leave.pending.total} leave request(s) waiting for a decision</AttentionChip>}
           {unassignedStudents > 0 && <AttentionChip href="/admin/students">{unassignedStudents} student(s) without a class</AttentionChip>}
           {sectionsWithoutTeacher > 0 && <AttentionChip href="/admin/classes">{sectionsWithoutTeacher} section(s) without a class teacher</AttentionChip>}
         </div>
@@ -286,24 +292,24 @@ export default async function DashboardPage() {
         <KpiCard href="/admin/teachers" icon={Users} tone="emerald" label="Total teachers" value={teacherCount} link="View teachers" />
         <KpiCard href="/admin/staff" icon={Presentation} tone="amber" label="Total staff" value={staffCount} link="View staff" />
         <KpiCard
-          href="/admin/attendance"
+          href={`/admin/attendance/list?group=students&status=present&date=${win.today}`}
           icon={UserRoundCheck}
           tone="violet"
           label="Present today"
           value={attendanceOpen ? presentCount : null}
           badge={presentPct != null ? `${presentPct}%` : undefined}
           empty={todayHoliday ? "Holiday" : attendanceDue ? "Not marked" : "Day off"}
-          link="View attendance"
+          link="View who's present"
         />
         <KpiCard
-          href="/admin/attendance/register"
+          href={`/admin/attendance/list?group=students&status=absent&date=${win.today}`}
           icon={UserRoundX}
           tone="rose"
           label="Absent today"
           value={attendanceOpen ? counts.ABSENT : null}
           badge={absentPct != null ? `${absentPct}%` : undefined}
           empty={todayHoliday ? "Holiday" : attendanceDue ? "Not marked" : "Day off"}
-          link="View register"
+          link="View who's absent"
         />
         <KpiCard
           href="/admin/fees/receipts"
@@ -316,6 +322,9 @@ export default async function DashboardPage() {
           link="View receipts"
         />
       </KpiGrid>
+
+      {/* Leave: waiting, today and upcoming */}
+      <LeaveWidget overview={leave} today={win.today} decide={decideLeave} className="mt-6" />
 
       {/* Charts */}
       <div className="mt-6 grid gap-6 xl:grid-cols-2">

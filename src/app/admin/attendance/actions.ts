@@ -7,6 +7,7 @@ import { getActor } from "@/lib/access";
 import { attendanceWindow } from "@/lib/attendance";
 import {
   ATTENDANCE_STATUSES,
+  STATUS_META,
   addDays,
   formatISO,
   isSunday,
@@ -17,8 +18,9 @@ import {
 import { db } from "@/lib/db";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { getCurrentSchool, getViewer } from "@/lib/school";
+import { onLeave } from "@/lib/leave";
 import { saveStaffSheet } from "@/lib/staff-attendance";
-import type { StaffGroup } from "@/lib/staff-attendance-shared";
+import { STAFF_STATUSES, STAFF_STATUS_META, type StaffGroup } from "@/lib/staff-attendance-shared";
 
 /**
  * Checks the signed-in user may take attendance for this section on this date:
@@ -65,8 +67,24 @@ export async function saveAttendance(sectionId: string, date: string, _: ActionS
   const roster = await db.student.findMany({ where: { sectionId, status: "ACTIVE" }, select: { id: true } });
   if (!roster.length) return { error: "There are no students in this class." };
 
+  // Students on approved leave stay on Leave (keeping their saved remark) when a teacher saves; admins can change them.
+  const [leave, viewer] = await Promise.all([onLeave(school.id, d), getViewer()]);
+  const locked = new Set(viewer ? [] : roster.filter((s) => leave.has(s.id)).map((s) => s.id));
+  const savedRemarks = new Map(
+    (
+      await db.attendanceRecord.findMany({
+        where: { studentId: { in: [...locked] }, day: { sectionId, date: d } },
+        select: { studentId: true, remark: true },
+      })
+    ).map((r) => [r.studentId, r.remark]),
+  );
+
   const records: { studentId: string; status: AttendanceStatusKey; remark: string | null }[] = [];
   for (const { id } of roster) {
+    if (locked.has(id)) {
+      records.push({ studentId: id, status: "LEAVE", remark: savedRemarks.get(id) || "Approved leave" });
+      continue;
+    }
     const status = ATTENDANCE_STATUSES.find((s) => s === formData.get(`s:${id}`));
     if (!status) return { error: "Mark every student before saving." };
     const remark = remarkSchema.safeParse(formData.get(`r:${id}`) ?? "");
@@ -200,4 +218,108 @@ export async function saveStaffAttendance(group: StaffGroup, date: string, _: Ac
   const result = await saveStaffSheet(school.id, group, date, formData, viewer?.kind === "admin" ? `${viewer.admin.name} (admin)` : "Power Admin");
   if (result.ok) revalidatePath("/", "layout");
   return result;
+}
+
+/* ───────────────────────── Register edits (admins only, with a reason) ───────────────────────── */
+
+const editNoteSchema = z.string().trim().min(3, "Say why you are changing it").max(200, "Keep the note under 200 characters");
+
+async function editAccess(date: string) {
+  const school = await getCurrentSchool(); // admins / Power Admin only
+  const win = await attendanceWindow(school.id);
+  const d = parseISODate(date);
+  if (!d || date < win.min || date > win.max) return { error: `Choose a date in session ${win.session.name}, up to today.` } as const;
+  const viewer = await getViewer();
+  return { school, d, by: viewer?.kind === "admin" ? `${viewer.admin.name} (admin)` : "Power Admin" };
+}
+
+/** Changes one teacher's or staff member's mark for one day from the register. Fields: group, personId, date, status, note. */
+export async function editStaffMark(_: ActionState, formData: FormData): Promise<ActionState> {
+  const group = formData.get("group") === "non-teaching" ? "non-teaching" : "teaching";
+  const personId = String(formData.get("personId") ?? "");
+  const date = String(formData.get("date") ?? "");
+  const access = await editAccess(date);
+  if ("error" in access) return { error: access.error };
+  const { school, d, by } = access;
+  const status = STAFF_STATUSES.find((s) => s === formData.get("status"));
+  if (!status) return { error: "Choose a status." };
+  const note = editNoteSchema.safeParse(formData.get("note") ?? "");
+  if (!note.success) return { error: note.error.issues[0].message, fieldErrors: { note: [note.error.issues[0].message] } };
+
+  const teaching = group === "teaching";
+  const person = teaching
+    ? await db.teacher.findFirst({ where: { id: personId, schoolId: school.id } }).then((t) => t && { name: fullName(t) })
+    : await db.staffMember.findFirst({ where: { id: personId, schoolId: school.id } }).then((s) => s && { name: s.name });
+  if (!person) return { error: "Person not found." };
+  const where = teaching ? { teacherId_date: { teacherId: personId, date: d } } : { staffId_date: { staffId: personId, date: d } };
+  const existing = await db.staffAttendance.findUnique({ where });
+  if (existing?.status === status) return { error: `Already marked ${STAFF_STATUS_META[status].label.toLowerCase()}.` };
+
+  await db.$transaction([
+    db.staffAttendance.upsert({
+      where,
+      create: { schoolId: school.id, date: d, [teaching ? "teacherId" : "staffId"]: personId, status, markedBy: by },
+      update: { status, markedBy: by },
+    }),
+    db.attendanceChange.create({
+      data: {
+        schoolId: school.id,
+        date: d,
+        [teaching ? "teacherId" : "staffId"]: personId,
+        personName: person.name,
+        fromStatus: existing?.status ?? null,
+        toStatus: status,
+        note: note.data,
+        changedBy: by,
+      },
+    }),
+  ]);
+  revalidatePath("/", "layout");
+  return { ok: true, message: `${person.name}: ${STAFF_STATUS_META[status].label} on ${formatISO(date, shortDate)}.` };
+}
+
+/** Changes one student's mark on a day already marked, from the register. Fields: sectionId, studentId, date, status, note. */
+export async function editStudentMark(_: ActionState, formData: FormData): Promise<ActionState> {
+  const sectionId = String(formData.get("sectionId") ?? "");
+  const studentId = String(formData.get("studentId") ?? "");
+  const date = String(formData.get("date") ?? "");
+  const access = await editAccess(date);
+  if ("error" in access) return { error: access.error };
+  const { school, d, by } = access;
+  const status = ATTENDANCE_STATUSES.find((s) => s === formData.get("status"));
+  if (!status) return { error: "Choose a status." };
+  const note = editNoteSchema.safeParse(formData.get("note") ?? "");
+  if (!note.success) return { error: note.error.issues[0].message, fieldErrors: { note: [note.error.issues[0].message] } };
+
+  const [student, day] = await Promise.all([
+    db.student.findFirst({ where: { id: studentId, schoolId: school.id } }),
+    db.attendanceDay.findFirst({ where: { sectionId, date: d, schoolId: school.id }, include: { records: { where: { studentId } } } }),
+  ]);
+  if (!student) return { error: "Student not found." };
+  if (!day || day.holiday) return { error: "Take this class's attendance for the day first." };
+  const existing = day.records[0];
+  if (!existing && student.sectionId !== sectionId) return { error: "This student isn't in this class." };
+  if (existing?.status === status) return { error: `Already marked ${STATUS_META[status].label.toLowerCase()}.` };
+
+  await db.$transaction([
+    db.attendanceRecord.upsert({
+      where: { dayId_studentId: { dayId: day.id, studentId } },
+      create: { dayId: day.id, studentId, status, remark: note.data },
+      update: { status, remark: note.data },
+    }),
+    db.attendanceChange.create({
+      data: {
+        schoolId: school.id,
+        date: d,
+        studentId,
+        personName: fullName(student),
+        fromStatus: existing?.status ?? null,
+        toStatus: status,
+        note: note.data,
+        changedBy: by,
+      },
+    }),
+  ]);
+  revalidatePath("/", "layout");
+  return { ok: true, message: `${fullName(student)}: ${STATUS_META[status].label} on ${formatISO(date, shortDate)}.` };
 }

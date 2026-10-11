@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { startTransition, useActionState, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowRight, CalendarOff, CheckCheck, CircleCheck, Keyboard, Loader2, PartyPopper, Save, Sun, Undo2 } from "lucide-react";
+import { ArrowRight, CalendarOff, CheckCheck, CircleCheck, Keyboard, Loader2, Lock, PartyPopper, Save, Sun, Undo2 } from "lucide-react";
 import { ActionForm, Field, FormMessage, SubmitButton } from "@/components/forms";
+import { SheetFilter, matchesQuery } from "@/components/attendance/sheet-filter";
 import { Avatar, Button, buttonClass, buttonVariants, inputClass, useToast } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { ATTENDANCE_STATUSES, STATUS_META, emptyCounts, type AttendanceStatusKey } from "@/lib/attendance-shared";
@@ -16,11 +17,13 @@ export type SheetStudent = { id: string; name: string; roll: number | null; phot
 /**
  * Take or edit one class's attendance for one day. Everyone starts as Present
  * on a day that isn't marked yet; nothing is saved until "Save attendance".
+ * Students on approved leave are locked to Leave for teachers; admins can change them.
  */
 export function AttendanceSheet({
   students,
   initial,
   onLeave = [],
+  leaveLocked = true,
   markedBy,
   schoolHoliday,
   classHoliday,
@@ -35,6 +38,8 @@ export function AttendanceSheet({
   initial: Record<string, Mark> | null;
   /** On approved leave this day; they start as Leave when the day isn't marked yet. */
   onLeave?: string[];
+  /** Whether onLeave students are locked to Leave (teachers; not admins). */
+  leaveLocked?: boolean;
   markedBy: string | null;
   schoolHoliday: string | null;
   classHoliday: string | null;
@@ -45,15 +50,18 @@ export function AttendanceSheet({
   /** The next class still to mark on this date (admin view), offered after saving. */
   next?: { href: string; label: string } | null;
 }) {
+  const locked = useMemo(() => new Set(leaveLocked ? onLeave : []), [leaveLocked, onLeave]);
   const start = useMemo(
     () =>
       Object.fromEntries(
-        students.map((s) => [
-          s.id,
-          initial?.[s.id] ?? (onLeave.includes(s.id) ? { status: "LEAVE" as const, remark: "Approved leave" } : { status: "PRESENT" as const, remark: "" }),
-        ]),
+        students.map((s) => {
+          const saved = initial?.[s.id];
+          const leave = { status: "LEAVE" as const, remark: saved?.remark || "Approved leave" };
+          if (locked.has(s.id)) return [s.id, leave];
+          return [s.id, saved ?? (onLeave.includes(s.id) ? leave : { status: "PRESENT" as const, remark: "" })];
+        }),
       ),
-    [students, initial, onLeave],
+    [students, initial, onLeave, locked],
   );
   const [marks, setMarks] = useState<Record<string, Mark>>(start);
   const [savedMarks, setSavedMarks] = useState(start);
@@ -67,6 +75,8 @@ export function AttendanceSheet({
     }
     return result;
   }, {});
+  const [query, setQuery] = useState("");
+  const [only, setOnly] = useState<AttendanceStatusKey | null>(null);
   const [clearState, setClearState] = useState<ActionState>({});
   const [clearing, startClearing] = useTransition();
 
@@ -118,7 +128,7 @@ export function AttendanceSheet({
   function onRowKey(e: React.KeyboardEvent, index: number, id: string) {
     if ((e.target as HTMLElement).dataset.remark !== undefined || e.metaKey || e.ctrlKey || e.altKey) return;
     const status = ATTENDANCE_STATUSES.find((st) => STATUS_META[st].key === e.key.toLowerCase());
-    if (!status) return;
+    if (!status || locked.has(id)) return;
     e.preventDefault();
     set(id, { status });
     const next = rows.current[index + 1];
@@ -151,7 +161,7 @@ export function AttendanceSheet({
               </p>
               <p className="text-sm text-muted">attending{counts.ABSENT ? ` · ${counts.ABSENT} absent` : ""}</p>
             </div>
-            <Button variant="ghost" size="sm" icon={CheckCheck} onClick={() => setMarks(Object.fromEntries(students.map((s) => [s.id, { ...marks[s.id], status: "PRESENT" }])))}>
+            <Button variant="ghost" size="sm" icon={CheckCheck} onClick={() => setMarks(Object.fromEntries(students.map((s) => [s.id, locked.has(s.id) ? marks[s.id] : { ...marks[s.id], status: "PRESENT" }])))}>
               Mark all present
             </Button>
           </div>
@@ -176,12 +186,54 @@ export function AttendanceSheet({
           </div>
         </div>
 
+        <SheetFilter
+          query={query}
+          onQuery={setQuery}
+          only={only}
+          onOnly={setOnly}
+          statuses={ATTENDANCE_STATUSES.map((st) => ({ value: st, label: STATUS_META[st].label }))}
+          counts={counts}
+          placeholder="Search name, ID or roll"
+        />
         <ul className="divide-y divide-line">
           {students.map((s, i) => {
             const mark = marks[s.id];
+            const hidden = (only != null && mark.status !== only) || !matchesQuery(query, s.name, s.code, s.roll);
+            if (locked.has(s.id)) {
+              return (
+                <li
+                  key={s.id}
+                  hidden={hidden}
+                  ref={(el) => {
+                    rows.current[i] = el;
+                  }}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6"
+                >
+                  <span className="w-7 shrink-0 text-right font-mono text-xs text-subtle">{s.roll ?? "—"}</span>
+                  <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
+                    <Avatar name={s.name} src={s.photoUrl} size="sm" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-fg">{s.name}</p>
+                      <p className="font-mono text-[11px] text-subtle">{s.code}</p>
+                    </div>
+                  </div>
+                  <input type="hidden" name={`s:${s.id}`} value="LEAVE" />
+                  <input type="hidden" name={`r:${s.id}`} value={mark.remark} />
+                  <span
+                    title="On approved leave. Only the school admin can change this."
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold ring-1 ring-inset ${STATUS_META.LEAVE.on}`}
+                  >
+                    <Lock className="h-3.5 w-3.5" aria-hidden />
+                    On leave
+                  </span>
+                  <span className="w-full truncate text-xs text-muted sm:w-40">{mark.remark} · locked</span>
+                </li>
+              );
+            }
             return (
               <li
                 key={s.id}
+                hidden={hidden}
                 ref={(el) => {
                   rows.current[i] = el;
                 }}

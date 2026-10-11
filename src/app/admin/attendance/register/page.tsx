@@ -1,4 +1,6 @@
-import { Download, School, TriangleAlert, UserRoundX, Users } from "lucide-react";
+import Link from "next/link";
+import { Download, Printer, School, TriangleAlert, UserRoundX, Users } from "lucide-react";
+import { ChangeLog } from "@/components/attendance/change-log";
 import { FilterSelect, ListToolbar } from "@/components/list-toolbar";
 import { ClassSummaryTable, RegisterFilters, RegisterView, pickView, registerDownloadHref } from "@/components/attendance/register-view";
 import { Card, PageHeader, StatCard, StatGrid, buttonVariants } from "@/components/ui";
@@ -6,6 +8,8 @@ import { attendanceWindow, loadClassSummaries, loadRegister, pickRange } from "@
 import { db } from "@/lib/db";
 import { sectionLabel } from "@/lib/queries";
 import { getCurrentSchool } from "@/lib/school";
+import { isoDate, parseISODate } from "@/lib/attendance-shared";
+import { editStudentMark } from "../actions";
 
 /**
  * School-wide attendance register. With no class chosen it compares every
@@ -48,6 +52,15 @@ export default async function AttendanceRegisterPage({ searchParams }: PageProps
 
   if (section) {
     const register = await loadRegister(school.id, section.id, range.from, range.to, win);
+    const changes = await db.attendanceChange.findMany({
+      where: {
+        schoolId: school.id,
+        date: { gte: parseISODate(range.from)!, lte: parseISODate(range.to)! },
+        studentId: { in: register.students.map((s) => s.id) },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
     return (
       <>
         <PageHeader
@@ -55,10 +68,16 @@ export default async function AttendanceRegisterPage({ searchParams }: PageProps
           breadcrumbs={[{ label: "Attendance", href: "/admin/attendance" }, { label: "Register", href: `${base}?${range.query}` }, { label: sectionLabel(section) }]}
           subtitle={`${sectionLabel(section)} · ${range.label}`}
           action={
-            <a href={registerDownloadHref(section.id, range, query)} download className={buttonVariants.primary}>
-              <Download className="h-4 w-4" />
-              Download Excel
-            </a>
+            <>
+              <a href={registerDownloadHref(section.id, range, query)} download className={buttonVariants.secondary}>
+                <Download className="h-4 w-4" />
+                Excel
+              </a>
+              <Link href={`${base}/print?section=${section.id}&month=${range.from.slice(0, 7)}`} className={buttonVariants.primary}>
+                <Printer className="h-4 w-4" />
+                Print / PDF
+              </Link>
+            </>
           }
         />
         <RegisterView
@@ -71,7 +90,11 @@ export default async function AttendanceRegisterPage({ searchParams }: PageProps
           max={win.max}
           dayHref={(d) => `/admin/attendance/${section.id}?date=${d}`}
           leading={picker}
+          edit={{ sectionId: section.id, action: editStudentMark }}
         />
+        <div className="mt-6 max-w-3xl">
+          <ChangeLog description={`${sectionLabel(section)} · ${range.label}`} changes={changes.map((c) => ({ ...c, date: isoDate(c.date) }))} />
+        </div>
       </>
     );
   }

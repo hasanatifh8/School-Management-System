@@ -28,3 +28,14 @@ export const leaveDays = (from: string, to: string) =>
 
 /** Someone a leave request can be entered for, as the picker lists them. */
 export type LeavePerson = { id: string; applicant: LeaveApplicantKey; name: string; sub: string };
+
+/** A teacher's department: their specialisation (e.g. "Mathematics"), else "Teaching". */
+export const teacherDepartment = (t: { specialization: string | null }) => t.specialization?.trim() || "Teaching";
+/** A staff member's department, else "Non-teaching". */
+export const staffDepartment = (s: { department: string | null }) => s.department?.trim() || "Non-teaching";
+
+/** Pending this long (hours) is overdue for a decision. */
+export const LEAVE_URGENT_HOURS = 48;
+
+/** Share of a department on leave at once that triggers a warning. */
+export const CLASH_SHARE = 0.2;

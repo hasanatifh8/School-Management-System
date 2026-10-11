@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { PagedTable } from "@/components/ui";
-import { ATTENDANCE_STATUSES, STATUS_META, isSunday, parseISODate } from "@/lib/attendance-shared";
+import type { ActionState } from "@/lib/action-state";
+import { ATTENDANCE_STATUSES, STATUS_META, formatISO, isSunday, parseISODate, shortDate } from "@/lib/attendance-shared";
 import type { Register } from "@/lib/attendance";
+import { MarkEditor } from "./mark-editor";
+
+/** Lets admins change a marked day from the register (a reason is required). */
+export type RegisterEdit = { sectionId: string; action: (state: ActionState, formData: FormData) => Promise<ActionState> };
+
+const EDIT_OPTIONS = ATTENDANCE_STATUSES.map((s) => ({ value: s, label: STATUS_META[s].label, short: STATUS_META[s].short, on: STATUS_META[s].on }));
 
 const weekday = new Intl.DateTimeFormat("en-IN", { weekday: "narrow", timeZone: "UTC" });
 const shortMonth = new Intl.DateTimeFormat("en-IN", { month: "short", timeZone: "UTC" });
@@ -44,12 +51,14 @@ export function RegisterGrid({
   today,
   dayHref,
   periodLabel = "Period",
+  edit,
 }: {
   register: Register;
   today: string;
   dayHref?: (date: string) => string;
   /** Header for the range percentage column, e.g. "Week". */
   periodLabel?: string;
+  edit?: RegisterEdit;
 }) {
   const { dates, months, students, classHolidays, schoolHolidays, daily } = register;
   const cellBase = "h-8 min-w-7 border-l border-line px-0.5 text-center text-[11px]";
@@ -131,7 +140,22 @@ export function RegisterGrid({
                   status ? STATUS_META[status].text : "text-subtle"
                 } ${status === "ABSENT" ? "bg-danger-soft" : ""} ${manyMonths && d.endsWith("-01") && i > 0 ? "border-l-2 border-l-line-strong" : ""}`}
               >
-                {status ? STATUS_META[status].short : ""}
+                {edit && !holiday && daily.has(d) && d <= today ? (
+                  <MarkEditor
+                    options={EDIT_OPTIONS}
+                    current={status ?? null}
+                    title={`${s.name} · ${formatISO(d, shortDate)}`}
+                    fields={{ sectionId: edit.sectionId, studentId: s.id, date: d }}
+                    action={edit.action}
+                    className="min-h-7"
+                  >
+                    {status ? STATUS_META[status].short : ""}
+                  </MarkEditor>
+                ) : status ? (
+                  STATUS_META[status].short
+                ) : (
+                  ""
+                )}
               </td>
             );
           })}

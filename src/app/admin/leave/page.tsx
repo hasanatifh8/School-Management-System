@@ -1,6 +1,9 @@
+import { Settings2 } from "lucide-react";
+import { DrillNav } from "@/components/attendance/drill-nav";
 import { LeavePageContent } from "@/components/leave/leave-page";
+import { ButtonLink } from "@/components/ui";
 import { getCurrentSchool, getViewer } from "@/lib/school";
-import { decideLeave, deleteLeave } from "./actions";
+import { bulkApproveLeave, decideLeave, deleteLeave } from "./actions";
 
 /** Every leave request in the school: approve or reject pending ones. */
 export default async function LeavePage({ searchParams }: PageProps<"/admin/leave">) {
@@ -20,6 +23,13 @@ export default async function LeavePage({ searchParams }: PageProps<"/admin/leav
       personHref={(r) => (r.person.href ? `/admin${r.person.href}` : null)}
       decide={(id) => decideLeave.bind(null, id)}
       withdraw={(id) => deleteLeave.bind(null, id)}
+      bulkApprove={bulkApproveLeave}
+      breadcrumbs={<DrillNav items={[{ label: "Leave" }]} />}
+      headerExtra={
+        <ButtonLink href="/admin/leave/allowances" variant="secondary" icon={Settings2}>
+          Leave allowances
+        </ButtonLink>
+      }
     />
   );
 }

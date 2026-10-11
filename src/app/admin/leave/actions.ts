@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ActionState } from "@/lib/action-state";
-import { createLeaveRecord, decideLeaveRecord, withdrawLeaveRecord, type LeaveActor } from "@/lib/leave";
+import { bulkApproveRecords, createLeaveRecord, decideLeaveRecord, saveAllowanceRecords, withdrawLeaveRecord, type LeaveActor } from "@/lib/leave";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 
 async function adminActor(): Promise<LeaveActor> {
@@ -25,6 +25,19 @@ export async function decideLeave(id: string, approve: boolean, _: ActionState, 
 
 export async function deleteLeave(id: string): Promise<ActionState> {
   const result = await withdrawLeaveRecord(await adminActor(), id);
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
+}
+
+export async function bulkApproveLeave(ids: string[]): Promise<ActionState> {
+  const result = await bulkApproveRecords(await adminActor(), ids);
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
+}
+
+export async function saveAllowances(_: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const result = await saveAllowanceRecords(school.id, formData);
   if (result.ok) revalidatePath("/", "layout");
   return result;
 }

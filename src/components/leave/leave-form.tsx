@@ -5,6 +5,7 @@ import { Search, Send, X } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
+import { MAX_DOCUMENT_LABEL } from "@/lib/document-types";
 import {
   APPLICANT_LABELS,
   CATEGORY_LABELS,
@@ -165,6 +166,15 @@ export function LeaveForm({
 
           <Field label="Description" name="description" errors={state.fieldErrors} hint="Optional. Details for whoever approves it.">
             <textarea name="description" rows={3} maxLength={500} className={inputClass} />
+          </Field>
+
+          <Field
+            label="Supporting document"
+            name="attachment"
+            errors={state.fieldErrors}
+            hint={`Optional. A medical certificate or letter: PDF, JPG, PNG or WebP up to ${MAX_DOCUMENT_LABEL}.`}
+          >
+            <input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className={inputClass} />
           </Field>
 
           {canApproveNow && (

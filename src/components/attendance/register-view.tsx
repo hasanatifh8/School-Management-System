@@ -13,7 +13,7 @@ import {
   UserRoundX,
   Users,
 } from "lucide-react";
-import { RegisterGrid, RegisterLegend, RegisterSummary } from "@/components/attendance/register-grid";
+import { RegisterGrid, RegisterLegend, RegisterSummary, type RegisterEdit } from "@/components/attendance/register-grid";
 import { FilterSelect, ListToolbar, ResetFilters, SearchBox } from "@/components/list-toolbar";
 import {
   Button,
@@ -192,6 +192,7 @@ export function RegisterView({
   max,
   dayHref,
   leading,
+  edit,
 }: {
   /** The register page's path, e.g. /teacher/attendance/register. */
   basePath: string;
@@ -204,6 +205,8 @@ export function RegisterView({
   max: string;
   dayHref?: (date: string) => string;
   leading?: ReactNode;
+  /** Admins: click a marked day to change it, with a reason. */
+  edit?: RegisterEdit;
 }) {
   const canDaily = register.dates.length <= MAX_DAILY_DAYS;
   const periodLabel = PERIOD_LABEL[range.period];
@@ -253,7 +256,7 @@ export function RegisterView({
         {shown.students.length === 0 ? (
           <EmptyState icon={SearchX} title="No students match" description="Try a different name or attendance filter." />
         ) : view === "daily" ? (
-          <RegisterGrid register={shown} today={max} dayHref={dayHref} periodLabel={periodLabel} />
+          <RegisterGrid register={shown} today={max} dayHref={dayHref} periodLabel={periodLabel} edit={edit} />
         ) : (
           <RegisterSummary register={shown} periodLabel={periodLabel} />
         )}

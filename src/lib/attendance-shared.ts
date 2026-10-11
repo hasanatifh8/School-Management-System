@@ -10,8 +10,8 @@ export const STATUS_META: Record<
 > = {
   PRESENT: { label: "Present", short: "P", on: "bg-emerald-600 text-white ring-emerald-600", text: "text-success", bar: "bg-emerald-500", key: "p" },
   ABSENT: { label: "Absent", short: "A", on: "bg-rose-600 text-white ring-rose-600", text: "text-danger", bar: "bg-rose-500", key: "a" },
-  LATE: { label: "Late", short: "L", on: "bg-amber-500 text-white ring-amber-500", text: "text-warning", bar: "bg-amber-400", key: "l" },
-  HALF_DAY: { label: "Half day", short: "HD", on: "bg-sky-600 text-white ring-sky-600", text: "text-info", bar: "bg-sky-500", key: "h" },
+  LATE: { label: "Late", short: "L", on: "bg-orange-500 text-white ring-orange-500", text: "text-orange-600 dark:text-orange-300", bar: "bg-orange-400", key: "l" },
+  HALF_DAY: { label: "Half day", short: "HD", on: "bg-yellow-400 text-yellow-950 ring-yellow-400", text: "text-yellow-700 dark:text-yellow-300", bar: "bg-yellow-400", key: "h" },
   LEAVE: { label: "Leave", short: "LV", on: "bg-violet-600 text-white ring-violet-600", text: "text-violet-700 dark:text-violet-300", bar: "bg-violet-500", key: "v" },
 };
 

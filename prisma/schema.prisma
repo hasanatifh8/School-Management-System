@@ -106,6 +106,7 @@ enum AttendanceStatus {
 enum StaffAttendanceStatus {
   PRESENT
   ABSENT
+  LATE
   HALF_DAY
   ON_LEAVE
 }
@@ -209,6 +210,9 @@ model School {
   exams           Exam[]
   periods         Period[]
   calendarEvents  CalendarEvent[]
+  leaveAllowances LeaveAllowance[]
+  attendanceEdits AttendanceChange[]
+  proxies         ProxyAssignment[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -390,6 +394,8 @@ model Teacher {
   noticeMessages NoticeRecipient[]
   attendance     StaffAttendance[]
   leaveRequests  LeaveRequest[]
+  proxiesNeeded  ProxyAssignment[] @relation("ProxyAbsent")
+  proxiesTaken   ProxyAssignment[] @relation("ProxyCover")
 
   @@unique([schoolId, employeeCode])
 }
@@ -690,15 +696,82 @@ model LeaveRequest {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  student Student?     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  staff   StaffMember? @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  school     School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student    Student?         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher    Teacher?         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staff      StaffMember?     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  attachment LeaveAttachment?
 
   @@index([schoolId, status])
   @@index([studentId])
   @@index([teacherId])
   @@index([staffId])
+}
+
+// A medical certificate or other document sent with a leave request.
+model LeaveAttachment {
+  leaveId  String @id
+  fileName String
+  mimeType String
+  size     Int
+  data     Bytes
+
+  leave LeaveRequest @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+}
+
+// Leave days a teacher or staff member gets each session for one leave type.
+model LeaveAllowance {
+  id        String         @id @default(cuid())
+  schoolId  String
+  applicant LeaveApplicant // TEACHER or STAFF
+  category  LeaveCategory
+  days      Int
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, applicant, category])
+}
+
+// A change to saved attendance made from a register, with the reason. Exactly
+// one of studentId / teacherId / staffId is set. Kept when the person is removed.
+model AttendanceChange {
+  id         String   @id @default(cuid())
+  schoolId   String
+  date       DateTime @db.Date
+  studentId  String?
+  teacherId  String?
+  staffId    String?
+  personName String
+  fromStatus String? // null when the day had no mark
+  toStatus   String
+  note       String
+  changedBy  String
+  createdAt  DateTime @default(now())
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, date])
+}
+
+// A free teacher covering one timetable period of a teacher who is absent or on leave.
+model ProxyAssignment {
+  id              String   @id @default(cuid())
+  schoolId        String
+  date            DateTime @db.Date
+  slotId          String
+  absentTeacherId String
+  proxyTeacherId  String
+  assignedBy      String
+  createdAt       DateTime @default(now())
+
+  school        School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  slot          TimetableSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  absentTeacher Teacher       @relation("ProxyAbsent", fields: [absentTeacherId], references: [id], onDelete: Cascade)
+  proxyTeacher  Teacher       @relation("ProxyCover", fields: [proxyTeacherId], references: [id], onDelete: Cascade)
+
+  @@unique([slotId, date])
+  @@index([schoolId, date])
+  @@index([proxyTeacherId, date])
 }
 
 // A school bus or van route: the vehicle, its driver and its stops in order.
@@ -744,19 +817,19 @@ model Holiday {
 // (one time). Each class has its own amount; a class without an amount isn't
 // charged. Optional heads (transport, hostel) apply only to students added to them.
 model FeeHead {
-  id        String       @id @default(cuid())
-  schoolId  String
-  sessionId String
-  name      String
-  frequency FeeFrequency
-  optional  Boolean      @default(false)
-  transport Boolean      @default(false) // amount is each student's stop fare (Transport), not per class; monthly, opt-in
-  dueDay    Int          @default(10) // day of the month the fee is due
-  dueMonth  Int? // YEARLY only: 1–12
-  lateFee   Int          @default(0) // extra charge when an instalment is paid after its due day
-  lateFeeMonthly Boolean @default(true) // charge the late fee again for every month it stays unpaid (false = once)
-  sortOrder Int          @default(0)
-  createdAt DateTime     @default(now())
+  id             String       @id @default(cuid())
+  schoolId       String
+  sessionId      String
+  name           String
+  frequency      FeeFrequency
+  optional       Boolean      @default(false)
+  transport      Boolean      @default(false) // amount is each student's stop fare (Transport), not per class; monthly, opt-in
+  dueDay         Int          @default(10) // day of the month the fee is due
+  dueMonth       Int? // YEARLY only: 1–12
+  lateFee        Int          @default(0) // extra charge when an instalment is paid after its due day
+  lateFeeMonthly Boolean      @default(true) // charge the late fee again for every month it stays unpaid (false = once)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
 
   school       School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   session      AcademicSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -1188,10 +1261,11 @@ model TimetableSlot {
   teacherId String?
   label     String? // instead of a subject, e.g. "Library" or "Games"
 
-  section Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  period  Period   @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  teacher Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  section Section           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  period  Period            @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  subject Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  teacher Teacher?          @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  proxies ProxyAssignment[]
 
   @@unique([sectionId, day, periodId])
   @@index([teacherId])

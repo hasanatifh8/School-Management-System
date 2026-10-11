@@ -1,8 +1,10 @@
-import { Briefcase, Presentation, Users } from "lucide-react";
+import { Briefcase, Plane, Presentation, Table2, Users } from "lucide-react";
 import { StaffAttendanceSheet } from "@/components/attendance/staff-attendance-sheet";
 import { DateNav } from "@/components/attendance/date-nav";
+import { DayKpis } from "@/components/attendance/day-kpis";
 import { ButtonLink, Callout, Card, EmptyState, PageHeader, StatusTab } from "@/components/ui";
 import { attendanceWindow, pickDate } from "@/lib/attendance";
+import { dayRoster } from "@/lib/attendance-day";
 import { formatISO, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
@@ -18,10 +20,11 @@ export default async function StaffAttendancePage({ searchParams }: PageProps<"/
   const win = await attendanceWindow(school.id);
   const date = pickDate(params.date, win);
   const group = pickStaffGroup(params.group);
-  const [sheet, summary, holiday] = await Promise.all([
+  const [sheet, summary, holiday, roster] = await Promise.all([
     loadStaffSheet(school.id, group, date),
     staffDaySummary(school.id, date),
     db.holiday.findUnique({ where: { schoolId_date: { schoolId: school.id, date: parseISODate(date)! } } }),
+    dayRoster(school.id, group, date),
   ]);
   const tab = (g: string) => `/admin/attendance/staff?group=${g}&date=${date}`;
   const line = (s: typeof summary.teaching) => (s.marked ? `${s.present} of ${s.total} present${s.absent ? ` · ${s.absent} absent` : ""}` : `${s.total} · not marked`);
@@ -32,9 +35,14 @@ export default async function StaffAttendancePage({ searchParams }: PageProps<"/
         title="Attendance"
         subtitle={`${formatISO(date)} · Session ${win.session.name}`}
         action={
-          <ButtonLink href="/admin/leave" variant="secondary">
-            Leave requests
-          </ButtonLink>
+          <>
+            <ButtonLink href="/admin/leave" variant="secondary" icon={Plane}>
+              Leave requests
+            </ButtonLink>
+            <ButtonLink href={`/admin/attendance/staff/register?group=${group}&month=${date.slice(0, 7)}`} icon={Table2}>
+              Monthly register
+            </ButtonLink>
+          </>
         }
       />
       <AttendanceTabs active="staff" date={date} />
@@ -46,6 +54,9 @@ export default async function StaffAttendancePage({ searchParams }: PageProps<"/
           <strong className="font-semibold">School holiday: {holiday.name}.</strong> You can still mark staff who came in.
         </Callout>
       )}
+      <div className="mb-6">
+        <DayKpis group={group} date={date} roster={roster} today={date === win.today} />
+      </div>
       <Card padded={false} className="max-w-4xl">
         <div className="flex gap-6 overflow-x-auto border-b border-line px-4 pt-4 text-sm font-medium sm:px-6">
           <StatusTab href={tab("teaching")} active={group === "teaching"} label={`Teaching · ${line(summary.teaching)}`} icon={Presentation} />

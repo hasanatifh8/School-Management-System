@@ -19,7 +19,7 @@ export async function loadStaffSheet(schoolId: string, group: StaffGroup, date: 
           .then((ts) => ts.map((t) => ({ id: t.id, name: fullName(t), sub: [t.specialization, t.employeeCode].filter(Boolean).join(" · "), photoId: t.photoId })))
       : db.staffMember
           .findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: { name: "asc" } })
-          .then((ss) => ss.map((s) => ({ id: s.id, name: s.name, sub: `${s.designation} · ${s.employeeCode}`, photoId: s.photoId }))),
+          .then((ss) => ss.map((s) => ({ id: s.id, name: s.name, sub: [s.designation, s.department, s.employeeCode].filter(Boolean).join(" · "), photoId: s.photoId }))),
     db.staffAttendance.findMany({ where: { schoolId, date: d, [teaching ? "teacherId" : "staffId"]: { not: null } } }),
     onLeave(schoolId, d),
   ]);
@@ -64,7 +64,7 @@ export async function saveStaffSheet(schoolId: string, group: StaffGroup, date: 
     db.staffAttendance.deleteMany({ where: { schoolId, date: d, [key]: { in: rows.map((r) => r.id) } } }),
     db.staffAttendance.createMany({ data: rows.map((r) => ({ schoolId, date: d, [key]: r.id, status: r.status, remark: r.remark, markedBy })) }),
   ]);
-  const present = rows.filter((r) => r.status === "PRESENT" || r.status === "HALF_DAY").length;
+  const present = rows.filter((r) => r.status === "PRESENT" || r.status === "LATE" || r.status === "HALF_DAY").length;
   return { ok: true, message: `Saved ${teaching ? "teaching" : "non-teaching"} staff attendance: ${present} of ${rows.length} present.` };
 }
 
@@ -78,7 +78,7 @@ export async function staffDaySummary(schoolId: string, date: string) {
   ]);
   const count = (teaching: boolean) => {
     const rs = records.filter((r) => !!r.teacherId === teaching);
-    return { marked: rs.length > 0, present: rs.filter((r) => r.status === "PRESENT" || r.status === "HALF_DAY").length, absent: rs.filter((r) => r.status === "ABSENT").length };
+    return { marked: rs.length > 0, present: rs.filter((r) => r.status === "PRESENT" || r.status === "LATE" || r.status === "HALF_DAY").length, absent: rs.filter((r) => r.status === "ABSENT").length };
   };
   return { teaching: { total: teachers, ...count(true) }, nonTeaching: { total: staff, ...count(false) } };
 }
