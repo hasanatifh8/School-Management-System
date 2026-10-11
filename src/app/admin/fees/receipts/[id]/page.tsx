@@ -8,7 +8,8 @@ import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { ButtonLink, Card, SuccessState, buttonVariants, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { earlierPayments, getFeesAccess } from "@/lib/fees";
-import { MODE_LABELS, amountInWords, rupees } from "@/lib/fees-shared";
+import { MODE_LABELS, amountInWords, monthLabel, rupees } from "@/lib/fees-shared";
+import { billStatusNote, receiptRows } from "@/lib/receipt-rows";
 import { schoolLogoUrl } from "@/lib/school";
 import { cancelReceipt } from "../../actions";
 import { PrintButton } from "./print-button";
@@ -42,32 +43,12 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
     earlierPayments(receipt),
   ]);
   const logoUrl = schoolLogoUrl({ id: school.id, logo });
-  // Consecutive instalments of the same fee become one line: "Tuition fee · Apr 2026 – Sep 2026 (6)".
-  const lines: { key: string; name: string; period: string; amount: number; discount: number }[] = [];
-  let run: { first: string; last: string; count: number } | null = null;
-  // A fee paid only in part on this receipt says so: "Oct 2026 (part of ₹2,000)".
-  const isPart = (i: { amount: number; discount: number; charged: number }) => i.charged > 0 && i.amount + i.discount < i.charged;
-  // A line that only pays (or waives) a late fee left from a part payment shows in the late fee line.
-  for (const item of receipt.items.filter((i) => i.amount + i.discount > 0)) {
-    const prev = lines.at(-1);
-    if (prev && prev.name === item.headName && run && !isPart(item) && !prev.period.includes("part of")) {
-      run.last = item.periodLabel;
-      run.count++;
-      prev.period = `${run.first} – ${run.last} (${run.count})`;
-      prev.amount += item.amount + item.discount;
-      prev.discount += item.discount;
-    } else {
-      run = { first: item.periodLabel, last: item.periodLabel, count: 1 };
-      // Each fee at its full amount; the discount comes off the total, once.
-      const period = isPart(item) ? `${item.periodLabel} (part of ${rupees(item.charged)})` : item.periodLabel;
-      lines.push({ key: item.id, name: item.headName, period, amount: item.amount + item.discount, discount: item.discount });
-    }
-  }
-  const discount = lines.reduce((n, l) => n + l.discount, 0);
-  const lateFee = receipt.items.reduce((n, i) => n + i.lateFee, 0);
-  const lateCount = receipt.items.filter((i) => i.lateFee > 0).length;
+  // Previous dues and the bill's own fees, each late fee by month (see receiptRows).
+  const rows = receiptRows(receipt);
+  const billNote = billStatusNote(receipt);
+  const discount = receipt.items.reduce((n, i) => n + i.discount, 0);
   // Two copies share an A4 page; a long receipt prints as one copy instead.
-  const fitsTwo = lines.length <= 7;
+  const fitsTwo = rows.length <= 7;
   const copies = sp.copies === "1" || (!fitsTwo && sp.copies !== "2") ? ["Receipt"] : ["Parent copy", "Office copy"];
 
   const copy = (label: string) => (
@@ -113,6 +94,12 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
         </dd>
         <dt className="text-slate-500">Father</dt>
         <dd>{receipt.student?.fatherName ?? "—"}</dd>
+        {receipt.billMonth && (
+          <>
+            <dt className="text-slate-500">Bill</dt>
+            <dd className="font-semibold">{receipt.billMonth === "arrears" ? "Last session's dues" : monthLabel(receipt.billMonth)}</dd>
+          </>
+        )}
       </dl>
 
       <table className="w-full border-collapse text-[9pt]">
@@ -125,23 +112,24 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
           </tr>
         </thead>
         <tbody>
-          {lines.map((item, i) => (
-            <tr key={item.key} className="border-b border-slate-200">
-              <td className="py-[1mm] pl-1 text-slate-500">{i + 1}</td>
-              <td className="py-[1mm]">{item.name}</td>
-              <td className="py-[1mm]">{item.period}</td>
-              <td className="py-[1mm] pr-1 text-right tabular-nums">{rupees(item.amount)}</td>
-            </tr>
-          ))}
-          {lateFee > 0 && (
-            <tr className="border-b border-slate-200">
-              <td className="py-[1mm] pl-1 text-slate-500">{lines.length + 1}</td>
-              <td className="py-[1mm]">Late fee</td>
-              <td className="py-[1mm]">
-                {lateCount} late instalment{lateCount === 1 ? "" : "s"}
-              </td>
-              <td className="py-[1mm] pr-1 text-right tabular-nums">{rupees(lateFee)}</td>
-            </tr>
+          {rows.map((row) =>
+            row.kind === "section" ? (
+              <tr key={row.key} className="border-b border-slate-200 bg-slate-50/60">
+                <td colSpan={4} className="py-[0.8mm] pl-1 text-[8pt] font-semibold uppercase tracking-wider text-slate-600">
+                  {row.label}
+                </td>
+              </tr>
+            ) : (
+              <tr key={row.key} className="border-b border-slate-200">
+                <td className="py-[1mm] pl-1 text-slate-500">{rows.filter((r) => r.kind !== "section").indexOf(row) + 1}</td>
+                <td className="py-[1mm]">{row.name}</td>
+                <td className="py-[1mm]">
+                  {row.period}
+                  {row.kind === "fee" && row.note && <span className="text-slate-500"> · {row.note}</span>}
+                </td>
+                <td className="py-[1mm] pr-1 text-right tabular-nums">{rupees(row.amount)}</td>
+              </tr>
+            ),
           )}
         </tbody>
         <tfoot>
@@ -170,6 +158,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
         </tfoot>
       </table>
       <p className="mt-[2mm] text-[8.5pt] italic">{amountInWords(receipt.total)}</p>
+      {billNote && <p className="mt-[1.5mm] rounded border border-slate-300 bg-slate-50 px-2 py-[1mm] text-[8.5pt] font-medium">{billNote}</p>}
       {earlier.count > 0 && (
         <p className="mt-[1.5mm] text-[8.5pt]">
           <span className="text-slate-500">Paid earlier this session:</span> {rupees(earlier.total)} ({earlier.count} receipt{earlier.count === 1 ? "" : "s"}) ·{" "}

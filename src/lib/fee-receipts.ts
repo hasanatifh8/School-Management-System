@@ -4,7 +4,7 @@ import "server-only";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import type { PaymentModeKey } from "@/lib/fees-shared";
-import { dueKey, monthLabel, type DueItem } from "@/lib/fees-shared";
+import { deskMonth, dueKey, monthLabel, type DueItem } from "@/lib/fees-shared";
 import { type getFeesAccess, type loadStudentAccount, nextReceiptNumber } from "@/lib/fees";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -23,6 +23,9 @@ export type ReceiptLine = {
   lateCharged: number;
   lateWaived: number;
   lateMonths: number;
+  month: string;
+  paidBefore: number;
+  cleared: boolean;
 };
 
 /**
@@ -49,6 +52,11 @@ export function receiptLine(
     lateCharged: late.charged,
     lateWaived: late.waived ?? 0,
     lateMonths: late.months,
+    // Which month it belongs to, what was paid on it before, and whether this settles it: the
+    // receipt and the month's bill say "clears May 2026 (₹2,000 paid earlier)".
+    month: deskMonth(item),
+    paidBefore: item.paid + item.discount + item.lateFeePaid,
+    cleared: amount + discount >= item.balance && lateFee + (late.waived ?? 0) >= item.lateLeft + late.charged,
     // The instalment keeps this price from now on (a later fee or class change won't reprice it).
     charged: item.amount,
   };
@@ -69,6 +77,7 @@ export async function saveReceipt({
   discountNote,
   lateWaived,
   waiver = false,
+  bill,
 }: {
   access: Access;
   account: Account;
@@ -81,6 +90,8 @@ export async function saveReceipt({
   lateWaived: number;
   /** Dues written off by an admin, not a payment: numbered apart, total 0. */
   waiver?: boolean;
+  /** Fee desk: the bill it was collected on, what it left owing and the bill that moved to (null = the same). */
+  bill?: { month: string; leftOwing: number; leftTo: string | null };
 }): Promise<{ id: string; number: string } | { error: string }> {
   const { school, session, who } = access;
   const { student } = account;
@@ -112,6 +123,9 @@ export async function saveReceipt({
             studentId: student.id,
             number: await nextReceiptNumber(tx, school.id, session.name, waiver),
             waiver,
+            billMonth: bill?.month ?? null,
+            leftOwing: bill?.leftOwing ?? 0,
+            leftTo: bill?.leftTo ?? null,
             date: parseISODate(date)!,
             mode,
             reference,

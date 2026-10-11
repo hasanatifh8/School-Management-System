@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { MODE_LABELS, MONTH_NAMES, deskMonths, dueKey, dueTotals, headAmount, rupees, stopFare, studentDues, type DueItem, type FeeHeadInfo, type LateLog } from "@/lib/fees-shared";
+import { MODE_LABELS, MONTH_NAMES, deskMonths, monthLabel, dueKey, dueTotals, headAmount, rupees, stopFare, studentDues, type DueItem, type FeeHeadInfo, type LateLog } from "@/lib/fees-shared";
 import { getPortalSchool, getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 import { ensureTransportFee } from "@/lib/transport-fees";
@@ -410,7 +410,7 @@ export async function loadLedger(schoolId: string, studentId: string) {
   const receipts = await db.feeReceipt.findMany({
     where: { studentId, schoolId, sessionId: session.id },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-    include: { items: { select: { headId: true, period: true, amount: true, discount: true, lateFee: true } } },
+    include: { items: { select: { headId: true, period: true, amount: true, discount: true, lateFee: true, cleared: true } } },
   });
   const arrearsKeys = new Set(dues.filter((d) => d.arrears).map((d) => dueKey(d.headId, d.period)));
 
@@ -467,13 +467,16 @@ export async function loadLedger(schoolId: string, studentId: string) {
     upcoming: dues.filter((d) => d.due > today).reduce((n, d) => n + d.balance, 0),
   };
 
-  const monthPayments = (items: DueItem[]) => {
+  const monthPayments = (month: string, items: DueItem[]) => {
     const keys = new Set(items.map((d) => dueKey(d.headId, d.period)));
     return valid.flatMap((r) => {
       const parts = r.items.filter((i) => i.headId && keys.has(dueKey(i.headId, i.period)));
       if (!parts.length) return [];
       const sum = (f: (i: (typeof parts)[number]) => number) => parts.reduce((n, i) => n + f(i), 0);
-      return [{ id: r.id, number: r.number, date: isoDate(r.date), mode: r.mode, fees: sum((i) => i.amount), late: sum((i) => i.lateFee), discount: sum((i) => i.discount), lateWaived: r.lateWaived, note: r.discountNote }];
+      return [{ id: r.id, number: r.number, date: isoDate(r.date), mode: r.mode, fees: sum((i) => i.amount), late: sum((i) => i.lateFee), discount: sum((i) => i.discount), lateWaived: r.lateWaived, note: r.discountNote, waiver: r.waiver,
+        // Paid on a later month's bill, as previous dues; and whether it cleared this month's fees.
+        onBill: r.billMonth && r.billMonth !== month ? (r.billMonth === "arrears" ? "last session's dues" : monthLabel(r.billMonth)) : null,
+        cleared: parts.some((i) => i.cleared) }];
     });
   };
 
@@ -486,7 +489,7 @@ export async function loadLedger(schoolId: string, studentId: string) {
       fees: m.items.map((d) => d.headName),
       // Each fee of the month, and every collection made towards it (the part of each receipt for this month).
       items: m.items.map((d) => ({ name: d.headName, label: d.label, due: d.due, amount: d.amount, paid: d.paid, discount: d.discount, balance: d.balance, lateFeePaid: d.lateFeePaid, lateFee: d.lateFee })),
-      payments: monthPayments(m.items),
+      payments: monthPayments(m.key, m.items),
       charged: m.charged,
       late: m.items.reduce((n, d) => n + d.lateFeePaid, 0),
       lateDue: m.items.reduce((n, d) => n + d.lateFee, 0),

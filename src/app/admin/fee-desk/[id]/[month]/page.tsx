@@ -35,11 +35,20 @@ export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk
       ? db.feeReceiptItem.findMany({
           where: { receipt: { schoolId: school.id, studentId: student.id, cancelledAt: null }, OR: bill.items.map((d) => ({ headId: d.headId, period: d.period })) },
           orderBy: { receipt: { date: "asc" } },
-          select: { receipt: { select: { id: true, number: true, date: true, mode: true, waiver: true } } },
+          select: { amount: true, discount: true, lateFee: true, cleared: true, receipt: { select: { id: true, number: true, date: true, mode: true, waiver: true, billMonth: true } } },
         })
       : [],
   ]);
-  const receipts = [...new Map(receiptItems.map((i) => [i.receipt.id, i.receipt])).values()];
+  // Each receipt with what of it went to this month, and whether it cleared the month's fees.
+  const byReceipt = new Map<string, (typeof receiptItems)[number]["receipt"] & { towards: number; waived: number; cleared: boolean }>();
+  for (const i of receiptItems) {
+    const r = byReceipt.get(i.receipt.id) ?? { ...i.receipt, towards: 0, waived: 0, cleared: false };
+    r.towards += i.amount + i.lateFee;
+    r.waived += i.discount;
+    r.cleared ||= i.cleared;
+    byReceipt.set(i.receipt.id, r);
+  }
+  const receipts = [...byReceipt.values()];
   const name = fullName(student);
   const deskHref = `/admin/fee-desk?s=${student.id}`;
   const prev = months[at - 1]?.key !== "arrears" ? months[at - 1] : undefined;
@@ -82,7 +91,16 @@ export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk
           carried: carried.map((c) => ({ key: c.key, label: c.label, items: c.items, balance: c.balance })),
           movedTo: movedTo && { key: movedTo.key, label: movedTo.label },
           nextBill: nextBill ? { key: nextBill.key, label: nextBill.label } : null,
-          receipts: receipts.map((r) => ({ id: r.id, number: r.number, date: r.date.toISOString().slice(0, 10), mode: r.waiver ? "Dues waived" : MODE_LABELS[r.mode] })),
+          receipts: receipts.map((r) => ({
+            id: r.id,
+            number: r.number,
+            date: r.date.toISOString().slice(0, 10),
+            mode: r.waiver ? "Dues waived" : MODE_LABELS[r.mode],
+            amount: r.waiver ? r.waived : r.towards,
+            // Collected on a later bill, as previous dues: "with the June 2026 bill".
+            onBill: r.billMonth && r.billMonth !== bill.key ? (months.find((m) => m.key === r.billMonth)?.label ?? null) : null,
+            cleared: r.cleared,
+          })),
         }}
         today={today}
         minDate={session.startDate.toISOString().slice(0, 10)}

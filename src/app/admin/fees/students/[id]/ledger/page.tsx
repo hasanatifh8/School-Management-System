@@ -208,8 +208,10 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
                               {p.number}
                             </Link>
                             <span className="text-muted">
-                              {fmt(p.date)} · {MODE_LABELS[p.mode]}
+                              {fmt(p.date)} · {p.waiver ? "Dues waived" : MODE_LABELS[p.mode]}
+                              {p.onBill && ` · with the ${p.onBill} bill`}
                             </span>
+                            {p.cleared && <Badge tone="green">{p.waiver ? "Waived" : "Cleared"}</Badge>}
                           </span>
                           <span className="font-semibold tabular-nums text-success">{rupees(p.fees + p.late)}</span>
                         </div>

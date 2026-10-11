@@ -6,7 +6,8 @@ import path from "node:path";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, degrees, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { db } from "@/lib/db";
-import { MODE_LABELS, amountInWords, rupees } from "@/lib/fees-shared";
+import { MODE_LABELS, amountInWords, monthLabel, rupees } from "@/lib/fees-shared";
+import { billStatusNote, receiptRows } from "@/lib/receipt-rows";
 import { earlierPayments, type Ledger } from "@/lib/fees";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -200,13 +201,14 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
     ["Student ID", receipt.studentCode],
     ["Class", `${receipt.className ?? "—"}${receipt.student?.rollNumber != null ? ` · Roll ${receipt.student.rollNumber}` : ""}`],
     ["Father", receipt.student?.fatherName ?? "—"],
+    ...(receipt.billMonth ? [["Bill", receipt.billMonth === "arrears" ? "Last session's dues" : monthLabel(receipt.billMonth)] as [string, string]] : []),
   ]);
   w.y -= 6;
 
   const discount = receipt.items.reduce((n, i) => n + i.discount, 0);
-  const lateFee = receipt.items.reduce((n, i) => n + i.lateFee, 0);
-  const lateCount = receipt.items.filter((i) => i.lateFee > 0).length;
-  const feeItems = receipt.items.filter((i) => i.amount + i.discount > 0);
+  // Previous dues and the bill's own fees, each late fee by month (see receiptRows).
+  const rows = receiptRows(receipt);
+  const numbered = rows.filter((r) => r.kind !== "section");
   const cols = [
     { label: "#", w: 26 },
     { label: "Fee", w: 235 },
@@ -217,12 +219,11 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
     cols,
     [
       // Each fee at its full amount; the discount comes off the total, once.
-      // A line that only pays (or waives) a late fee left from a part payment shows in the late fee line.
-      ...feeItems.map((i, n) => ({
-        cells: [String(n + 1), i.headName, i.charged > 0 && i.amount + i.discount < i.charged ? `${i.periodLabel} (part of ${rupees(i.charged)})` : i.periodLabel, rupees(i.amount + i.discount)],
-      })),
-      // Late fees collected, as one line (the total already includes them).
-      ...(lateFee ? [{ cells: [String(feeItems.length + 1), "Late fee", `${lateCount} late instalment${lateCount === 1 ? "" : "s"}`, rupees(lateFee)] }] : []),
+      ...rows.map((r) =>
+        r.kind === "section"
+          ? { cells: ["", r.label.toUpperCase(), "", ""], bold: true }
+          : { cells: [String(numbered.indexOf(r) + 1), r.name, r.kind === "fee" && r.note ? [r.period, r.note] : r.period, rupees(r.amount)] },
+      ),
       ...(discount
         ? [
             { cells: ["", "Subtotal", "", rupees(receipt.total + discount)] },
@@ -235,6 +236,13 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
   w.ensure(80);
   w.text(amountInWords(receipt.total), M, { size: 8.5, color: MUTED, width: A4.w - 2 * M });
   w.y -= 22;
+  const billNote = billStatusNote(receipt);
+  // One sentence a line: what the payment did to the bill, then any earlier month it clears.
+  for (const sentence of billNote?.split(/(?<=\.) /) ?? []) {
+    w.text(sentence, M, { size: 9, bold: true, width: A4.w - 2 * M });
+    w.y -= 13;
+  }
+  if (billNote) w.y -= 3;
   const earlier = await earlierPayments(receipt);
   if (earlier.count) {
     w.text(

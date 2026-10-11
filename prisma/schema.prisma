@@ -819,6 +819,9 @@ model FeeReceipt {
   lateWaived   Int         @default(0) // late fee the collector chose not to charge (whole or some months)
   feeNote      String? // how fees before a mid-session admission were handled, as at this payment
   waiver       Boolean     @default(false) // not a payment: an admin wrote off dues (total 0, reason in discountNote)
+  billMonth    String? // the Fee desk bill it was collected on ("2026-06", "arrears"); null = collected elsewhere
+  leftOwing    Int         @default(0) // still owed on that bill after this payment
+  leftTo       String? // the bill what was left moved to as previous dues ("2026-07"); null = stays on the same bill
 
   school  School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   session AcademicSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -844,6 +847,9 @@ model FeeReceiptItem {
   lateCharged Int     @default(0) // late fee fixed on the instalment by this payment; owed until paid (lateFee) or waived (lateWaived)
   lateWaived  Int     @default(0) // late fee already fixed on the instalment that this receipt wrote off
   lateMonths  Int     @default(0) // late months counted from the due date up to this payment (charged or waived), so none is charged twice
+  month       String? // the Fee desk month the instalment belongs to ("2026-05", "arrears"), to tell previous dues from the bill's own fees
+  paidBefore  Int     @default(0) // paid (and discounted) on the instalment before this receipt, fee and late fee
+  cleared     Boolean @default(false) // this receipt settled what was left of the instalment, fee and late fee
 
   receipt FeeReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   head    FeeHead?   @relation(fields: [headId], references: [id], onDelete: SetNull)

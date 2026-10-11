@@ -108,7 +108,8 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
   }
   // Each month is billed on its own; a part-paid month's balance is collected on the next bill.
   if (months.length !== 1) return { error: "Collect one month at a time." };
-  const bill = billOf(deskMonths(account.dues, session.startDate.toISOString().slice(0, 10), today), months[0]);
+  const desk = deskMonths(account.dues, session.startDate.toISOString().slice(0, 10), today);
+  const bill = billOf(desk, months[0]);
   if (!bill) return { error: "Month not found." };
   if (bill.movedTo) return { error: `This month's balance is collected on the ${bill.movedTo.label} bill.` };
   if (received != null && received <= 0) return { error: "Enter the amount received.", fieldErrors: { received: ["Enter the amount"] } };
@@ -139,6 +140,8 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
     remarks,
     discountNote: discount > 0 ? discountNote : null,
     lateWaived: plan.lateWaived,
+    // What a part payment leaves moves to the next bill with fees (as the bill said), else stays here.
+    bill: { month: bill.month.key, leftOwing: plan.full - plan.total, leftTo: plan.full > plan.total ? (desk.slice(desk.indexOf(bill.month) + 1).find((m) => m.items.length > 0)?.key ?? null) : null },
   });
   if ("error" in saved) return { error: saved.error };
   revalidatePath("/admin/fees", "layout");
@@ -187,6 +190,7 @@ export async function waiveDues(studentId: string, _: ActionState, formData: For
     discountNote: reason,
     lateWaived,
     waiver: true,
+    bill: { month, leftOwing: 0, leftTo: null },
   });
   if ("error" in saved) return { error: saved.error };
   revalidatePath("/admin/fees", "layout");

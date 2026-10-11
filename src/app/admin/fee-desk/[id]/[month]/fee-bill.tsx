@@ -24,7 +24,8 @@ export type BillData = {
   movedTo: { key: string; label: string } | null;
   /** Where a part payment's remainder would go: the next month with fees. */
   nextBill: { key: string; label: string } | null;
-  receipts: { id: string; number: string; date: string; mode: string }[];
+  /** Receipts that paid this month's fees: how much of each went to them, and the bill it was collected on when a later one. */
+  receipts: { id: string; number: string; date: string; mode: string; amount: number; onBill: string | null; cleared: boolean }[];
 };
 
 /**
@@ -64,6 +65,8 @@ export function FeeBill({
   const unpaid = useMemo(() => billItems.filter(isOwing), [billItems]);
   const paid = month.items.length > 0 && month.balance === 0 && carried.length === 0;
   const waivedOff = paid && month.items.some((d) => d.waived > 0);
+  // The receipt that settled the month: the last one that cleared any of its fees.
+  const closing = receipts.findLast((r) => r.cleared);
   // Every month's late fee on each unpaid fee, up to the payment date.
   const lateMonths = useMemo(() => unpaid.flatMap((d) => lateFeeMonths(d, date).map((l) => ({ ...l, fee: d.headName }))), [unpaid, date]);
   const isOn = (l: { key: string; onByDefault: boolean }) => lateChoice[l.key] ?? l.onByDefault;
@@ -242,6 +245,13 @@ export function FeeBill({
         {receipts.length > 0 && (
           <footer className="border-t border-line bg-surface-2/60 px-6 py-3 text-sm">
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted">{paid ? "Paid by" : "Payments so far"}</p>
+            {/* When a later bill settled this month, say so: monthly totals stay traceable. */}
+            {paid && closing && (
+              <p className="mb-2 rounded-lg bg-success-soft px-3 py-2 text-sm text-success">
+                {waivedOff ? "Waived" : "Cleared"} on {day(closing.date)} by {closing.number}
+                {closing.onBill ? `, collected with the ${closing.onBill} bill as previous dues` : ""}.
+              </p>
+            )}
             <ul className="space-y-1">
               {receipts.map((r) => (
                 <li key={r.id} className="flex flex-wrap items-center gap-x-3">
@@ -250,7 +260,10 @@ export function FeeBill({
                   </Link>
                   <span className="text-muted">
                     {day(r.date)} · {r.mode}
+                    {r.onBill && ` · with the ${r.onBill} bill`}
+                    {r.cleared && " · cleared it"}
                   </span>
+                  <span className="tabular-nums font-medium text-fg">{rupees(r.amount)}</span>
                   <a href={`/admin/fees/receipts/${r.id}?print=1`} target="_blank" rel="noopener" className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-fg">
                     <Printer className="h-3.5 w-3.5" /> Print
                   </a>
