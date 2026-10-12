@@ -56,7 +56,7 @@ export function SegmentedControl<T extends string>({
               className="sr-only"
             />
             {Icon && <Icon className="h-4 w-4" aria-hidden />}
-            <span className={iconOnly ? "sr-only" : undefined}>{o.label}</span>
+            <span className={iconOnly ? "sr-only" : "whitespace-nowrap"}>{o.label}</span>
           </label>
         );
       })}

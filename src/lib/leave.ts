@@ -115,21 +115,46 @@ function view(actor: LeaveActor, r: Row) {
 
 export type LeaveView = ReturnType<typeof view>;
 
-/** ?status=pending|approved|rejected|all and ?who=student|teacher|staff|mine from the URL. */
+/**
+ * ?status=pending|approved|rejected|all, ?who=student|teacher|staff|mine,
+ * ?q= (a name or ID) and ?on= (leave covering that day) from the URL. A search
+ * looks at every status, and a day at approved leave, unless one is picked.
+ */
 export function leaveFilters(params: Record<string, string | string[] | undefined>) {
-  const s = typeof params.status === "string" ? params.status.toUpperCase() : "PENDING";
+  const q = typeof params.q === "string" ? params.q.trim().slice(0, 80) : "";
+  const on = typeof params.on === "string" && parseISODate(params.on) ? params.on : null;
+  const s = typeof params.status === "string" ? params.status.toUpperCase() : on ? "APPROVED" : q ? "ALL" : "PENDING";
   const status = (LEAVE_STATUSES as readonly string[]).includes(s) ? (s as LeaveStatusKey) : s === "ALL" ? null : "PENDING";
   const w = typeof params.who === "string" ? params.who : "";
   const who: LeaveApplicantKey | "mine" | null = w === "mine" ? "mine" : ((LEAVE_APPLICANTS as readonly string[]).includes(w.toUpperCase()) ? (w.toUpperCase() as LeaveApplicantKey) : null);
-  return { status, who };
+  return { status, who, q, on };
+}
+
+/** Requests whose person matches every word of the search (names, student ID or employee code). */
+function searchWhere(q: string): Prisma.LeaveRequestWhereInput {
+  const words = q.split(/\s+/).filter(Boolean);
+  if (!words.length) return {};
+  const has = (w: string) => ({ contains: w, mode: "insensitive" as const });
+  return {
+    AND: words.map((w) => ({
+      OR: [
+        { student: { OR: [{ firstName: has(w) }, { middleName: has(w) }, { lastName: has(w) }, { studentCode: has(w) }] } },
+        { teacher: { OR: [{ firstName: has(w) }, { middleName: has(w) }, { lastName: has(w) }, { employeeCode: has(w) }] } },
+        { staff: { OR: [{ name: has(w) }, { employeeCode: has(w) }] } },
+      ],
+    })),
+  };
 }
 
 /** One page of requests matching the filters, and the count of each status (for the tabs). */
 export async function listLeave(actor: LeaveActor, filters: ReturnType<typeof leaveFilters>, params: Record<string, string | string[] | undefined>) {
   const base = visibleWhere(actor);
   const { who } = filters;
-  const whoWhere: Prisma.LeaveRequestWhereInput =
-    who === "mine" ? (actor.kind === "teacher" ? { teacherId: actor.ctx.teacher.id } : {}) : who ? { applicant: who } : {};
+  const whoWhere: Prisma.LeaveRequestWhereInput = {
+    AND: [who === "mine" ? (actor.kind === "teacher" ? { teacherId: actor.ctx.teacher.id } : {}) : who ? { applicant: who } : {}, searchWhere(filters.q),
+      filters.on ? { fromDate: { lte: parseISODate(filters.on)! }, toDate: { gte: parseISODate(filters.on)! } } : {},
+    ],
+  };
   const where = { AND: [base, whoWhere, filters.status ? { status: filters.status } : {}] };
   const [total, counts, urgent] = await Promise.all([
     db.leaveRequest.count({ where }),
@@ -149,7 +174,59 @@ export async function listLeave(actor: LeaveActor, filters: ReturnType<typeof le
   const views = rows.map((r) => view(actor, r));
   // Clash warnings only matter while a request is still to be decided.
   const clashes = await departmentClashes(actor.schoolId, views.filter((v) => v.status === "PENDING"));
-  return { rows: views.map((v) => ({ ...v, clash: clashes.get(v.id) ?? null })), paging, byStatus, urgent };
+  return {
+    rows: views.map((v) => ({ ...v, clash: clashes.get(v.id) ?? null })),
+    paging,
+    byStatus,
+    urgent,
+    people: filters.q ? await leaveTally(actor, { AND: [base, whoWhere] }) : [],
+  };
+}
+
+export type LeaveTally = {
+  key: string;
+  applicant: LeaveApplicantKey;
+  name: string;
+  sub: string;
+  href: string | null;
+  requests: number;
+  approved: number;
+  pending: number;
+  rejected: number;
+  approvedDays: number;
+};
+
+/** For a search: each matching person with how many times they asked for leave, and the days approved (most first). */
+async function leaveTally(actor: LeaveActor, where: Prisma.LeaveRequestWhereInput): Promise<LeaveTally[]> {
+  const rows = await db.leaveRequest.findMany({ where, include, orderBy: { fromDate: "desc" }, take: 1000 });
+  const people = new Map<string, LeaveTally>();
+  for (const r of rows) {
+    const v = view(actor, r);
+    const key = `${v.applicant}:${v.personId}`;
+    const p = people.get(key) ?? { key, applicant: v.applicant, ...v.person, requests: 0, approved: 0, pending: 0, rejected: 0, approvedDays: 0 };
+    p.requests++;
+    if (v.status === "APPROVED") {
+      p.approved++;
+      p.approvedDays += v.days;
+    } else if (v.status === "PENDING") p.pending++;
+    else p.rejected++;
+    people.set(key, p);
+  }
+  return [...people.values()].sort((a, b) => b.requests - a.requests || a.name.localeCompare(b.name));
+}
+
+/** A student's leave requests (newest first), each with its length in days. */
+export async function studentLeave(schoolId: string, studentId: string) {
+  const rows = await db.leaveRequest.findMany({
+    where: { schoolId, studentId },
+    orderBy: [{ fromDate: "desc" }, { createdAt: "desc" }],
+    select: { id: true, fromDate: true, toDate: true, category: true, description: true, status: true, requestedBy: true, decidedBy: true, decisionNote: true },
+  });
+  return rows.map((r) => {
+    const from = isoDate(r.fromDate);
+    const to = isoDate(r.toDate);
+    return { ...r, from, to, days: leaveDays(from, to) };
+  });
 }
 
 /* ───────────────────────── Who a request can be for ───────────────────────── */
@@ -314,24 +391,29 @@ export async function withdrawLeaveRecord(actor: LeaveActor, id: string): Promis
  * waiting for a decision, who is on approved leave that day, and approved
  * leave starting later. Each list has at most `take` rows plus its full count.
  */
-export async function leaveOverview(actor: LeaveActor, date: string, take = 5) {
+export async function leaveOverview(actor: LeaveActor, date: string, take = 8) {
   const day = parseISODate(date)!;
   const base = visibleWhere(actor);
   const pendingWhere = { AND: [base, { status: "PENDING" as const }] };
   const todayWhere = { AND: [base, { status: "APPROVED" as const, fromDate: { lte: day }, toDate: { gte: day } }] };
   const upcomingWhere = { AND: [base, { status: "APPROVED" as const, fromDate: { gt: day } }] };
-  const [pending, today, upcoming, pendingCount, todayCount, upcomingCount] = await Promise.all([
-    db.leaveRequest.findMany({ where: pendingWhere, include, orderBy: [{ fromDate: "asc" }, { createdAt: "asc" }], take }),
+  const [pending, today, upcoming, pendingCount, todayCount, upcomingCount, todayBy, upcomingBy] = await Promise.all([
+    // Waiting requests carry approve / reject buttons, so fewer of them fit.
+    db.leaveRequest.findMany({ where: pendingWhere, include, orderBy: [{ fromDate: "asc" }, { createdAt: "asc" }], take: Math.min(take, 4) }),
     db.leaveRequest.findMany({ where: todayWhere, include, orderBy: [{ toDate: "asc" }, { createdAt: "asc" }], take }),
     db.leaveRequest.findMany({ where: upcomingWhere, include, orderBy: [{ fromDate: "asc" }, { createdAt: "asc" }], take }),
     db.leaveRequest.count({ where: pendingWhere }),
     db.leaveRequest.count({ where: todayWhere }),
     db.leaveRequest.count({ where: upcomingWhere }),
+    db.leaveRequest.groupBy({ by: ["applicant"], where: todayWhere, _count: true }),
+    db.leaveRequest.groupBy({ by: ["applicant"], where: upcomingWhere, _count: true }),
   ]);
+  const by = (groups: { applicant: LeaveApplicantKey; _count: number }[]) =>
+    Object.fromEntries(LEAVE_APPLICANTS.map((a) => [a, groups.find((g) => g.applicant === a)?._count ?? 0])) as Record<LeaveApplicantKey, number>;
   return {
     pending: { rows: pending.map((r) => view(actor, r)), total: pendingCount },
-    today: { rows: today.map((r) => view(actor, r)), total: todayCount },
-    upcoming: { rows: upcoming.map((r) => view(actor, r)), total: upcomingCount },
+    today: { rows: today.map((r) => view(actor, r)), total: todayCount, byApplicant: by(todayBy) },
+    upcoming: { rows: upcoming.map((r) => view(actor, r)), total: upcomingCount, byApplicant: by(upcomingBy) },
   };
 }
 

@@ -1,17 +1,19 @@
 import Link from "next/link";
-import { Bus, CalendarClock, ClipboardList, Download, FileBarChart, Megaphone, Paperclip, Phone, Printer, Ticket, UserRound } from "lucide-react";
+import { Bus, CalendarClock, ClipboardList, Download, FileBarChart, Megaphone, Paperclip, Phone, Plane, Plus, Printer, Ticket, UserRound } from "lucide-react";
 import { AdmitCardPages } from "@/components/exams/admit-card";
 import { PdfDownloadButton } from "@/components/pdf-download";
 import { ResultsTable, type ResultSummary } from "@/components/student-profile/results-table";
 import { ReportCard } from "@/components/exams/report-card";
 import { TimetableGrid } from "@/components/timetable/timetable-grid";
-import { Badge, Card, EmptyState, buttonVariants } from "@/components/ui";
+import { Badge, ButtonLink, Card, EmptyState, PagedList, buttonVariants } from "@/components/ui";
 import { loadAdmitCards } from "@/lib/admit-cards";
 import { formatISO, shortDate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { rupees } from "@/lib/fees-shared";
 import { computeResults, loadSheet } from "@/lib/exam-marks";
 import { loadExam, schoolHeader, type ExamActor } from "@/lib/exams";
+import type { studentLeave } from "@/lib/leave";
+import { CATEGORY_LABELS, STATUS_LABELS, STATUS_TONES } from "@/lib/leave-shared";
 import { dateSpan, formatExamDate, timeRange } from "@/lib/exams-shared";
 import { noticeStatus } from "@/lib/notices-shared";
 import type { StudentExam, studentNotices } from "@/lib/student-profile";
@@ -401,3 +403,73 @@ export function TransportPanel({ route, stop, assign, routeHref }: { route: Rout
   );
 }
 
+
+/** Every leave the student has asked for: how many times, the days approved, and each request with its decision. */
+export function LeavePanel({
+  leave,
+  openHref,
+  newHref,
+}: {
+  leave: Awaited<ReturnType<typeof studentLeave>>;
+  /** Opens a request on the Leave page, or null for none. */
+  openHref: ((id: string) => string) | null;
+  newHref?: string;
+}) {
+  const newButton = newHref && (
+    <ButtonLink href={newHref} icon={Plus} size="sm" variant="secondary">
+      New leave request
+    </ButtonLink>
+  );
+  if (!leave.length) return <EmptyState icon={Plane} title="No leave taken" description="Leave requests for this student show here." action={newButton} />;
+  const count = (status: keyof typeof STATUS_LABELS) => leave.filter((r) => r.status === status).length;
+  const approvedDays = leave.filter((r) => r.status === "APPROVED").reduce((n, r) => n + r.days, 0);
+  const stats = [
+    { label: "Leave requests", value: leave.length, tone: "text-fg" },
+    { label: "Days approved", value: approvedDays, tone: "text-success" },
+    { label: "Pending", value: count("PENDING"), tone: count("PENDING") ? "text-warning" : "text-fg" },
+    { label: "Rejected", value: count("REJECTED"), tone: count("REJECTED") ? "text-danger" : "text-fg" },
+  ];
+  return (
+    <Card title="Leave" icon={Plane} description={`${leave.length} ${leave.length === 1 ? "request" : "requests"}, ${count("APPROVED")} approved`} action={newButton} padded={false}>
+      <dl className="grid grid-cols-2 gap-3 border-b border-line px-4 py-4 sm:grid-cols-4 sm:px-6">
+        {stats.map((t) => (
+          <div key={t.label}>
+            <dt className="text-eyebrow uppercase text-muted">{t.label}</dt>
+            <dd className={`mt-0.5 text-lg font-semibold tabular-nums ${t.tone}`}>{t.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <PagedList pageSize={10} noun="requests" className="divide-y divide-line">
+        {leave.map((r) => {
+          const range = r.from === r.to ? formatISO(r.from, shortDate) : `${formatISO(r.from, shortDate)} – ${formatISO(r.to, shortDate)}`;
+          return (
+            <li key={r.id} className="px-4 py-3.5 sm:px-6">
+              <div className="flex flex-wrap items-center gap-2">
+                {openHref ? (
+                  <Link href={openHref(r.id)} className="font-medium text-fg hover:text-accent-text">
+                    {range}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-fg">{range}</span>
+                )}
+                <span className="text-sm text-muted">
+                  {r.days} {r.days === 1 ? "day" : "days"}
+                </span>
+                <Badge>{CATEGORY_LABELS[r.category]}</Badge>
+                <span className="ml-auto">
+                  <Badge tone={STATUS_TONES[r.status]}>{STATUS_LABELS[r.status]}</Badge>
+                </span>
+              </div>
+              {r.description && <p className="mt-1 line-clamp-2 text-sm text-fg-2">{r.description}</p>}
+              <p className="mt-1 text-xs text-muted">
+                Asked by {r.requestedBy}
+                {r.decidedBy && ` · ${STATUS_LABELS[r.status].toLowerCase()} by ${r.decidedBy}`}
+                {r.decisionNote && ` · “${r.decisionNote}”`}
+              </p>
+            </li>
+          );
+        })}
+      </PagedList>
+    </Card>
+  );
+}

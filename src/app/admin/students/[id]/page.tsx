@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { BookOpen, Bus, CalendarClock, CalendarDays, CircleCheck, ClipboardList, Droplet, FileBarChart, FileCheck2, FileText, Hash, History, IdCard, LayoutGrid, Mail, Megaphone, Pencil, Phone, RotateCcw, Ticket, UserRound, UserRoundX, Wallet } from "lucide-react";
+import { BookOpen, Bus, CalendarClock, CalendarDays, CircleCheck, ClipboardList, Droplet, FileBarChart, FileCheck2, FileText, Hash, History, IdCard, LayoutGrid, Mail, Megaphone, Pencil, Phone, Plane, RotateCcw, Ticket, UserRound, UserRoundX, Wallet } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
@@ -14,15 +14,16 @@ import { fullName, getClassesWithSections, getHouses, sectionLabel } from "@/lib
 import { HouseBadge } from "@/components/house";
 import { removeStudent, restoreStudent, setStudentSubjects, updateStudent } from "../actions";
 import { StudentForm } from "../student-form";
-import { AdmitCardPanel, ExamsPanel, NoticesPanel, ReportCardPanel, TimetablePanel, TransportPanel } from "@/components/student-profile/panels";
+import { AdmitCardPanel, ExamsPanel, LeavePanel, NoticesPanel, ReportCardPanel, TimetablePanel, TransportPanel } from "@/components/student-profile/panels";
 import { TransportAssign } from "@/components/student-profile/transport-assign";
 import { studentExams, studentNotices } from "@/lib/student-profile";
+import { studentLeave } from "@/lib/leave";
 import { assignTransport } from "../../transport/actions";
 import { todayISO } from "@/lib/attendance-shared";
 import { sessionMonths } from "@/lib/fees-shared";
 import { getCurrentSession } from "@/lib/sessions";
 
-const TABS = ["overview", "exams", "results", "timetable", "notices", "admit-card", "transport", "documents", "edit"] as const;
+const TABS = ["overview", "exams", "results", "timetable", "notices", "admit-card", "transport", "leave", "documents", "edit"] as const;
 type Tab = (typeof TABS)[number];
 
 const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -73,11 +74,12 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
 
   const tabHref = (t: Tab) => `/admin/students/${student.id}${t === "overview" ? "" : `?tab=${t}`}`;
   const examTabs = tab === "exams" || tab === "results" || tab === "admit-card";
-  const [exams, notices, routes, session] = await Promise.all([
+  const [exams, notices, routes, session, leave] = await Promise.all([
     examTabs ? studentExams(student) : [],
     tab === "notices" ? studentNotices(student.id) : [],
     tab === "transport" ? db.transportRoute.findMany({ where: { schoolId: school.id }, orderBy: { routeNumber: "asc" }, select: { id: true, routeNumber: true, name: true, stops: true, stopTimes: true, stopFares: true } }) : [],
     getCurrentSession(school.id),
+    tab === "leave" ? studentLeave(school.id, student.id) : [],
   ]);
   // The months the transport fee runs, as set now (a new rider starts this month).
   const feeMonths = sessionMonths(session.startDate.toISOString().slice(0, 10));
@@ -193,6 +195,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           <StatusTab href={tabHref("notices")} active={tab === "notices"} label="Notices" icon={Megaphone} />
           <StatusTab href={tabHref("admit-card")} active={tab === "admit-card"} label="Admit card" icon={Ticket} />
           <StatusTab href={tabHref("transport")} active={tab === "transport"} label="Transport" icon={Bus} />
+          <StatusTab href={tabHref("leave")} active={tab === "leave"} label="Leave" icon={Plane} />
           <StatusTab href={tabHref("documents")} active={tab === "documents"} label="Documents" icon={FileText} count={student.documents.length} />
           <StatusTab href={tabHref("edit")} active={tab === "edit"} label="Edit details" icon={Pencil} />
         </nav>
@@ -237,6 +240,10 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             />
           }
         />
+      )}
+
+      {tab === "leave" && (
+        <LeavePanel leave={leave} openHref={(id) => `/admin/leave?status=all&q=${encodeURIComponent(student.studentCode)}&open=${id}`} newHref="/admin/leave/new" />
       )}
 
       {tab === "documents" && <DocumentsPanel ownerKind="student" ownerId={student.id} documents={student.documents} />}
