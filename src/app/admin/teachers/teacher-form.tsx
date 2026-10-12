@@ -146,7 +146,7 @@ export function TeacherForm({
                   className={inputClass}
                 />
               </Field>
-              <Field label="Experience (years)" name="experienceYears" errors={e} hint="Total teaching experience.">
+              <Field label="Experience (years)" name="experienceYears" errors={e} hint="Years of teaching before joining this school. Time here is added automatically.">
                 <input
                   type="number"
                   name="experienceYears"

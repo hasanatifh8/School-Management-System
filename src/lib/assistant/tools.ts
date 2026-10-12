@@ -14,8 +14,12 @@ import { paperName } from "@/lib/exams-shared";
 import { isMonth, monthBounds, monthSummary } from "@/lib/expenses";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { leaveBalance, personLeave } from "@/lib/leave";
+import { CATEGORY_LABELS, STATUS_LABELS } from "@/lib/leave-shared";
+import { performanceReport } from "@/lib/performance";
 import { getCurrentSession } from "@/lib/sessions";
 import type { ToolSpec } from "./llm";
+import { findPages } from "./pages";
 
 type Ctx = { schoolId: string; today: string };
 
@@ -246,6 +250,7 @@ const TOOLS: Tool[] = [
       return rows(
         list.map((s) => ({
           name: fullName(s),
+          link: `/admin/students/${s.id}`,
           studentId: s.studentCode,
           class: s.section ? sectionLabel(s.section) : null,
           roll: s.rollNumber,
@@ -306,6 +311,14 @@ const TOOLS: Tool[] = [
       }
       return {
         name: fullName(s),
+        links: {
+          profile: `/admin/students/${s.id}`,
+          reportCard: `/admin/students/${s.id}?tab=results`,
+          performanceReport: `/admin/students/${s.id}/performance`,
+          leave: `/admin/students/${s.id}?tab=leave`,
+          collectFees: `/admin/fee-desk?s=${s.id}`,
+          feeLedger: `/admin/fees/students/${s.id}/ledger`,
+        },
         studentId: s.studentCode,
         status: s.status,
         class: s.section ? sectionLabel(s.section) : null,
@@ -390,13 +403,15 @@ const TOOLS: Tool[] = [
       return rows(
         teachers.map((t) => ({
           name: fullName(t),
+          link: `/admin/teachers/${t.id}`,
           employeeId: t.employeeCode,
           ...(a.status !== "ACTIVE" ? { status: t.status } : {}),
           phone: t.phone ?? t.whatsappNumber,
           email: t.email,
           qualification: t.qualification,
           specialization: t.specialization,
-          experienceYears: t.experienceYears,
+          // Years entered on the form are before joining; total = these + time since joining.
+          experienceBeforeJoiningYears: t.experienceYears,
           monthlySalary: t.monthlySalary,
           joined: d(t.joiningDate),
           classTeacherOf: t.classTeacherOf.length ? t.classTeacherOf.map(sectionLabel).join(", ") : null,
@@ -425,6 +440,7 @@ const TOOLS: Tool[] = [
       return rows(
         staff.map((s) => ({
           name: s.name,
+          link: `/admin/staff/${s.id}`,
           staffId: s.employeeCode,
           job: s.designation,
           qualification: s.qualification,
@@ -563,7 +579,7 @@ const TOOLS: Tool[] = [
         .map((s) => ({ s, t: dues.get(s.id) }))
         .filter((x) => x.t && x.t.dueNow >= a.min_amount)
         .sort((x, y) => y.t!.dueNow - x.t!.dueNow)
-        .map(({ s, t }) => ({ name: fullName(s), studentId: s.studentCode, class: s.section ? sectionLabel(s.section) : null, father: s.fatherName, phone: s.phone ?? s.whatsappNumber, dueNow: t!.dueNow, paidThisSession: t!.paid }));
+        .map(({ s, t }) => ({ name: fullName(s), collectLink: `/admin/fee-desk?s=${s.id}`, studentId: s.studentCode, class: s.section ? sectionLabel(s.section) : null, father: s.fatherName, phone: s.phone ?? s.whatsappNumber, dueNow: t!.dueNow, paidThisSession: t!.paid }));
       return {
         session: session.name,
         totalOutstandingNow: totalDue,
@@ -661,6 +677,7 @@ const TOOLS: Tool[] = [
         const dates = e.papers.map((p) => isoDate(p.date)).sort();
         return {
           name: e.name,
+          resultsLink: `/admin/results/${e.id}`,
           kind: e.kind === "EXAM" ? "exam" : "class test",
           createdBy: e.teacher ? fullName(e.teacher) : e.createdBy,
           published: e.kind === "EXAM" ? e.published : undefined,
@@ -839,6 +856,256 @@ const TOOLS: Tool[] = [
         })),
         200,
       );
+    },
+  ),
+
+  tool(
+    "find_page",
+    "Where something is done in the app: the page(s) for a task (e.g. collect fees, apply leave, print report card, add a student), with their links and steps. Use for every how-to / where-is question.",
+    { task: str("What the admin wants to do or find, e.g. 'collect fees' or 'print admit cards'") },
+    z.object({ task: z.string().trim().min(1).max(200) }),
+    async (_ctx, { task }) => {
+      const pages = findPages(task);
+      if (!pages.length) return { error: `No page matches "${task}".`, note: "Name the section of the app instead, or ask the admin to rephrase." };
+      return pages.map((p) => ({
+        page: p.title,
+        link: p.path.includes(":") ? null : p.path,
+        // A page for one record: say how to reach it instead of a link.
+        reachedFrom: p.path.includes(":") ? `Open the record first (${p.path.replace(/:(\w+)/g, "[$1]")})` : undefined,
+        does: p.does,
+        steps: p.steps,
+      }));
+    },
+  ),
+
+  tool(
+    "leave_report",
+    "Leave of students, teachers and staff: requests waiting for approval, who is on leave on a date, or one person's leave history (how many times, days approved, and for teachers/staff their leave balance).",
+    {
+      view: { type: "string", enum: ["pending", "on_date", "person"], description: "pending = waiting for a decision; on_date = on approved leave on a day (default today); person = one person's history" },
+      date: str("YYYY-MM-DD for on_date (default today)"),
+      person: str("Name, student ID or employee ID, for view=person"),
+    },
+    z.object({
+      view: z.preprocess((v) => (typeof v === "string" ? v.toLowerCase() : blank(v)), z.enum(["pending", "on_date", "person"]).default("pending")),
+      date,
+      person: text,
+    }),
+    async ({ schoolId, today }, a) => {
+      const include = {
+        student: { select: { id: true, firstName: true, middleName: true, lastName: true, section: { include: { class: true } } } },
+        teacher: { select: { id: true, firstName: true, middleName: true, lastName: true } },
+        staff: { select: { id: true, name: true, designation: true } },
+      } as const;
+      type Row = Prisma.LeaveRequestGetPayload<{ include: typeof include }>;
+      const who = (r: Row) =>
+        r.student
+          ? { name: fullName(r.student), role: "student", detail: r.student.section ? sectionLabel(r.student.section) : null, link: `/admin/students/${r.student.id}?tab=leave` }
+          : r.teacher
+            ? { name: fullName(r.teacher), role: "teacher", detail: null, link: `/admin/teachers/${r.teacher.id}?tab=leave` }
+            : r.staff
+              ? { name: r.staff.name, role: "staff", detail: r.staff.designation, link: null }
+              : { name: "Removed", role: r.applicant.toLowerCase(), detail: null, link: null };
+      const line = (r: Row) => ({
+        ...who(r),
+        from: d(r.fromDate),
+        to: d(r.toDate),
+        days: Math.round((r.toDate.getTime() - r.fromDate.getTime()) / 86_400_000) + 1,
+        leaveType: CATEGORY_LABELS[r.category],
+        status: STATUS_LABELS[r.status],
+        reason: r.description,
+      });
+
+      if (a.view === "pending") {
+        const list = await db.leaveRequest.findMany({ where: { schoolId, status: "PENDING" }, include, orderBy: [{ fromDate: "asc" }, { createdAt: "asc" }] });
+        return { pageLink: "/admin/leave", waiting: list.length, requests: rows(list.map(line), 40) };
+      }
+      if (a.view === "on_date") {
+        const day = parseISODate(a.date ?? today)!;
+        const list = await db.leaveRequest.findMany({ where: { schoolId, status: "APPROVED", fromDate: { lte: day }, toDate: { gte: day } }, include, orderBy: { toDate: "asc" } });
+        const lines = list.map(line);
+        return {
+          date: a.date ?? today,
+          pageLink: `/admin/leave?on=${a.date ?? today}`,
+          onLeave: lines.length,
+          byType: { students: list.filter((r) => r.studentId).length, teachers: list.filter((r) => r.teacherId).length, staff: list.filter((r) => r.staffId).length },
+          people: rows(lines, 60),
+        };
+      }
+      if (!a.person) return { error: "Give the person's name or ID for view=person." };
+      const q = a.person;
+      const words = q.split(/\s+/).filter(Boolean);
+      const has = (w: string) => ({ contains: w, mode: "insensitive" as const });
+      const [students, teachers, staff] = await Promise.all([
+        db.student.findMany({ where: { schoolId, AND: studentNameWhere(q) }, take: 10, select: { id: true, firstName: true, middleName: true, lastName: true, studentCode: true, section: { include: { class: true } } } }),
+        db.teacher.findMany({ where: { schoolId, AND: words.map((w) => ({ OR: [{ firstName: has(w) }, { middleName: has(w) }, { lastName: has(w) }, { employeeCode: has(w) }] })) }, take: 10, select: { id: true, firstName: true, middleName: true, lastName: true, employeeCode: true } }),
+        db.staffMember.findMany({ where: { schoolId, AND: words.map((w) => ({ OR: [{ name: has(w) }, { employeeCode: has(w) }] })) }, take: 10, select: { id: true, name: true, employeeCode: true, designation: true } }),
+      ]);
+      const found = [
+        ...students.map((p) => ({ applicant: "STUDENT" as const, id: p.id, name: fullName(p), detail: `${p.studentCode}${p.section ? `, ${sectionLabel(p.section)}` : ""}`, link: `/admin/students/${p.id}?tab=leave` })),
+        ...teachers.map((p) => ({ applicant: "TEACHER" as const, id: p.id, name: fullName(p), detail: `Teacher ${p.employeeCode}`, link: `/admin/teachers/${p.id}?tab=leave` })),
+        ...staff.map((p) => ({ applicant: "STAFF" as const, id: p.id, name: p.name, detail: `${p.designation} ${p.employeeCode}`, link: null })),
+      ];
+      if (!found.length) return { error: `No student, teacher or staff member matches "${q}".` };
+      if (found.length > 1) return { multipleMatches: found.map(({ name, detail }) => ({ name, detail })), note: "Ask which person, or call again with their ID." };
+      const p = found[0];
+      const [history, balance] = await Promise.all([personLeave(schoolId, p.applicant, p.id), p.applicant === "STUDENT" ? null : leaveBalance(schoolId, p.applicant, p.id)]);
+      const approved = history.filter((r) => r.status === "APPROVED");
+      return {
+        name: p.name,
+        who: p.detail,
+        link: p.link,
+        pageLink: `/admin/leave?q=${encodeURIComponent(p.name)}`,
+        requests: history.length,
+        approved: approved.length,
+        pending: history.filter((r) => r.status === "PENDING").length,
+        rejected: history.filter((r) => r.status === "REJECTED").length,
+        calendarDaysApproved: approved.reduce((n, r) => n + r.days, 0),
+        balanceThisSession: balance && {
+          session: balance.session,
+          note: "Working days, against the school's allowances",
+          byType: balance.rows.map((b) => ({ type: CATEGORY_LABELS[b.category], allowed: b.allowed ?? "no limit", taken: b.used, pending: b.pending, left: b.allowed == null ? null : b.allowed - b.used })),
+        },
+        history: rows(
+          history.map((r) => ({ from: r.from, to: r.to, days: r.days, type: CATEGORY_LABELS[r.category], status: STATUS_LABELS[r.status], reason: r.description, decidedBy: r.decidedBy })),
+          30,
+        ),
+      };
+    },
+  ),
+
+  tool(
+    "student_performance",
+    "One student's performance analytics this session (from published class tests and exams, and attendance): latest exam %, grade and rank, class-test average, top and most improved subject, each subject against the class average with its trend, strengths, focus areas and suggested actions. Also gives the link to the printable Performance report.",
+    { student: str("Student name or student ID") },
+    z.object({ student: z.string().trim().min(1).max(200) }),
+    async ({ schoolId }, { student: q }) => {
+      const byCode = await db.student.findFirst({ where: { schoolId, studentCode: { equals: q, mode: "insensitive" } }, select: { id: true } });
+      const matches = byCode ? [] : await db.student.findMany({ where: { schoolId, AND: studentNameWhere(q) }, take: 20, select: { id: true, firstName: true, middleName: true, lastName: true, studentCode: true, section: { include: { class: true } } } });
+      if (!byCode && !matches.length) return { error: `No student matches "${q}".` };
+      if (matches.length > 1) return { multipleMatches: matches.map((s) => ({ name: fullName(s), studentId: s.studentCode, class: s.section ? sectionLabel(s.section) : null })), note: "Ask which student, or call again with the student ID." };
+      const id = byCode?.id ?? matches[0].id;
+      const r = await performanceReport(schoolId, id);
+      if (!r) return { error: "Student not found." };
+      const round = (n: number | null) => (n == null ? null : Math.round(n * 10) / 10);
+      if (!r.assessments.length) return { name: fullName(r.student), reportLink: `/admin/students/${id}/performance`, note: "No class tests or exams with published results this session yet." };
+      return {
+        name: fullName(r.student),
+        class: r.student.section ? sectionLabel(r.student.section) : null,
+        session: r.session.name,
+        reportLink: `/admin/students/${id}/performance`,
+        summary: r.insights.summary,
+        latest: r.anchor && { name: r.anchor.name, kind: r.anchor.kind === "EXAM" ? "exam" : "class test", percent: round(r.anchor.percent), grade: r.anchor.grade, rank: r.anchor.rank, outOf: r.anchor.outOf, classAverage: round(r.anchor.classAvg) },
+        attendancePercent: r.attendance.percent,
+        classTestAverage: round(r.testAvg),
+        examAverage: round(r.examAvg),
+        topSubject: r.top?.name ?? null,
+        mostImproved: r.improved && { subject: r.improved.name, byPoints: round(r.improved.by) },
+        progress: r.assessments.map((x) => ({ assessment: x.name, kind: x.kind === "EXAM" ? "exam" : "class test", date: x.date, percent: round(x.percent), classAverage: round(x.classAvg) })),
+        subjects: r.subjects.map((x) => ({ subject: x.name, latest: x.examAbsent ? "absent" : round(x.exam), classAverage: round(x.classAvg), classHighest: round(x.classHigh), classTestAverage: round(x.tests), trend: x.trend, status: x.status })),
+        observations: r.insights.notes,
+        suggestedActions: r.insights.actions,
+        note: "Percentages; only published results count; absent papers are not counted as 0; class figures are hidden when fewer than 3 students sat a paper.",
+      };
+    },
+  ),
+
+  tool(
+    "transport_routes",
+    "School bus/van routes: vehicle, driver and attendant with phones, stops with pick-up times and monthly fares, and riders. With a route, lists its students by stop.",
+    { route: str("Route number or name (optional)"), student: str("A student's name, to find their route and stop (optional)") },
+    z.object({ route: text, student: text }),
+    async ({ schoolId }, a) => {
+      if (a.student) {
+        const list = await db.student.findMany({ where: { schoolId, status: "ACTIVE", AND: studentNameWhere(a.student) }, take: 10, select: { id: true, firstName: true, middleName: true, lastName: true, studentCode: true, transportStop: true, transportRoute: { select: { routeNumber: true, name: true, vehicleNumber: true, driverName: true, driverPhone: true } }, section: { include: { class: true } } } });
+        if (!list.length) return { error: `No student matches "${a.student}".` };
+        return list.map((s) => ({ name: fullName(s), class: s.section ? sectionLabel(s.section) : null, link: `/admin/students/${s.id}?tab=transport`, route: s.transportRoute ? `${s.transportRoute.routeNumber}${s.transportRoute.name ? ` (${s.transportRoute.name})` : ""}` : "No school transport", stop: s.transportStop, vehicle: s.transportRoute?.vehicleNumber, driver: s.transportRoute?.driverName, driverPhone: s.transportRoute?.driverPhone }));
+      }
+      const routes = await db.transportRoute.findMany({
+        where: { schoolId, ...(a.route ? { OR: [{ routeNumber: { contains: a.route, mode: "insensitive" } }, { name: { contains: a.route, mode: "insensitive" } }] } : {}) },
+        orderBy: { routeNumber: "asc" },
+        include: { students: { where: { status: "ACTIVE" }, select: { firstName: true, middleName: true, lastName: true, transportStop: true, section: { include: { class: true } } } } },
+      });
+      if (!routes.length) return a.route ? { error: `No route matches "${a.route}".` } : { routes: 0, note: "No transport routes set up.", pageLink: "/admin/transport" };
+      const detail = routes.length === 1;
+      return {
+        routes: routes.length,
+        totalRiders: routes.reduce((n, r) => n + r.students.length, 0),
+        list: routes.map((r) => ({
+          route: r.routeNumber,
+          name: r.name,
+          link: `/admin/transport/${r.id}`,
+          vehicle: `${r.vehicleNumber}${r.vehicleType ? ` (${r.vehicleType})` : ""}`,
+          driver: r.driverName && `${r.driverName}${r.driverPhone ? `, ${r.driverPhone}` : ""}`,
+          attendant: r.attendantName && `${r.attendantName}${r.attendantPhone ? `, ${r.attendantPhone}` : ""}`,
+          riders: r.students.length,
+          stops: r.stops.map((stop, i) => ({
+            stop,
+            pickUp: r.stopTimes[i] || null,
+            monthlyFare: r.stopFares[i] || null,
+            ...(detail ? { students: r.students.filter((s) => s.transportStop === stop).map((s) => `${fullName(s)}${s.section ? ` (${sectionLabel(s.section)})` : ""}`) } : { riders: r.students.filter((s) => s.transportStop === stop).length }),
+          })),
+        })),
+      };
+    },
+  ),
+
+  tool(
+    "notices_sent",
+    "Notices sent by WhatsApp/SMS (newest first): title, audience, channels, when, and delivery counts (sent, failed, no phone). Optional search and day range.",
+    { search: str("Words in the title or message (optional)"), days: num("Only the last N days (optional, default 30)") },
+    z.object({ search: text, days: z.preprocess(blank, z.coerce.number().int().min(1).max(366).default(30)) }),
+    async ({ schoolId }, a) => {
+      const since = new Date(Date.now() - a.days * 86_400_000);
+      const notices = await db.notice.findMany({
+        where: { schoolId, publishAt: { gte: since }, ...(a.search ? { OR: [{ title: { contains: a.search, mode: "insensitive" } }, { body: { contains: a.search, mode: "insensitive" } }] } : {}) },
+        orderBy: { publishAt: "desc" },
+        take: 40,
+        include: { recipients: { select: { status: true } } },
+      });
+      return {
+        sinceDays: a.days,
+        pageLink: "/admin/notices/sent",
+        notices: rows(
+          notices.map((n) => {
+            const by = (s: string) => n.recipients.filter((r) => r.status === s).length;
+            return { title: n.title, link: `/admin/notices/${n.id}`, audience: n.audience, channels: n.channels, sentBy: n.sentBy, at: n.publishAt.toISOString().slice(0, 16).replace("T", " "), recipients: n.recipients.length, sent: by("SENT"), failed: by("FAILED"), noPhone: by("SKIPPED"), waiting: by("PENDING") };
+          }),
+          25,
+        ),
+      };
+    },
+  ),
+
+  tool(
+    "fee_structure",
+    "The session's fee heads (tuition, transport, annual…): how often charged, due day/month, late fee, optional or not, and the amount for each class (or one class).",
+    { class: CLASS_ARG },
+    z.object({ class: text }),
+    async ({ schoolId }, a) => {
+      const found = await findSections(schoolId, a.class);
+      if ("error" in found) return found;
+      const classIds = found.sections ? [...new Set(found.sections.map((s) => s.classId))] : null;
+      const session = await getCurrentSession(schoolId);
+      const heads = await db.feeHead.findMany({
+        where: { schoolId, sessionId: session.id },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        include: { amounts: { ...(classIds ? { where: { classId: { in: classIds } } } : {}), include: { class: { select: { name: true, sortOrder: true } } } } },
+      });
+      const FREQ = { ONE_TIME: "once (new admissions)", MONTHLY: "monthly", QUARTERLY: "quarterly", HALF_YEARLY: "half-yearly", YEARLY: "once a session" } as const;
+      return {
+        session: session.name,
+        pageLink: "/admin/fees/structure",
+        heads: heads.map((h) => ({
+          fee: h.name,
+          charged: FREQ[h.frequency],
+          optional: h.optional,
+          dueDay: h.dueDay,
+          ...(h.dueMonth ? { dueMonth: h.dueMonth } : {}),
+          lateFee: h.lateFee ? `${h.lateFee}${h.lateFeeMonthly ? " per month late" : " once"}` : null,
+          amounts: h.transport ? "each student's stop fare (see transport_routes)" : h.amounts.sort((x, y) => x.class.sortOrder - y.class.sortOrder).map((m) => ({ class: m.class.name, amount: m.amount })),
+        })),
+      };
     },
   ),
 ];

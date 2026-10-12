@@ -1,9 +1,13 @@
+import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
+import { APP_PAGES } from "@/lib/assistant/pages";
 
 /**
  * Renders the small Markdown subset the assistant writes: paragraphs,
- * headings, bullet/numbered lists, tables, **bold**, *italic* and `code`.
- * Builds React elements (no HTML injection), so model output can't add markup.
+ * headings, bullet/numbered lists, tables, **bold**, *italic*, `code` and
+ * [links](/admin/…) to pages of the Admin Portal. Builds React elements (no
+ * HTML injection), so model output can't add markup; a link anywhere else
+ * (another site, a script) shows as plain text.
  */
 export function Markdown({ text }: { text: string }) {
   const lines = text.replace(/\r/g, "").split("\n");
@@ -58,6 +62,21 @@ export function Markdown({ text }: { text: string }) {
       );
       continue;
     }
+    if (/^\s*>\s?/.test(line)) {
+      const quote: string[] = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) quote.push(lines[i++].replace(/^\s*>\s?/, ""));
+      blocks.push(
+        <p key={i} className="border-l-2 border-line-strong pl-3 text-fg-2">
+          {quote.map((q, j) => (
+            <Fragment key={j}>
+              {j > 0 && <br />}
+              {inline(q)}
+            </Fragment>
+          ))}
+        </p>,
+      );
+      continue;
+    }
     const listItem = /^\s*([-*•]|\d+[.)])\s+/;
     if (listItem.test(line)) {
       const ordered = /^\s*\d/.test(line);
@@ -74,7 +93,7 @@ export function Markdown({ text }: { text: string }) {
       continue;
     }
     const para: string[] = [];
-    while (i < lines.length && lines[i].trim() && !listItem.test(lines[i]) && !/^#{1,4}\s/.test(lines[i]) && !isTableRow(lines[i])) para.push(lines[i++]);
+    while (i < lines.length && lines[i].trim() && !listItem.test(lines[i]) && !/^#{1,4}\s/.test(lines[i]) && !/^\s*>/.test(lines[i]) && !isTableRow(lines[i])) para.push(lines[i++]);
     if (!para.length) para.push(lines[i++]); // a lone table-looking line
     blocks.push(
       <p key={i}>
@@ -90,17 +109,48 @@ export function Markdown({ text }: { text: string }) {
   return <div className="space-y-3 text-sm leading-relaxed text-fg-2">{blocks}</div>;
 }
 
+/** "Open Fee desk" for a bare link to a known page; else "Open page". */
+function pageName(path: string) {
+  const bare = path.split("?")[0].replace(/\/$/, "") || "/admin";
+  const page = APP_PAGES.find((p) => p.path === bare);
+  return page ? `Open ${page.title}` : "Open page";
+}
+
+/** Only the Admin Portal's own pages may be linked. */
+const INTERNAL = /^\/admin(\/[\w\-/]*)?(\?[\w\-=&%.]*)?$/;
+
 const isTableRow = (l: string) => /^\s*\|.*\|\s*$/.test(l);
 const cells = (l: string) => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
 
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g;
+  // A bare /admin/… path (no link text) is linked too, named after its page.
+  const re = /(\[[^\]]+\]\([^)\s]+\)|\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|(?<![\w(/])\/admin(?:\/[\w\-/]*)?(?:\?[\w\-=&%.]*)?)/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const t = m[0];
-    if (t.startsWith("**")) out.push(<strong key={m.index} className="font-semibold text-fg">{t.slice(2, -2)}</strong>);
+    if (t.startsWith("/admin")) {
+      const path = t.replace(/[.,;:]+$/, "");
+      out.push(
+        <Link key={m.index} href={path} className="font-medium text-accent-text underline-offset-4 hover:underline">
+          {pageName(path)}
+        </Link>,
+      );
+      if (path.length < t.length) out.push(t.slice(path.length));
+    } else if (t.startsWith("[")) {
+      const [, label, href] = t.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/)!;
+      out.push(
+        INTERNAL.test(href) ? (
+          <Link key={m.index} href={href} className="font-medium text-accent-text underline-offset-4 hover:underline">
+            {/* A path as the link text reads badly: name the page instead. */}
+            {label.trim().startsWith("/admin") ? pageName(href) : inline(label)}
+          </Link>
+        ) : (
+          label
+        ),
+      );
+    } else if (t.startsWith("**")) out.push(<strong key={m.index} className="font-semibold text-fg">{inline(t.slice(2, -2))}</strong>);
     else if (t.startsWith("`")) out.push(<code key={m.index} className="rounded bg-surface-3 px-1 py-0.5 text-xs">{t.slice(1, -1)}</code>);
     else out.push(<em key={m.index}>{t.slice(1, -1)}</em>);
     last = m.index + t.length;

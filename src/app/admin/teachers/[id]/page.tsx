@@ -5,7 +5,7 @@ import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import {
   ArrowRight,
   BookOpen,
-  Briefcase,
+  CalendarCheck,
   CalendarClock,
   CalendarDays,
   Crown,
@@ -32,16 +32,19 @@ import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { LeaveHistory } from "@/components/leave/leave-history";
+import { PersonAttendanceView } from "@/components/attendance/person-attendance";
+import { attendanceWindow, pickMonth, schoolHolidays } from "@/lib/attendance";
+import { loadPersonAttendance } from "@/lib/staff-register";
 import { leaveBalance, personLeave } from "@/lib/leave";
 import { Avatar, Badge, ButtonLink, Card, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
-import { todayISO } from "@/lib/attendance-shared";
+import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { loadTeacherTimetable } from "@/lib/timetable";
-import { DAY_NAMES, periodTime } from "@/lib/timetable-shared";
+import { DAY_NAMES, formatTime, periodTime } from "@/lib/timetable-shared";
 import { TimetableGrid } from "@/components/timetable/timetable-grid";
 import { TeachingCard, type SectionChoice } from "@/components/teaching/teaching-card";
 import {
@@ -65,18 +68,34 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", t
 const monthFormat = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 const GENDER_LABELS = { MALE: "Male", FEMALE: "Female", OTHER: "Other" } as const;
 
-const TABS = ["overview", "timetable", "leave", "edit", "documents"] as const;
+const TABS = ["overview", "timetable", "attendance", "leave", "edit", "documents"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Whole years and months from a date until today (India), e.g. "3 yrs 2 mos". */
-function durationSince(date: Date) {
+/** Whole months from `date` to today (0 before a month has passed). */
+function monthsSince(date: Date) {
   const [ty, tm, td] = todayISO().split("-").map(Number);
   let months = (ty - date.getUTCFullYear()) * 12 + (tm - 1 - date.getUTCMonth());
   if (td < date.getUTCDate()) months--;
-  if (months < 1) return "New";
+  return Math.max(months, 0);
+}
+
+/** "3 yrs 2 mos"; "< 1 month" for 0. */
+function span(months: number) {
+  if (months < 1) return "< 1 month";
   const y = Math.floor(months / 12);
   const m = months % 12;
   return [y && `${y} yr${y === 1 ? "" : "s"}`, m && `${m} mo${m === 1 ? "" : "s"}`].filter(Boolean).join(" ");
+}
+
+/**
+ * Total experience: the years entered on the teacher's form (before joining)
+ * plus the time at this school since the joining date.
+ */
+function experience(t: { experienceYears: number | null; joiningDate: Date }) {
+  const here = monthsSince(t.joiningDate);
+  const before = (t.experienceYears ?? 0) * 12;
+  return { total: before + here, before, here };
 }
 
 function ageOn(dob: Date) {
@@ -87,7 +106,7 @@ function ageOn(dob: Date) {
 
 export default async function TeacherPage({ params, searchParams }: PageProps<"/admin/teachers/[id]">) {
   const { id } = await params;
-  const requested = (await searchParams).tab;
+  const { tab: requested, month: monthParam } = await searchParams;
   const tab: Tab = TABS.find((t) => t === requested) ?? "overview";
   const school = await getCurrentSchool();
   const [allSubjects, schoolSections] = await Promise.all([
@@ -142,8 +161,10 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
   });
   if (!teacher) notFound();
   const timetable = await loadTeacherTimetable(school.id, teacher.id);
+  const today = tab === "overview" ? await todaysClasses(school.id, teacher.id, timetable) : { value: "", detail: "" };
 
   const name = fullName(teacher);
+  const exp = experience(teacher);
   const removed = teacher.status === "INACTIVE";
   const base = `/admin/teachers/${teacher.id}`;
 
@@ -214,13 +235,17 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
         <nav aria-label="Teacher sections" className={tabBarClass}>
           <StatusTab href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
           <StatusTab href={`${base}?tab=timetable`} active={tab === "timetable"} label="Timetable" icon={CalendarClock} count={timetable.count} />
+          <StatusTab href={`${base}?tab=attendance`} active={tab === "attendance"} label="Attendance" icon={CalendarCheck} />
           <StatusTab href={`${base}?tab=leave`} active={tab === "leave"} label="Leave" icon={Plane} />
-          <StatusTab href={`${base}?tab=edit`} active={tab === "edit"} label="Edit profile" icon={Pencil} />
           <StatusTab href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={teacher.documents.length} />
         </nav>
       </div>
 
       {tab === "timetable" && <TeacherTimetable timetable={timetable} teacherId={teacher.id} />}
+
+      {tab === "attendance" && (
+        <TeacherAttendance schoolId={school.id} teacherId={teacher.id} joined={teacher.joiningDate ? teacher.joiningDate.toISOString().slice(0, 10) : null} base={base} month={monthParam} />
+      )}
 
       {tab === "leave" && (
         <LeaveHistory
@@ -287,17 +312,11 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
             <StatCard
               icon={CalendarDays}
               tone="emerald"
-              label="At this school"
-              value={durationSince(teacher.joiningDate)}
-              detail={`Joined ${dateFormat.format(teacher.joiningDate)}`}
-            />
-            <StatCard
-              icon={Briefcase}
-              tone="sky"
               label="Experience"
-              value={teacher.experienceYears == null ? "—" : `${teacher.experienceYears} yr${teacher.experienceYears === 1 ? "" : "s"}`}
-              detail="Total teaching experience"
+              value={span(exp.total)}
+              detail={exp.before ? `${span(exp.before)} before + ${span(exp.here)} here` : `All here · joined ${dateFormat.format(teacher.joiningDate)}`}
             />
+            <StatCard icon={CalendarClock} tone="sky" label="Today's classes" value={today.value} detail={today.detail} href={`${base}?tab=timetable`} />
             <StatCard
               icon={BookOpen}
               tone="violet"
@@ -372,7 +391,10 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                   <Detail label="Specialization">{teacher.specialization}</Detail>
                   <Detail label="Can teach">{teacher.canTeach.length > 0 && teacher.canTeach.map((c) => c.subject.name).join(", ")}</Detail>
                   <Detail label="Experience">
-                    {teacher.experienceYears != null && `${teacher.experienceYears} year${teacher.experienceYears === 1 ? "" : "s"}`}
+                    {span(exp.total)} in total
+                    <span className="block text-xs text-muted">
+                      {exp.before ? `${span(exp.before)} before joining` : "No experience before joining"} · {span(exp.here)} at this school
+                    </span>
                   </Detail>
                   <Detail label="Joining date">{dateFormat.format(teacher.joiningDate)}</Detail>
                   <Detail label="Monthly salary">{teacher.monthlySalary != null && rupees(teacher.monthlySalary)}</Detail>
@@ -533,4 +555,74 @@ function Detail({ label, icon: Icon, children }: { label: string; icon?: LucideI
       </div>
     </div>
   );
+}
+
+/** The Attendance tab: the session's totals, a month as a calendar register (?month=) and every month's totals. */
+async function TeacherAttendance({
+  schoolId,
+  teacherId,
+  joined,
+  base,
+  month: param,
+}: {
+  schoolId: string;
+  teacherId: string;
+  joined: string | null;
+  base: string;
+  month: string | string[] | undefined;
+}) {
+  const win = await attendanceWindow(schoolId);
+  const month = pickMonth(param, win);
+  const data = await loadPersonAttendance(schoolId, { teacherId }, win.min, win.max, win.today, joined);
+  return (
+    <PersonAttendanceView
+      data={data}
+      session={win.session.name}
+      month={month}
+      minMonth={win.min.slice(0, 7)}
+      maxMonth={win.max.slice(0, 7)}
+      today={win.today}
+      monthHref={(m) => `${base}?tab=attendance&month=${m}`}
+      registerHref={`/admin/attendance/staff/register?group=teaching&month=${month}`}
+    />
+  );
+}
+
+/**
+ * The teacher's periods today: their own timetable, less periods handed to a
+ * proxy today, plus periods they cover as a proxy; and what is next.
+ */
+async function todaysClasses(schoolId: string, teacherId: string, timetable: Awaited<ReturnType<typeof loadTeacherTimetable>>) {
+  const date = todayISO();
+  const day = ((parseISODate(date)!.getUTCDay() + 6) % 7) + 1; // 1 = Monday … 7 = Sunday, as in the timetable
+  const [holidays, proxies] = await Promise.all([
+    schoolHolidays(schoolId, date, date),
+    db.proxyAssignment.findMany({
+      where: { schoolId, date: parseISODate(date)!, OR: [{ absentTeacherId: teacherId }, { proxyTeacherId: teacherId }] },
+      include: { slot: { include: { period: true, subject: true, section: { include: { class: true } } } } },
+    }),
+  ]);
+  const holiday = holidays.get(date);
+  if (holiday) return { value: "Holiday", detail: holiday.name };
+  if (!timetable.days.includes(day)) return { value: "No classes", detail: `${DAY_NAMES[day]} is not a school day` };
+
+  const handedOver = new Set(proxies.filter((p) => p.absentTeacherId === teacherId).map((p) => `${p.slot.periodId}:${p.slot.sectionId}`));
+  const classes = [
+    ...timetable.entries
+      .filter((e) => e.day === day && !handedOver.has(`${e.period.id}:${e.sectionId}`))
+      .map((e) => ({ start: e.period.startTime, subject: e.subject, section: e.section, proxy: false })),
+    ...proxies
+      .filter((p) => p.proxyTeacherId === teacherId)
+      .map((p) => ({ start: p.slot.period.startTime, subject: p.slot.subject?.name ?? p.slot.label ?? "", section: sectionLabel(p.slot.section), proxy: true })),
+  ].sort((a, b) => a.start.localeCompare(b.start));
+  if (!classes.length) return { value: "No classes", detail: handedOver.size ? "All covered by a proxy" : "None on the timetable" };
+
+  const now = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date());
+  const next = classes.find((c) => c.start > now);
+  const proxyCount = classes.filter((c) => c.proxy).length;
+  const what = (c: (typeof classes)[number]) => `${[c.subject, c.section].filter(Boolean).join(" · ")} at ${formatTime(c.start)}${c.proxy ? " (proxy)" : ""}`;
+  return {
+    value: `${classes.length} period${classes.length === 1 ? "" : "s"}`,
+    detail: next ? `Next: ${what(next)}` : `Done for today${proxyCount ? ` · ${proxyCount} as proxy` : ""}`,
+  };
 }

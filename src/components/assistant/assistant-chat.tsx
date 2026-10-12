@@ -10,6 +10,7 @@ import {
   CalendarDays,
   Check,
   ClipboardList,
+  Compass,
   Copy,
   Cpu,
   GraduationCap,
@@ -17,10 +18,14 @@ import {
   Lock,
   Megaphone,
   PiggyBank,
+  Plane,
   Presentation,
   RotateCcw,
   School,
   ShieldCheck,
+  ChartLine,
+  Bus,
+  Receipt,
   Sparkles,
   SquarePen,
   TriangleAlert,
@@ -37,12 +42,12 @@ type Message = { role: "user" | "assistant"; content: string; tools?: string[] }
 /* ───────────────────────── Content ───────────────────────── */
 
 const TOPICS: { title: string; icon: LucideIcon; tone: IconTone; prompts: string[] }[] = [
-  { title: "Students", icon: GraduationCap, tone: "indigo", prompts: ["How many students are in each class?", "Students with a birthday this month"] },
-  { title: "Attendance", icon: CalendarCheck, tone: "emerald", prompts: ["Who is absent today?", "Students below 75% attendance this session"] },
+  { title: "Students", icon: GraduationCap, tone: "indigo", prompts: ["How many students are in each class?", "How is Aarav Gupta doing this session?"] },
+  { title: "Attendance & leave", icon: CalendarCheck, tone: "emerald", prompts: ["Who is absent or on leave today?", "How many times has Aarav Gupta taken leave?"] },
   { title: "Fees", icon: Wallet, tone: "amber", prompts: ["Top 10 students with pending fees", "Fees collected this month by payment mode"] },
   { title: "Expenses", icon: PiggyBank, tone: "rose", prompts: ["This month's expenses vs budget", "Whose salary is still to be paid?"] },
   { title: "Exams", icon: ClipboardList, tone: "violet", prompts: ["Which exams are there this session?", "Toppers of the latest exam"] },
-  { title: "Calendar", icon: CalendarDays, tone: "sky", prompts: ["Upcoming holidays and events", "Who teaches Maths, and in which classes?"] },
+  { title: "Find your way", icon: Compass, tone: "sky", prompts: ["How do I collect fees?", "Where do I print a student's performance report?"] },
 ];
 
 /** What each lookup is called for people, and where it lives in the app. */
@@ -62,6 +67,12 @@ const TOOL_INFO: Record<string, { label: string; icon: LucideIcon; href: string;
   exam_results: { label: "Exam results", icon: ClipboardList, href: "/admin/exams", section: "Exams" },
   calendar: { label: "Calendar", icon: CalendarDays, href: "/admin/calendar", section: "Calendar" },
   timetable: { label: "Timetable", icon: CalendarClock, href: "/admin/timetable", section: "Timetable" },
+  find_page: { label: "App guide", icon: Compass, href: "/admin", section: "Dashboard" },
+  leave_report: { label: "Leave", icon: Plane, href: "/admin/leave", section: "Leave" },
+  student_performance: { label: "Performance report", icon: ChartLine, href: "/admin/students", section: "Students" },
+  transport_routes: { label: "Transport", icon: Bus, href: "/admin/transport", section: "Transport" },
+  notices_sent: { label: "Notices", icon: Megaphone, href: "/admin/notices/sent", section: "Notices" },
+  fee_structure: { label: "Fee structure", icon: Receipt, href: "/admin/fees/structure", section: "Fees" },
 };
 // Answers about dues or absences usually lead to messaging parents.
 const NOTICE_AFTER = new Set(["fee_dues", "attendance_on_date", "attendance_report"]);
@@ -301,7 +312,8 @@ function Answer({ message }: { message: Message }) {
   const [copied, setCopied] = useState(false);
   const tools = [...new Set(message.tools ?? [])].filter((t) => TOOL_INFO[t]);
   const sources = [...new Map(tools.map((t) => [TOOL_INFO[t].label, TOOL_INFO[t]])).values()];
-  const links = [...new Map(tools.map((t) => [TOOL_INFO[t].href, TOOL_INFO[t]])).values()].slice(0, 3);
+  // The app guide isn't a section of its own: its pages are linked in the answer.
+  const links = [...new Map(tools.filter((t) => t !== "find_page").map((t) => [TOOL_INFO[t].href, TOOL_INFO[t]])).values()].slice(0, 3);
   const notice = tools.some((t) => NOTICE_AFTER.has(t));
 
   async function copy() {
