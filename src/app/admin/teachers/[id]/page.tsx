@@ -19,6 +19,7 @@ import {
   Pencil,
   Layers,
   Phone,
+  Plane,
   Printer,
   RotateCcw,
   UserRound,
@@ -30,6 +31,8 @@ import { ActionForm, SubmitButton } from "@/components/forms";
 import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
+import { LeaveHistory } from "@/components/leave/leave-history";
+import { leaveBalance, personLeave } from "@/lib/leave";
 import { Avatar, Badge, ButtonLink, Card, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
@@ -62,7 +65,7 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", t
 const monthFormat = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 const GENDER_LABELS = { MALE: "Male", FEMALE: "Female", OTHER: "Other" } as const;
 
-const TABS = ["overview", "timetable", "edit", "documents"] as const;
+const TABS = ["overview", "timetable", "leave", "edit", "documents"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Whole years and months from a date until today (India), e.g. "3 yrs 2 mos". */
@@ -211,12 +214,23 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
         <nav aria-label="Teacher sections" className={tabBarClass}>
           <StatusTab href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
           <StatusTab href={`${base}?tab=timetable`} active={tab === "timetable"} label="Timetable" icon={CalendarClock} count={timetable.count} />
+          <StatusTab href={`${base}?tab=leave`} active={tab === "leave"} label="Leave" icon={Plane} />
           <StatusTab href={`${base}?tab=edit`} active={tab === "edit"} label="Edit profile" icon={Pencil} />
           <StatusTab href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={teacher.documents.length} />
         </nav>
       </div>
 
       {tab === "timetable" && <TeacherTimetable timetable={timetable} teacherId={teacher.id} />}
+
+      {tab === "leave" && (
+        <LeaveHistory
+          leave={await personLeave(school.id, "TEACHER", teacher.id)}
+          balance={await leaveBalance(school.id, "TEACHER", teacher.id)}
+          noun="teacher"
+          openHref={(lid) => `/admin/leave?status=all&q=${encodeURIComponent(teacher.employeeCode)}&open=${lid}`}
+          newHref="/admin/leave/new"
+        />
+      )}
 
       {tab === "documents" && <DocumentsPanel ownerKind="teacher" ownerId={teacher.id} documents={teacher.documents} />}
 

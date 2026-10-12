@@ -14,10 +14,11 @@ import { fullName, getClassesWithSections, getHouses, sectionLabel } from "@/lib
 import { HouseBadge } from "@/components/house";
 import { removeStudent, restoreStudent, setStudentSubjects, updateStudent } from "../actions";
 import { StudentForm } from "../student-form";
-import { AdmitCardPanel, ExamsPanel, LeavePanel, NoticesPanel, ReportCardPanel, TimetablePanel, TransportPanel } from "@/components/student-profile/panels";
+import { AdmitCardPanel, ExamsPanel, NoticesPanel, ReportCardPanel, TimetablePanel, TransportPanel } from "@/components/student-profile/panels";
 import { TransportAssign } from "@/components/student-profile/transport-assign";
 import { studentExams, studentNotices } from "@/lib/student-profile";
-import { studentLeave } from "@/lib/leave";
+import { personLeave } from "@/lib/leave";
+import { LeaveHistory } from "@/components/leave/leave-history";
 import { assignTransport } from "../../transport/actions";
 import { todayISO } from "@/lib/attendance-shared";
 import { sessionMonths } from "@/lib/fees-shared";
@@ -79,7 +80,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
     tab === "notices" ? studentNotices(student.id) : [],
     tab === "transport" ? db.transportRoute.findMany({ where: { schoolId: school.id }, orderBy: { routeNumber: "asc" }, select: { id: true, routeNumber: true, name: true, stops: true, stopTimes: true, stopFares: true } }) : [],
     getCurrentSession(school.id),
-    tab === "leave" ? studentLeave(school.id, student.id) : [],
+    tab === "leave" ? personLeave(school.id, "STUDENT", student.id) : [],
   ]);
   // The months the transport fee runs, as set now (a new rider starts this month).
   const feeMonths = sessionMonths(session.startDate.toISOString().slice(0, 10));
@@ -210,6 +211,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           selected={selectedExam}
           tabHref={(examId) => `${tabHref("results")}&exam=${examId}`}
           cardHref={(e) => `/admin/results/${e.id}/${e.sectionId}?student=${student.id}`}
+          performanceHref={`/admin/students/${student.id}/performance`}
         />
       )}
       {tab === "timetable" && <TimetablePanel schoolId={school.id} sectionId={student.sectionId} />}
@@ -243,7 +245,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       )}
 
       {tab === "leave" && (
-        <LeavePanel leave={leave} openHref={(id) => `/admin/leave?status=all&q=${encodeURIComponent(student.studentCode)}&open=${id}`} newHref="/admin/leave/new" />
+        <LeaveHistory leave={leave} noun="student" openHref={(id) => `/admin/leave?status=all&q=${encodeURIComponent(student.studentCode)}&open=${id}`} newHref="/admin/leave/new" />
       )}
 
       {tab === "documents" && <DocumentsPanel ownerKind="student" ownerId={student.id} documents={student.documents} />}

@@ -215,10 +215,10 @@ async function leaveTally(actor: LeaveActor, where: Prisma.LeaveRequestWhereInpu
   return [...people.values()].sort((a, b) => b.requests - a.requests || a.name.localeCompare(b.name));
 }
 
-/** A student's leave requests (newest first), each with its length in days. */
-export async function studentLeave(schoolId: string, studentId: string) {
+/** One person's leave requests (newest first), each with its length in days. */
+export async function personLeave(schoolId: string, applicant: LeaveApplicantKey, personId: string) {
   const rows = await db.leaveRequest.findMany({
-    where: { schoolId, studentId },
+    where: { schoolId, [personKey[applicant]]: personId },
     orderBy: [{ fromDate: "desc" }, { createdAt: "desc" }],
     select: { id: true, fromDate: true, toDate: true, category: true, description: true, status: true, requestedBy: true, decidedBy: true, decisionNote: true },
   });
