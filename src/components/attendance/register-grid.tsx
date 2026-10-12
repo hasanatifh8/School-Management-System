@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PagedTable } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { ATTENDANCE_STATUSES, STATUS_META, formatISO, isSunday, parseISODate, shortDate } from "@/lib/attendance-shared";
+import { ATTENDANCE_STATUSES, STATUS_META, formatISO, parseISODate, shortDate } from "@/lib/attendance-shared";
 import type { Register } from "@/lib/attendance";
 import { MarkEditor } from "./mark-editor";
 
@@ -79,7 +79,10 @@ export function RegisterGrid({
             Session
           </th>
           {dates.map((d, i) => {
-            const holiday = schoolHolidays.get(d)?.name ?? classHolidays.get(d);
+            // School and class holidays are tinted; weekly offs (Sunday, Saturday if off) are grey.
+            const off = schoolHolidays.get(d);
+            const holiday = (off && !off.weeklyOff ? off.name : undefined) ?? classHolidays.get(d);
+            const weekly = !holiday && off?.weeklyOff ? off.name : undefined;
             const day = Number(d.slice(8));
             const label = (
               <>
@@ -92,8 +95,8 @@ export function RegisterGrid({
             return (
               <th
                 key={d}
-                title={holiday ?? (isSunday(d) ? "Sunday" : undefined)}
-                className={`${cellBase} border-b py-1 font-semibold text-fg-2 ${holiday ? "bg-accent-soft text-accent-text" : isSunday(d) ? "bg-surface-3 text-subtle" : ""} ${manyMonths && day === 1 && i > 0 ? "border-l-2 border-l-line-strong" : ""}`}
+                title={holiday ?? weekly}
+                className={`${cellBase} border-b py-1 font-semibold text-fg-2 ${holiday ? "bg-accent-soft text-accent-text" : weekly ? "bg-surface-3 text-subtle" : ""} ${manyMonths && day === 1 && i > 0 ? "border-l-2 border-l-line-strong" : ""}`}
               >
                 {dayHref && d <= today ? (
                   <Link href={dayHref(d)} className="block rounded transition hover:text-accent-text">
@@ -131,12 +134,15 @@ export function RegisterGrid({
           <td className={`${cellBase} border-b px-2 font-semibold tabular-nums ${pctTone(s.periodPercent)}`}>{pct(s.periodPercent)}</td>
           <td className={`${cellBase} border-b border-r px-2 font-semibold tabular-nums ${pctTone(s.sessionPercent)}`}>{pct(s.sessionPercent)}</td>
           {dates.map((d, i) => {
-            const holiday = schoolHolidays.has(d) || classHolidays.has(d);
-            const status = holiday ? undefined : s.marks.get(d);
+            const off = schoolHolidays.get(d);
+            const holiday = (!!off && !off.weeklyOff) || classHolidays.has(d);
+            const weekly = !holiday && !!off?.weeklyOff;
+            // A mark on a holiday or weekly off isn't counted, so it isn't shown either.
+            const status = holiday || weekly ? undefined : s.marks.get(d);
             return (
               <td
                 key={d}
-                className={`${cellBase} border-b font-semibold ${holiday ? "bg-accent-soft" : isSunday(d) && !status ? "bg-surface-2" : ""} ${
+                className={`${cellBase} border-b font-semibold ${holiday ? "bg-accent-soft" : weekly ? "bg-surface-2" : ""} ${
                   status ? STATUS_META[status].text : "text-subtle"
                 } ${status === "ABSENT" ? "bg-danger-soft" : ""} ${manyMonths && d.endsWith("-01") && i > 0 ? "border-l-2 border-l-line-strong" : ""}`}
               >
@@ -246,7 +252,7 @@ export function RegisterLegend() {
         <span className="inline-block h-3 w-3 rounded-sm bg-accent-soft" /> Holiday
       </span>
       <span className="flex items-center gap-1">
-        <span className="inline-block h-3 w-3 rounded-sm bg-surface-3" /> Sunday
+        <span className="inline-block h-3 w-3 rounded-sm bg-surface-3" /> Weekly off
       </span>
       <span>Late counts as present, half day as half. Green 90%+, amber 75–90%, red below 75%.</span>
     </div>

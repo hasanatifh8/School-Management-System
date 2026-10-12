@@ -39,8 +39,8 @@ import {
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, ButtonLink, Callout, Card, EmptyState, IconTile, PageHeader, TextLink } from "@/components/ui";
 import { selfCheckIn } from "./actions";
-import { attendanceWindow } from "@/lib/attendance";
-import { attendancePercent, emptyCounts, isSunday, isoDate, parseISODate } from "@/lib/attendance-shared";
+import { attendanceWindow, weeklyOffOn } from "@/lib/attendance";
+import { attendancePercent, emptyCounts, isoDate, parseISODate } from "@/lib/attendance-shared";
 import { loadCalendar } from "@/lib/calendar";
 import { db } from "@/lib/db";
 import { fullName, sectionLabel } from "@/lib/queries";
@@ -66,7 +66,7 @@ export default async function TeacherDashboard() {
   const todayDate = parseISODate(win.today)!;
   const weekday = todayDate.getUTCDay() || 7;
   const session = await getCurrentSession(ctx.school.id);
-  const attendanceDue = win.today === win.max && !isSunday(win.today);
+  const attendanceDue = win.today === win.max && !(await weeklyOffOn(ctx.school.id, win.today));
 
   const [
     counts,

@@ -1,8 +1,8 @@
 import "server-only";
 // Monthly attendance register for teaching or non-teaching staff: one row per
 // person, one column per day, and totals including loss of pay (LOP).
-import { schoolHolidays } from "@/lib/attendance";
-import { addMonths, isSunday, isoDate, monthDates, parseISODate } from "@/lib/attendance-shared";
+import { daysOff } from "@/lib/attendance";
+import { addMonths, isoDate, monthDates, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { fullName } from "@/lib/queries";
 import type { StaffGroup, StaffStatusKey } from "@/lib/staff-attendance-shared";
@@ -52,7 +52,7 @@ export function tallyStaff(working: string[], marks: Record<string, StaffStatusK
 
 /**
  * One month of a staff group's attendance. Working days are the month's days
- * up to `today` that are neither Sundays nor school holidays.
+ * up to `today` that are neither weekly offs nor school holidays.
  */
 export async function loadStaffRegister(schoolId: string, group: StaffGroup, month: string, today: string) {
   const dates = monthDates(month);
@@ -71,14 +71,14 @@ export async function loadStaffRegister(schoolId: string, group: StaffGroup, mon
           .findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: { name: "asc" } })
           .then((ss) => ss.map((s) => ({ id: s.id, name: s.name, code: s.employeeCode, department: [s.designation, s.department].filter(Boolean).join(" · ") }))),
     db.staffAttendance.findMany({ where: { schoolId, date: range, [key]: { not: null } }, select: { teacherId: true, staffId: true, date: true, status: true } }),
-    schoolHolidays(schoolId, from, to),
+    daysOff(schoolId, from, to),
     db.leaveRequest.findMany({
       where: { schoolId, status: "APPROVED", [key]: { not: null }, fromDate: { lte: range.lte }, toDate: { gte: range.gte } },
       select: { teacherId: true, staffId: true, fromDate: true, toDate: true },
     }),
   ]);
 
-  const working = dates.filter((d) => d <= today && !isSunday(d) && !holidays.has(d));
+  const working = dates.filter((d) => d <= today && !holidays.has(d));
   const marks = new Map<string, Record<string, StaffStatusKey>>();
   for (const r of records) {
     const id = (r.teacherId ?? r.staffId)!;
@@ -121,7 +121,7 @@ export async function loadPersonAttendance(
   const range = { gte: parseISODate(from)!, lte: parseISODate(to)! };
   const [records, holidays, leave, first] = await Promise.all([
     db.staffAttendance.findMany({ where: { schoolId, date: range, ...person }, select: { date: true, status: true, remark: true } }),
-    schoolHolidays(schoolId, from, to),
+    daysOff(schoolId, from, to),
     db.leaveRequest.findMany({
       where: { schoolId, status: "APPROVED", ...person, fromDate: { lte: range.lte }, toDate: { gte: range.gte } },
       select: { fromDate: true, toDate: true, category: true },
@@ -139,7 +139,7 @@ export async function loadPersonAttendance(
   const months: string[] = [];
   for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = addMonths(m, 1)) months.push(m);
   const dates = months.flatMap((m) => monthDates(m)).filter((d) => d >= from && d <= to);
-  const working = dates.filter((d) => d >= since && d <= today && !isSunday(d) && !holidays.has(d));
+  const working = dates.filter((d) => d >= since && d <= today && !holidays.has(d));
   const onLeave = new Set(working.filter((d) => leave.some((l) => d >= isoDate(l.fromDate) && d <= isoDate(l.toDate))));
   return {
     since,

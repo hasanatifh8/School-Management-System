@@ -1,17 +1,21 @@
 import "server-only";
+import { cache } from "react";
 import { db } from "@/lib/db";
 import {
+  ATTENDANCE_STATUSES,
   addDays,
   addMonths,
   attendancePercent,
   datesBetween,
   emptyCounts,
   isSunday,
+  isWeeklyOff,
   isoDate,
   monthDates,
   parseISODate,
   todayISO,
   weekStart,
+  weeklyOffName,
   type AttendanceCounts,
   type AttendanceStatusKey,
   type RegisterPeriod,
@@ -130,6 +134,30 @@ export async function schoolHolidays(schoolId: string, from: string, to: string)
   return new Map(rows.map((h) => [isoDate(h.date), h]));
 }
 
+/** Whether Saturday is a weekly off at this school (Sunday always is). Read once per request. */
+export const getSaturdayOff = cache(async (schoolId: string) => {
+  const school = await db.school.findUnique({ where: { id: schoolId }, select: { saturdayOff: true } });
+  return school?.saturdayOff ?? false;
+});
+
+/** The weekly off a date falls on ("Sunday" / "Saturday"), or null on a school day. */
+export async function weeklyOffOn(schoolId: string, date: string) {
+  return isWeeklyOff(date, await getSaturdayOff(schoolId)) ? weeklyOffName(date) : null;
+}
+
+/**
+ * Days nobody attends between two dates: school holidays and weekly offs
+ * (Sundays, and Saturdays when the school has them off), date → name. Every
+ * attendance count leaves these out.
+ */
+export async function daysOff(schoolId: string, from: string, to: string) {
+  const [holidays, saturdayOff] = await Promise.all([schoolHolidays(schoolId, from, to), getSaturdayOff(schoolId)]);
+  const off = new Map<string, { name: string; weeklyOff: boolean }>();
+  for (const d of datesBetween(from, to)) if (isWeeklyOff(d, saturdayOff)) off.set(d, { name: `${weeklyOffName(d)} (weekly off)`, weeklyOff: true });
+  for (const [d, h] of holidays) off.set(d, { name: h.name, weeklyOff: false });
+  return off;
+}
+
 export const rosterSelect = {
   id: true,
   firstName: true,
@@ -181,7 +209,7 @@ export async function attendanceSheetProps(schoolId: string, sectionId: string, 
     markedBy: day?.markedBy ?? null,
     schoolHoliday: holiday?.name ?? null,
     classHoliday: day?.holiday ?? null,
-    sunday: isSunday(date),
+    weeklyOff: await weeklyOffOn(schoolId, date),
   };
 }
 
@@ -195,7 +223,7 @@ export async function attendanceTotals(schoolId: string, studentIds: string[], f
       },
       select: { studentId: true, status: true, day: { select: { date: true } } },
     }),
-    schoolHolidays(schoolId, from, to),
+    daysOff(schoolId, from, to),
   ]);
   const totals = new Map<string, AttendanceCounts>(studentIds.map((id) => [id, emptyCounts()]));
   for (const r of records) {
@@ -223,7 +251,7 @@ export async function loadRegister(schoolId: string, sectionId: string, from: st
       where: { sectionId, date: { gte: parseISODate(from)!, lte: parseISODate(to)! } },
       include: { records: { select: { studentId: true, status: true } } },
     }),
-    schoolHolidays(schoolId, from, to),
+    daysOff(schoolId, from, to),
   ]);
   // Current students, plus anyone marked here in the range who has since left or moved.
   const markedIds = [...new Set(days.flatMap((d) => d.records.map((r) => r.studentId)))];
@@ -313,7 +341,7 @@ export function filterRegisterStudents<T extends { name: string; studentCode: st
  * total absences. Students count under their current class.
  */
 export async function loadClassSummaries(schoolId: string, from: string, to: string) {
-  const holidays = await schoolHolidays(schoolId, from, to);
+  const holidays = await daysOff(schoolId, from, to);
   const dayWhere = {
     schoolId,
     holiday: null,
@@ -356,3 +384,57 @@ export async function loadClassSummaries(schoolId: string, from: string, to: str
 }
 
 export type ClassSummary = Awaited<ReturnType<typeof loadClassSummaries>>[number];
+
+/**
+ * One student's attendance from `from` to `to` for their profile: every
+ * day's mark, holidays (school-wide and their class's), approved leave not
+ * yet marked, and totals for the range and each month, counted as the
+ * class register counts them (holidays left out; leave is not attendance).
+ */
+export async function loadStudentAttendance(schoolId: string, student: { id: string; sectionId: string | null; admissionDate: Date }, from: string, to: string) {
+  const range = { gte: parseISODate(from)!, lte: parseISODate(to)! };
+  const [records, holidays, classHolidays, leave] = await Promise.all([
+    db.attendanceRecord.findMany({
+      where: { studentId: student.id, day: { date: range } },
+      select: { status: true, remark: true, day: { select: { date: true, holiday: true } } },
+    }),
+    daysOff(schoolId, from, to),
+    student.sectionId
+      ? db.attendanceDay.findMany({ where: { sectionId: student.sectionId, date: range, holiday: { not: null } }, select: { date: true, holiday: true } })
+      : [],
+    db.leaveRequest.findMany({ where: { schoolId, studentId: student.id, status: "APPROVED", fromDate: { lte: range.lte }, toDate: { gte: range.gte } }, select: { fromDate: true, toDate: true } }),
+  ]);
+  const holidayNames = new Map<string, string>([...holidays].map(([d, h]) => [d, h.name]));
+  for (const c of classHolidays) holidayNames.set(isoDate(c.date), c.holiday!);
+
+  const marks: Record<string, AttendanceStatusKey> = {};
+  const remarks: Record<string, string> = {};
+  const total = emptyCounts();
+  const byMonth = new Map<string, AttendanceCounts>();
+  for (const r of records) {
+    const d = isoDate(r.day.date);
+    marks[d] = r.status;
+    if (r.remark) remarks[d] = r.remark;
+    if (r.day.holiday || holidays.has(d)) continue;
+    total[r.status]++;
+    const m = byMonth.get(d.slice(0, 7)) ?? emptyCounts();
+    m[r.status]++;
+    byMonth.set(d.slice(0, 7), m);
+  }
+  const onLeave = new Set<string>();
+  for (const l of leave) for (const d of datesBetween(isoDate(l.fromDate), isoDate(l.toDate))) if (d >= from && d <= to && !marks[d] && !holidayNames.has(d) && !isSunday(d)) onLeave.add(d);
+
+  const admitted = isoDate(student.admissionDate);
+  const days = (c: AttendanceCounts) => ATTENDANCE_STATUSES.reduce((n, s) => n + c[s], 0);
+  return {
+    since: admitted > from ? admitted : from,
+    marks,
+    remarks,
+    holidays: holidayNames,
+    onLeave,
+    total,
+    days: days(total),
+    percent: attendancePercent(total),
+    byMonth: [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, c]) => ({ month, counts: c, days: days(c), percent: attendancePercent(c) })),
+  };
+}

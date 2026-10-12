@@ -15,12 +15,11 @@ import {
   PageHeader,
   PersonCell,
 } from "@/components/ui";
-import { attendanceWindow, pickDate } from "@/lib/attendance";
+import { attendanceWindow, pickDate, weeklyOffOn } from "@/lib/attendance";
 import { dayRoster } from "@/lib/attendance-day";
 import {
   emptyCounts,
   formatISO,
-  isSunday,
   parseISODate,
 } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
@@ -35,6 +34,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
   const win = await attendanceWindow(school.id);
   const date = pickDate((await searchParams).date, win);
   const d = parseISODate(date)!;
+  const weeklyOff = await weeklyOffOn(school.id, date);
 
   const [classes, days, holiday, roster] = await Promise.all([
     db.schoolClass.findMany({
@@ -130,14 +130,18 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
           <strong className="font-semibold">School holiday: {holiday.name}.</strong> No attendance is taken today.
         </Callout>
       ) : (
-        isSunday(date) && (
-          <Callout icon={Sun} tone="warning" className="mb-6">
-            Sunday is a weekly off. Classes that were open can still take attendance.
+        weeklyOff && (
+          <Callout icon={Sun} className="mb-6">
+            <strong className="font-semibold">{weeklyOff}: weekly off.</strong> No attendance is taken on a weekly off. Change weekly offs in{" "}
+            <Link href="/admin/settings/weekly-off" className="font-medium underline-offset-4 hover:underline">
+              Settings → Weekly off
+            </Link>
+            .
           </Callout>
         )
       )}
 
-      <DayKpis group="students" date={date} roster={roster} today={date === win.today} />
+      {!weeklyOff && <DayKpis group="students" date={date} roster={roster} today={date === win.today} />}
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">

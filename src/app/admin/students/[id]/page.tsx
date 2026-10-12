@@ -1,11 +1,14 @@
 import { notFound } from "next/navigation";
 import { BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { BookOpen, Bus, CalendarClock, CalendarDays, CircleCheck, ClipboardList, Droplet, FileBarChart, FileCheck2, FileText, Hash, History, IdCard, LayoutGrid, Mail, Megaphone, Pencil, Phone, Plane, RotateCcw, Ticket, UserRound, UserRoundX, Wallet } from "lucide-react";
+import { BookOpen, Bus, CalendarCheck, CalendarClock, CalendarDays, CircleCheck, ClipboardList, Droplet, FileBarChart, FileCheck2, FileText, Hash, History, IdCard, LayoutGrid, Mail, Megaphone, Pencil, Phone, Plane, RotateCcw, Ticket, UserRound, UserRoundX, Wallet } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { AttendanceSummaryCard } from "@/components/attendance/attendance-summary";
+import { PersonAttendanceView } from "@/components/attendance/person-attendance";
+import { attendanceWindow, loadStudentAttendance, pickMonth, getSaturdayOff } from "@/lib/attendance";
+import { ATTENDANCE_STATUSES, STATUS_META } from "@/lib/attendance-shared";
 import { Avatar, Badge, ButtonLink, Callout, Card, EmptyState, InfoItem, MenuLink, MoreMenu, PageHeader, StatusTab, TextLink, checkboxClass, tabBarClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
@@ -24,14 +27,14 @@ import { todayISO } from "@/lib/attendance-shared";
 import { sessionMonths } from "@/lib/fees-shared";
 import { getCurrentSession } from "@/lib/sessions";
 
-const TABS = ["overview", "exams", "results", "timetable", "notices", "admit-card", "transport", "leave", "documents", "edit"] as const;
+const TABS = ["overview", "attendance", "exams", "results", "timetable", "notices", "admit-card", "transport", "leave", "documents", "edit"] as const;
 type Tab = (typeof TABS)[number];
 
 const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
 export default async function StudentPage({ params, searchParams }: PageProps<"/admin/students/[id]">) {
   const { id } = await params;
-  const { tab: tabParam, admitted, exam: examParam } = await searchParams;
+  const { tab: tabParam, admitted, exam: examParam, month: monthParam } = await searchParams;
   const tab: Tab = TABS.find((t) => t === tabParam) ?? "overview";
   const selectedExam = typeof examParam === "string" ? examParam : undefined;
   const school = await getCurrentSchool();
@@ -190,6 +193,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       <div className="mb-6 border-b border-line">
         <nav aria-label="Student sections" className={tabBarClass}>
           <StatusTab href={tabHref("overview")} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
+          <StatusTab href={tabHref("attendance")} active={tab === "attendance"} label="Attendance" icon={CalendarCheck} />
           <StatusTab href={tabHref("exams")} active={tab === "exams"} label="Examinations" icon={ClipboardList} />
           <StatusTab href={tabHref("results")} active={tab === "results"} label="Report card" icon={FileBarChart} />
           <StatusTab href={tabHref("timetable")} active={tab === "timetable"} label="Timetable" icon={CalendarClock} />
@@ -243,6 +247,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           }
         />
       )}
+
+      {tab === "attendance" && <StudentAttendance schoolId={school.id} student={student} base={tabHref("attendance")} month={monthParam} />}
 
       {tab === "leave" && (
         <LeaveHistory leave={leave} noun="student" openHref={(id) => `/admin/leave?status=all&q=${encodeURIComponent(student.studentCode)}&open=${id}`} newHref="/admin/leave/new" />
@@ -385,7 +391,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             <AttendanceSummaryCard
               schoolId={school.id}
               studentId={student.id}
-              registerHref={student.section ? `/admin/attendance/register?section=${student.section.id}` : null}
+              registerHref={tabHref("attendance")}
             />
 
             <Card title="Class history" icon={History} padded={false}>
@@ -438,4 +444,60 @@ function EnrollmentStatus({
   if (status === "CURRENT") return <Badge tone="green" dot>Current</Badge>;
   if (status === "UPCOMING") return <Badge tone="sky">Next year</Badge>;
   return <Badge>Completed</Badge>;
+}
+
+const sinceFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** The Attendance tab: the session's totals, a month as a calendar register (?month=) and every month's totals. */
+async function StudentAttendance({
+  schoolId,
+  student,
+  base,
+  month: param,
+}: {
+  schoolId: string;
+  student: { id: string; sectionId: string | null; admissionDate: Date };
+  base: string;
+  month: string | string[] | undefined;
+}) {
+  const win = await attendanceWindow(schoolId);
+  const month = pickMonth(param, win);
+  const data = await loadStudentAttendance(schoolId, student, win.min, win.max);
+  const t = data.total;
+  const m = data.byMonth.find((x) => x.month === month);
+  const red = (n: number) => (n ? "text-danger" : undefined);
+  const row = (c: typeof t) => [
+    { label: "Present", value: c.PRESENT, cls: "text-success" },
+    { label: "Absent", value: c.ABSENT, cls: red(c.ABSENT) },
+    { label: "Late", value: c.LATE },
+    { label: "Half day", value: c.HALF_DAY },
+    { label: "Leave", value: c.LEAVE },
+  ];
+  return (
+    <PersonAttendanceView
+      session={win.session.name}
+      percent={data.percent}
+      subtitle={data.days ? `${data.days} school day${data.days === 1 ? "" : "s"} marked${data.since > win.min ? ` since admission on ${sinceFmt.format(student.admissionDate)}` : ""}` : undefined}
+      counts={[{ label: "School days", value: data.days }, ...row(t)]}
+      note="Present and late count as a full day, a half day as half; absent and leave count as not attended. Days the class took no attendance are not counted."
+      month={month}
+      minMonth={win.min.slice(0, 7)}
+      maxMonth={win.max.slice(0, 7)}
+      today={win.today}
+      statuses={ATTENDANCE_STATUSES}
+      meta={STATUS_META}
+      marks={data.marks}
+      remarks={data.remarks}
+      holidays={data.holidays}
+      onLeave={data.onLeave}
+      since={data.since}
+      saturdayOff={await getSaturdayOff(schoolId)}
+      flagUnmarked={false}
+      monthLine={m ? `${m.days} school day${m.days === 1 ? "" : "s"} · present ${m.counts.PRESENT} · absent ${m.counts.ABSENT} · leave ${m.counts.LEAVE}${m.percent != null ? ` · ${m.percent}%` : ""}` : undefined}
+      monthRows={data.byMonth.map((x) => ({ month: x.month, percent: x.percent, cells: [{ label: "School days", value: x.days }, ...row(x.counts)] }))}
+      monthHref={(mo) => `${base}&month=${mo}`}
+      registerHref={student.sectionId ? `/admin/attendance/register?section=${student.sectionId}&period=month&month=${month}` : "/admin/attendance/register"}
+      registerLabel="Full class register"
+    />
+  );
 }

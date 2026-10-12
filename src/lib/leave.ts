@@ -12,7 +12,8 @@ import "server-only";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { type ActionState, validationError } from "@/lib/action-state";
-import { datesBetween, isSunday, isoDate, parseISODate } from "@/lib/attendance-shared";
+import { datesBetween, isoDate, parseISODate } from "@/lib/attendance-shared";
+import { daysOff } from "@/lib/attendance";
 import { db } from "@/lib/db";
 import { INLINE_TYPES, readDocumentUpload } from "@/lib/documents";
 import {
@@ -441,11 +442,10 @@ export async function approvedLeaveOn(schoolId: string, date: Date) {
 
 /* ───────────────────────── Working days, balances and clashes ───────────────────────── */
 
-/** Dates from `from` to `to` that are neither Sundays nor school holidays. */
+/** Dates from `from` to `to` that are neither weekly offs nor school holidays. */
 async function workingDates(schoolId: string, from: string, to: string) {
-  const holidays = await db.holiday.findMany({ where: { schoolId, date: { gte: parseISODate(from)!, lte: parseISODate(to)! } }, select: { date: true } });
-  const off = new Set(holidays.map((h) => isoDate(h.date)));
-  return datesBetween(from, to).filter((d) => !isSunday(d) && !off.has(d));
+  const off = await daysOff(schoolId, from, to);
+  return datesBetween(from, to).filter((d) => !off.has(d));
 }
 
 /** Leave days per session for teachers and staff, by leave type (null = no limit set). */

@@ -13,7 +13,7 @@ import "server-only";
 //    fewer than MIN_PEERS students (they would give away individual marks);
 //  - no other student is ever named: "class highest" is a number only.
 import { attendancePercent, emptyCounts, isoDate, parseISODate, type AttendanceCounts } from "@/lib/attendance-shared";
-import { attendanceWindow, schoolHolidays } from "@/lib/attendance";
+import { attendanceWindow, daysOff } from "@/lib/attendance";
 import { db } from "@/lib/db";
 import { computeResults, loadSheet, type ResultRow, type Sheet } from "@/lib/exam-marks";
 import { loadExam, type ExamActor } from "@/lib/exams";
@@ -130,7 +130,7 @@ async function monthlyAttendance(schoolId: string, studentId: string, sectionId:
       },
       select: { studentId: true, status: true, day: { select: { date: true } } },
     }),
-    schoolHolidays(schoolId, from, to),
+    daysOff(schoolId, from, to),
   ]);
   const mine = new Map<string, AttendanceCounts>();
   const cls = new Map<string, AttendanceCounts>();

@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { Briefcase, Plane, Presentation, Table2, Users } from "lucide-react";
 import { StaffAttendanceSheet } from "@/components/attendance/staff-attendance-sheet";
 import { DateNav } from "@/components/attendance/date-nav";
 import { DayKpis } from "@/components/attendance/day-kpis";
 import { ButtonLink, Callout, Card, EmptyState, PageHeader, StatusTab } from "@/components/ui";
-import { attendanceWindow, pickDate } from "@/lib/attendance";
+import { attendanceWindow, weeklyOffOn, pickDate } from "@/lib/attendance";
 import { dayRoster } from "@/lib/attendance-day";
 import { formatISO, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
@@ -20,11 +21,12 @@ export default async function StaffAttendancePage({ searchParams }: PageProps<"/
   const win = await attendanceWindow(school.id);
   const date = pickDate(params.date, win);
   const group = pickStaffGroup(params.group);
-  const [sheet, summary, holiday, roster] = await Promise.all([
+  const [sheet, summary, holiday, roster, weeklyOff] = await Promise.all([
     loadStaffSheet(school.id, group, date),
     staffDaySummary(school.id, date),
     db.holiday.findUnique({ where: { schoolId_date: { schoolId: school.id, date: parseISODate(date)! } } }),
     dayRoster(school.id, group, date),
+    weeklyOffOn(school.id, date),
   ]);
   const tab = (g: string) => `/admin/attendance/staff?group=${g}&date=${date}`;
   const line = (s: typeof summary.teaching) => (s.marked ? `${s.present} of ${s.total} present${s.absent ? ` · ${s.absent} absent` : ""}` : `${s.total} · not marked`);
@@ -49,21 +51,34 @@ export default async function StaffAttendancePage({ searchParams }: PageProps<"/
       <div className="mb-6">
         <DateNav basePath={`/admin/attendance/staff?group=${group}`} date={date} min={win.min} max={win.max} />
       </div>
-      {holiday && (
+      {weeklyOff && (
+        <Callout icon={Briefcase} className="mb-6">
+          <strong className="font-semibold">{weeklyOff}: weekly off.</strong> No attendance is taken on a weekly off. Change weekly offs in{" "}
+          <Link href="/admin/settings/weekly-off" className="font-medium underline-offset-4 hover:underline">
+            Settings → Weekly off
+          </Link>
+          .
+        </Callout>
+      )}
+      {holiday && !weeklyOff && (
         <Callout icon={Briefcase} className="mb-6">
           <strong className="font-semibold">School holiday: {holiday.name}.</strong> You can still mark staff who came in.
         </Callout>
       )}
-      <div className="mb-6">
-        <DayKpis group={group} date={date} roster={roster} today={date === win.today} />
-      </div>
+      {!weeklyOff && (
+        <div className="mb-6">
+          <DayKpis group={group} date={date} roster={roster} today={date === win.today} />
+        </div>
+      )}
       <Card padded={false} className="max-w-4xl">
         <div className="flex gap-6 overflow-x-auto border-b border-line px-4 pt-4 text-sm font-medium sm:px-6">
           <StatusTab href={tab("teaching")} active={group === "teaching"} label={`Teaching · ${line(summary.teaching)}`} icon={Presentation} />
           <StatusTab href={tab("non-teaching")} active={group === "non-teaching"} label={`Non-teaching · ${line(summary.nonTeaching)}`} icon={Users} />
         </div>
         <div className="p-4 sm:p-6">
-          {sheet.people.length === 0 ? (
+          {weeklyOff ? (
+            <EmptyState compact icon={Briefcase} title={`${weeklyOff} is a weekly off`} description="Pick a school day to mark staff attendance." />
+          ) : sheet.people.length === 0 ? (
             <EmptyState
               compact
               icon={Users}

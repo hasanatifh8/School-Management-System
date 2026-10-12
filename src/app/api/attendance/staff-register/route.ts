@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const ws = wb.addWorksheet(label, { views: [{ state: "frozen", xSplit: 3, ySplit: 3 }], pageSetup: { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1 } });
   ws.addRow([`${school.name} · ${GROUP_LABELS[group]} attendance · ${label}`]).font = { bold: true, size: 13 };
   ws.addRow([
-    `Working days: ${reg.working.length} · P Present, A Absent, L Late, HD Half day, LV Leave, H Holiday/Sunday · LOP = absent days + half of each half day`,
+    `Working days: ${reg.working.length} · P Present, A Absent, L Late, HD Half day, LV Leave, H Holiday/weekly off · LOP = absent days + half of each half day`,
   ]).font = { color: { argb: TEXT.muted }, size: 10 };
   const header = ws.addRow(["ID", "Name", "Department", ...reg.dates.map((d) => Number(d.slice(8))), "Present", "Absent", "Late", "Half day", "Leave", "LOP", "%"]);
   header.eachCell((c) => {

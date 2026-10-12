@@ -27,7 +27,7 @@ export function AttendanceSheet({
   markedBy,
   schoolHoliday,
   classHoliday,
-  sunday,
+  weeklyOff,
   save,
   setHoliday,
   clearHoliday,
@@ -43,7 +43,8 @@ export function AttendanceSheet({
   markedBy: string | null;
   schoolHoliday: string | null;
   classHoliday: string | null;
-  sunday: boolean;
+  /** "Sunday" / "Saturday" on a weekly off: no attendance is taken. */
+  weeklyOff: string | null;
   save: Action;
   setHoliday: Action;
   clearHoliday: () => Promise<ActionState>;
@@ -96,6 +97,14 @@ export function AttendanceSheet({
     );
   }
 
+  if (weeklyOff) {
+    return (
+      <Banner icon={Sun} tone="slate" title={`${weeklyOff}: weekly off`}>
+        No attendance is taken on a weekly off. The school admin sets weekly offs in Settings → Weekly off.
+      </Banner>
+    );
+  }
+
   if (classHoliday) {
     return (
       <div className="space-y-3">
@@ -138,12 +147,6 @@ export function AttendanceSheet({
 
   return (
     <div className="space-y-6">
-      {sunday && (
-        <Banner icon={Sun} tone="amber" title="Sunday">
-          Sunday is a weekly off. Take attendance only if the school was open today.
-        </Banner>
-      )}
-
       <form
         onSubmit={(e) => {
           e.preventDefault();

@@ -113,7 +113,7 @@ export function EventForm({
               <legend className="mb-2 text-sm font-medium text-fg-2">For</legend>
               {holiday ? (
                 <p className="rounded-lg border border-dashed border-line bg-surface-2 px-3.5 py-2.5 text-sm text-muted">
-                  The whole school. Once published, these days become school holidays and no attendance is due (Sundays in a range are skipped).
+                  The whole school. Once published, these days become school holidays and no attendance is due (weekly offs in a range are skipped).
                 </p>
               ) : (
                 <>

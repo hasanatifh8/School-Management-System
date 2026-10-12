@@ -58,6 +58,15 @@ export function addDays(iso: string, days: number) {
 
 export const isSunday = (iso: string) => parseISODate(iso)!.getUTCDay() === 0;
 
+/** Sunday is always a weekly off; Saturday too when the school says so (Settings → Weekly off). */
+export const isWeeklyOff = (iso: string, saturdayOff: boolean) => {
+  const day = parseISODate(iso)!.getUTCDay();
+  return day === 0 || (saturdayOff && day === 6);
+};
+
+/** "Sunday" / "Saturday": the weekly off a date falls on. */
+export const weeklyOffName = (iso: string) => (parseISODate(iso)!.getUTCDay() === 0 ? "Sunday" : "Saturday");
+
 /** "2026-09" → every date in that month. */
 export function monthDates(month: string) {
   const [y, m] = month.split("-").map(Number);

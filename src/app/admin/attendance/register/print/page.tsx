@@ -67,7 +67,7 @@ export default async function RegisterPrintPage({ searchParams }: PageProps<"/ad
           ),
           totals: [String(s.period.PRESENT), String(s.period.ABSENT), String(s.period.LATE), String(s.period.HALF_DAY), String(s.period.LEAVE), pct(attendancePercent(s.period))],
         }))}
-        legend="P Present · A Absent · L Late · HD Half day · LV Leave · H Holiday / Sunday · Late counts as present, half day as half."
+        legend="P Present · A Absent · L Late · HD Half day · LV Leave · H Holiday / weekly off · Late counts as present, half day as half."
         signatures={["Class teacher", "Principal"]}
       />
     </div>

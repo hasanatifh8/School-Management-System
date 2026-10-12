@@ -43,8 +43,8 @@ import { db } from "@/lib/db";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { getCurrentSession, getUpcomingSession, pendingPromotions } from "@/lib/sessions";
-import { attendanceWindow } from "@/lib/attendance";
-import { attendancePercent, emptyCounts, isSunday, parseISODate } from "@/lib/attendance-shared";
+import { attendanceWindow, weeklyOffOn } from "@/lib/attendance";
+import { attendancePercent, emptyCounts, parseISODate } from "@/lib/attendance-shared";
 import { loadCalendar } from "@/lib/calendar";
 import { leaveOverview } from "@/lib/leave";
 import { monthlyFeeTrend } from "@/lib/fees";
@@ -63,7 +63,7 @@ export default async function DashboardPage() {
 
   const win = await attendanceWindow(school.id);
   const todayDate = parseISODate(win.today)!;
-  const attendanceDue = win.today === win.max && !isSunday(win.today);
+  const attendanceDue = win.today === win.max && !(await weeklyOffOn(school.id, win.today));
 
   const [
     studentCount,

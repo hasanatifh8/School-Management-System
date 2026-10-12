@@ -61,7 +61,7 @@ export default async function StaffRegisterPrintPage({ searchParams }: PageProps
           ),
           totals: [num(r.present), String(r.absent), String(r.leave), num(r.lop), r.percent == null ? "—" : `${num(r.percent)}%`],
         }))}
-        legend="P Present · A Absent · L Late · HD Half day · LV Leave · H Holiday / Sunday · LOP (loss of pay) = absent days + half of each half day · Approved leave is not counted in the %."
+        legend="P Present · A Absent · L Late · HD Half day · LV Leave · H Holiday / weekly off · LOP (loss of pay) = absent days + half of each half day · Approved leave is not counted in the %."
         signatures={["Prepared by", "Principal"]}
       />
     </div>

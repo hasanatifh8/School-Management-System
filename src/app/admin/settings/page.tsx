@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CalendarOff,
   CalendarRange,
+  CalendarX2,
   ChevronRight,
   School,
   IdCard,
@@ -34,6 +35,7 @@ const groups: { title: string; items: Item[] }[] = [
     title: "School year",
     items: [
       { href: "/admin/sessions", icon: CalendarRange, tone: "indigo", title: "Academic sessions", text: "Current session, next year and promotions" },
+      { href: "/admin/settings/weekly-off", icon: CalendarX2, tone: "slate", title: "Weekly off", text: "Sunday, and Saturday if the school is closed" },
       { href: "/admin/attendance/holidays", icon: CalendarOff, tone: "violet", title: "School holidays", text: "Days no class takes attendance" },
       { href: "/admin/calendar", icon: CalendarDays, tone: "teal", title: "School calendar", text: "Plan exams, events and holidays for the year" },
       { href: "/admin/timetable/periods", icon: Bell, tone: "amber", title: "Bell schedule", text: "Periods, breaks and school days" },

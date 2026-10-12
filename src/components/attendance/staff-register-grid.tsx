@@ -33,7 +33,7 @@ const num = (n: number) => (n % 1 ? n.toFixed(1) : String(n));
 
 /**
  * Month grid for staff: one row per person, one column per day (P, A, L, HD,
- * LV, H for holidays and Sundays), then Present, Absent, Leave, LOP and %.
+ * LV, H for holidays and weekly offs), then Present, Absent, Leave, LOP and %.
  * With `edit`, clicking a day opens the editor (a reason is required).
  */
 export function StaffRegisterGrid({
@@ -140,7 +140,7 @@ export function StaffRegisterLegend() {
         </span>
       ))}
       <span className="flex items-center gap-1">
-        <span className="inline-block h-3 w-3 rounded-sm bg-surface-3" /> <strong>H</strong> Holiday / Sunday
+        <span className="inline-block h-3 w-3 rounded-sm bg-surface-3" /> <strong>H</strong> Holiday / weekly off
       </span>
       <span>LOP = absent days + half of each half day. Approved leave isn&apos;t counted in the %.</span>
     </div>

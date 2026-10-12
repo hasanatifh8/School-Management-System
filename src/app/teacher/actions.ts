@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { type ActionState, optionalEmail, optionalMobile, optionalText, validationError } from "@/lib/action-state";
+import { weeklyOffOn } from "@/lib/attendance";
 import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { onLeave } from "@/lib/leave";
@@ -102,6 +103,8 @@ export async function selfCheckIn(): Promise<ActionState> {
   const date = parseISODate(today)!;
   const existing = await db.staffAttendance.findUnique({ where: { teacherId_date: { teacherId: ctx.teacher.id, date } } });
   if (existing) return { error: "Today's attendance is already marked." };
+  const off = await weeklyOffOn(ctx.school.id, today);
+  if (off) return { error: `Today is a ${off}, a weekly off. No attendance is taken.` };
   if ((await onLeave(ctx.school.id, date)).has(ctx.teacher.id)) return { error: "You are on approved leave today." };
   await db.staffAttendance.create({
     data: { schoolId: ctx.school.id, date, teacherId: ctx.teacher.id, status: "PRESENT", markedBy: `${fullName(ctx.teacher)} (self check-in)` },

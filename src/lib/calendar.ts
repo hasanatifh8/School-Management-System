@@ -1,6 +1,6 @@
 import "server-only";
 import type { CalendarEvent, Prisma } from "@/generated/prisma/client";
-import { addDays, isoDate, isSunday, parseISODate } from "@/lib/attendance-shared";
+import { addDays, isoDate, isSunday, isWeeklyOff, parseISODate } from "@/lib/attendance-shared";
 import type { CalendarItem } from "@/lib/calendar-shared";
 import { db } from "@/lib/db";
 
@@ -104,7 +104,7 @@ function groupHolidays(holidays: { date: Date; name: string }[]) {
 
 /**
  * Makes attendance follow a published holiday entry: its days become school
- * holidays (Sundays in a range are skipped; days already a holiday are left alone).
+ * holidays (weekly offs in a range are skipped; days already a holiday are left alone).
  * Entries that aren't published holidays own no holiday days.
  */
 export async function syncEventHolidays(tx: Prisma.TransactionClient, event: CalendarEvent) {
@@ -112,9 +112,10 @@ export async function syncEventHolidays(tx: Prisma.TransactionClient, event: Cal
   if (event.type !== "HOLIDAY" || !event.published) return;
   const from = isoDate(event.startDate);
   const to = isoDate(event.endDate);
+  const school = await tx.school.findUnique({ where: { id: event.schoolId }, select: { saturdayOff: true } });
   const dates: string[] = [];
   for (let day = from; day <= to && dates.length <= MAX_HOLIDAY_DAYS; day = addDays(day, 1)) {
-    if (from === to || !isSunday(day)) dates.push(day);
+    if (from === to || !isWeeklyOff(day, school?.saturdayOff ?? false)) dates.push(day);
   }
   const taken = await tx.holiday.findMany({
     where: { schoolId: event.schoolId, date: { in: dates.map((d) => parseISODate(d)!) } },

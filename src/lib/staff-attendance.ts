@@ -1,6 +1,7 @@
 import "server-only";
 // Daily attendance of teachers (teaching staff) and staff members (non-teaching).
 import type { ActionState } from "@/lib/action-state";
+import { weeklyOffOn } from "@/lib/attendance";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { onLeave } from "@/lib/leave";
@@ -44,6 +45,8 @@ export async function loadStaffSheet(schoolId: string, group: StaffGroup, date: 
 export async function saveStaffSheet(schoolId: string, group: StaffGroup, date: string, formData: FormData, markedBy: string): Promise<ActionState> {
   const d = parseISODate(date);
   if (!d) return { error: "Choose a date." };
+  const off = await weeklyOffOn(schoolId, date);
+  if (off) return { error: `${off} is a weekly off. No attendance is taken.` };
   const teaching = group === "teaching";
   const key = teaching ? "teacherId" : "staffId";
   const people = teaching

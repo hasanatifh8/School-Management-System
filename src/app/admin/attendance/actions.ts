@@ -4,13 +4,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { type ActionState, validationError } from "@/lib/action-state";
 import { getActor } from "@/lib/access";
-import { attendanceWindow } from "@/lib/attendance";
+import { attendanceWindow, getSaturdayOff, weeklyOffOn } from "@/lib/attendance";
 import {
   ATTENDANCE_STATUSES,
   STATUS_META,
   addDays,
   formatISO,
-  isSunday,
+  isWeeklyOff,
   parseISODate,
   shortDate,
   type AttendanceStatusKey,
@@ -61,6 +61,8 @@ export async function saveAttendance(sectionId: string, date: string, _: ActionS
   if ("error" in access) return { error: access.error };
   const { school, section, d, markedBy } = access;
 
+  const off = await weeklyOffOn(school.id, date);
+  if (off) return { error: `${formatISO(date, shortDate)} is a ${off}, a weekly off. No attendance is taken.` };
   const holiday = await db.holiday.findUnique({ where: { schoolId_date: { schoolId: school.id, date: d } } });
   if (holiday) return { error: `${formatISO(date, shortDate)} is a school holiday (${holiday.name}).` };
 
@@ -174,10 +176,11 @@ export async function addSchoolHoliday(_: ActionState, formData: FormData): Prom
     return { error: `Holidays must fall within session ${session.name}.`, fieldErrors: { from: ["Outside this session"] } };
   }
 
-  // Sundays are already off, so a range skips them (a single Sunday is kept as chosen).
+  // Weekly offs are already off, so a range skips them (a single day is kept as chosen).
+  const saturdayOff = await getSaturdayOff(school.id);
   const dates: string[] = [];
   for (let day = from; day <= to; day = addDays(day, 1)) {
-    if (from === to || !isSunday(day)) dates.push(day);
+    if (from === to || !isWeeklyOff(day, saturdayOff)) dates.push(day);
     if (dates.length > MAX_HOLIDAY_DAYS) {
       return { error: `Add at most ${MAX_HOLIDAY_DAYS} days at a time.`, fieldErrors: { to: ["Range too long"] } };
     }
@@ -241,6 +244,8 @@ export async function editStaffMark(_: ActionState, formData: FormData): Promise
   const access = await editAccess(date);
   if ("error" in access) return { error: access.error };
   const { school, d, by } = access;
+  const off = await weeklyOffOn(school.id, date);
+  if (off) return { error: `${formatISO(date, shortDate)} is a ${off}, a weekly off. No attendance is taken.` };
   const status = STAFF_STATUSES.find((s) => s === formData.get("status"));
   if (!status) return { error: "Choose a status." };
   const note = editNoteSchema.safeParse(formData.get("note") ?? "");
@@ -286,6 +291,8 @@ export async function editStudentMark(_: ActionState, formData: FormData): Promi
   const access = await editAccess(date);
   if ("error" in access) return { error: access.error };
   const { school, d, by } = access;
+  const off = await weeklyOffOn(school.id, date);
+  if (off) return { error: `${formatISO(date, shortDate)} is a ${off}, a weekly off. No attendance is taken.` };
   const status = ATTENDANCE_STATUSES.find((s) => s === formData.get("status"));
   if (!status) return { error: "Choose a status." };
   const note = editNoteSchema.safeParse(formData.get("note") ?? "");
