@@ -11,7 +11,6 @@ import {
   FileBarChart,
   Ticket,
   GraduationCap,
-  HandCoins,
   IdCard,
   KeyRound,
   LayoutDashboard,
@@ -52,10 +51,10 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   ]);
   const logoUrl = schoolLogoUrl({ id: school.id, logo });
 
-  const fees: NavItem = { href: "/admin/fees", label: "Fees", icon: <Wallet /> };
-  const feeDesk: NavItem = { href: "/admin/fee-desk", label: "Fee desk", icon: <HandCoins />, sub: "New: collect in one screen" };
+  // The Fee desk is a tab of Fees, so Fees stays lit there.
+  const fees: NavItem = { href: "/admin/fees", label: "Fees", icon: <Wallet />, alsoActive: ["/admin/fee-desk"] };
   const groups: NavGroup[] = feesOnly
-    ? [{ items: [feeDesk, fees] }]
+    ? [{ items: [fees] }]
     : [
         {
           items: [
@@ -68,7 +67,6 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           items: [
             { href: "/admin/attendance", label: "Attendance", icon: <CalendarCheck /> },
             { href: "/admin/leave", label: "Leave", icon: <Plane /> },
-            feeDesk,
             fees,
             { href: "/admin/notices", label: "Notices", icon: <Megaphone /> },
           ],
@@ -143,7 +141,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
       }}
       groups={groups}
       footerItems={footerItems}
-      mobileTabs={feesOnly ? ["/admin/fee-desk", "/admin/fees", "/admin/account"] : ["/admin", "/admin/students", "/admin/attendance", "/admin/fees"]}
+      mobileTabs={feesOnly ? ["/admin/fees", "/admin/account"] : ["/admin", "/admin/students", "/admin/attendance", "/admin/fees"]}
       account={
         <AccountCard
           name={viewer.kind === "admin" ? viewer.admin.name : "Power Admin"}

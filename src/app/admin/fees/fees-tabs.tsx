@@ -9,7 +9,7 @@ export function FeesTabs({ canManage }: { canManage: boolean }) {
     <NavTabs
       tabs={[
         { href: "/admin/fees", label: "Overview", icon: LayoutGrid, match: (p) => p === "/admin/fees" },
-        { href: "/admin/fees/collect", label: "Collect fees", icon: HandCoins, match: (p) => p.startsWith("/admin/fees/collect") || p.startsWith("/admin/fees/students") },
+        { href: "/admin/fee-desk", label: "Fee desk", icon: HandCoins, match: (p) => p.startsWith("/admin/fee-desk") || p.startsWith("/admin/fees/students") },
         { href: "/admin/fees/receipts", label: "Receipts", icon: Receipt },
         { href: "/admin/fees/structure", label: canManage ? "Fee structure" : "Fee chart", icon: ListTree },
       ]}

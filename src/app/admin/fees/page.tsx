@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { CalendarDays, IndianRupee, Receipt, Sparkles, TriangleAlert, Wallet } from "lucide-react";
-import { Badge, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar, StatCard, StatGrid, Table, tbodyClass, tdClass, TextLink, thClass, theadClass, trClass } from "@/components/ui";
+import { CalendarDays, IndianRupee, Receipt, TriangleAlert, Wallet } from "lucide-react";
+import { Badge, ButtonLink, Card, EmptyState, PagedList, ProgressBar, StatCard, StatGrid, Table, tbodyClass, tdClass, TextLink, thClass, theadClass, trClass } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, outstandingByStudent } from "@/lib/fees";
@@ -45,21 +45,18 @@ export default async function FeesOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <Callout icon={Sparkles} tone="info" action={<ButtonLink href="/admin/fee-desk" size="sm">Open Fee desk</ButtonLink>}>
-        <strong className="font-semibold">New: Fee desk.</strong> Find a student, type the amount received and print, all on one screen. These pages stay as they are.
-      </Callout>
       <NoticeBoard schoolId={school.id} audience="staff" title="Notices for staff" />
       <StatGrid>
         <StatCard icon={IndianRupee} tone="emerald" label="Collected today" value={todayAgg._sum.total ?? 0} prefix="₹" detail={`${todayAgg._count} receipt(s)`} href="/admin/fees/receipts" />
         <StatCard icon={CalendarDays} tone="indigo" label="This month" value={monthAgg._sum.total ?? 0} prefix="₹" detail={`${monthAgg._count} receipt(s)`} />
         <StatCard icon={Receipt} tone="sky" label={`Session ${session.name}`} value={sessionAgg._sum.total ?? 0} prefix="₹" detail={`${sessionAgg._count} receipt(s)`} />
-        <StatCard icon={TriangleAlert} tone="rose" label="Due now" value={dueNow} prefix="₹" detail="Instalments due up to today" href="/admin/fees/collect" />
+        <StatCard icon={TriangleAlert} tone="rose" label="Due now" value={dueNow} prefix="₹" detail="Instalments due up to today" href="/admin/fee-desk" />
       </StatGrid>
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card title="Recent receipts" padded={false} className="xl:col-span-2" action={<TextLink href="/admin/fees/receipts">All receipts</TextLink>}>
           {recent.length === 0 ? (
-            <EmptyState icon={Receipt} title="No payments yet" description="Payments you collect appear here." action={<ButtonLink href="/admin/fees/collect">Collect fees</ButtonLink>} />
+            <EmptyState icon={Receipt} title="No payments yet" description="Payments you collect appear here." action={<ButtonLink href="/admin/fee-desk">Open fee desk</ButtonLink>} />
           ) : (
             <Table>
               <thead className={theadClass}>
@@ -116,7 +113,7 @@ export default async function FeesOverviewPage() {
             <PagedList pageSize={8} noun="classes">
               {byClass.map(({ s, due, owing }) => (
                 <li key={s.id}>
-                  <Link href={`/admin/fees/collect?section=${s.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm transition hover:bg-surface-2 sm:px-6">
+                  <Link href={`/admin/fee-desk?section=${s.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm transition hover:bg-surface-2 sm:px-6">
                     <span>
                       <span className="font-medium text-fg">{sectionLabel(s)}</span>
                       <span className="block text-xs text-muted">{owing ? `${owing} of ${s.students.length} students owe` : "All clear"}</span>

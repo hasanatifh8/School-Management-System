@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, Check, ChevronDown, CircleCheck, HandCoins, IndianRupee, LayoutList, Phone, Receipt, SearchCheck, Wallet } from "lucide-react";
+import { ArrowLeft, BookOpenCheck, CalendarClock, Check, ChevronDown, CircleCheck, IndianRupee, Phone, Receipt, SearchCheck, Wallet } from "lucide-react";
 import { FeesFromForm } from "@/components/fees/fees-from-form";
-import { Avatar, Badge, ButtonLink, Card, EmptyState } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, Card, EmptyState, PageHeader, ProgressBar } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
@@ -9,6 +9,7 @@ import { MODE_LABELS, billMonthFor, billOf, deskMonth, deskMonths, dueKey, month
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { setFeesFrom } from "../fees/actions";
+import { FeesTabs } from "../fees/fees-tabs";
 import type { DeskStudent } from "./actions";
 import { DeskSearch } from "./desk-search";
 
@@ -19,18 +20,19 @@ const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 /**
  * The Fee desk: a cashier's one-screen counter. Find a student on the left;
  * on the right, their twelve months show what is paid and what is due. A month
- * opens as a fee bill to collect, which then prints as the receipt. The classic
- * Fees pages stay available for anything unusual.
+ * opens as a fee bill to collect, which then prints as the receipt. It is a
+ * tab of the Fees section.
  */
 export default async function FeeDeskPage({ searchParams }: PageProps<"/admin/fee-desk">) {
   const sp = await searchParams;
   const { school, session, today, canManage } = await getFeesAccess();
   const selectedId = typeof sp.s === "string" ? sp.s : null;
+  const sectionId = typeof sp.section === "string" ? sp.section : undefined;
 
   if (!(await db.feeHead.count({ where: { sessionId: session.id } }))) {
     return (
       <>
-        <DeskHeader />
+        <DeskHeader canManage={canManage} session={session.name} />
         <Card>
           <EmptyState
             icon={Wallet}
@@ -77,7 +79,7 @@ export default async function FeeDeskPage({ searchParams }: PageProps<"/admin/fe
 
   return (
     <>
-      <DeskHeader />
+      <DeskHeader canManage={canManage} session={session.name} />
 
       {/* Today at this counter */}
       <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-line bg-surface px-4 py-3 shadow-card sm:px-5">
@@ -100,9 +102,9 @@ export default async function FeeDeskPage({ searchParams }: PageProps<"/admin/fe
         </Link>
       </div>
 
-      <div className="grid gap-4 lg:h-[calc(100dvh-15rem)] lg:min-h-[34rem] lg:grid-cols-[22rem_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:h-[calc(100dvh-21rem)] lg:min-h-[34rem] lg:grid-cols-[22rem_minmax(0,1fr)]">
         <div className={account ? "hidden lg:block lg:min-h-0" : "lg:min-h-0"}>
-          <DeskSearch selectedId={selectedId} sections={sections.map((s) => ({ id: s.id, label: sectionLabel(s) }))} recent={recent} />
+          <DeskSearch selectedId={selectedId} initialSection={sectionId} sections={sections.map((s) => ({ id: s.id, label: sectionLabel(s) }))} recent={recent} />
         </div>
 
         <div className="space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
@@ -127,25 +129,17 @@ export default async function FeeDeskPage({ searchParams }: PageProps<"/admin/fe
   );
 }
 
-function DeskHeader() {
+/** The Fees header and tabs, as on the other Fees pages (the desk is one of its tabs). */
+function DeskHeader({ canManage, session }: { canManage: boolean; session: string }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3">
-      <div className="min-w-0 flex-1">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-fg">
-          <HandCoins className="h-6 w-6 text-accent-text" />
-          Fee desk
-          <Badge tone="indigo">New</Badge>
-        </h1>
-        <p className="text-sm text-muted">Find a student, open a month, collect and print the receipt.</p>
-      </div>
-      <ButtonLink href="/admin/fees" variant="ghost" icon={LayoutList}>
-        Classic fees
-      </ButtonLink>
-    </div>
+    <>
+      <PageHeader title="Fees" subtitle={`Collections, dues and receipts · Session ${session}`} />
+      <FeesTabs canManage={canManage} />
+    </>
   );
 }
 
-/** The chosen student: who they are, their twelve months at a glance, and recent receipts. */
+/** The chosen student: who they are, their session totals, their twelve months at a glance, and recent receipts. */
 async function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnType<typeof loadStudentAccount>>>; today: string }) {
   const { student, dues, totals, receipts, session } = account;
   const name = fullName(student);
@@ -190,11 +184,17 @@ async function StudentPanel({ account, today }: { account: NonNullable<Awaited<R
         <div className="flex flex-wrap items-center gap-4">
           <Avatar name={name} src={photoUrl(student.photoId)} size="lg" />
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold text-fg">{name}</h2>
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-              {student.section && <Badge tone="indigo">{sectionLabel(student.section)}</Badge>}
+            <h2 className="truncate text-lg font-semibold text-fg">
+              <Link href={`/admin/students/${student.id}`} className="rounded transition hover:text-accent-text">
+                {name}
+              </Link>
+            </h2>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
               <span className="font-mono">{student.studentCode}</span>
-              {student.fatherName && <span>· {student.fatherName}</span>}
+              {student.section ? <Badge tone="indigo">{sectionLabel(student.section)}</Badge> : <Badge tone="amber">No class</Badge>}
+              {student.rollNumber != null && <Badge>Roll {student.rollNumber}</Badge>}
+              {student.status !== "ACTIVE" && <Badge tone="red">Removed</Badge>}
+              {student.fatherName && <span>Father: {student.fatherName}</span>}
               {student.phone && (
                 <a href={`tel:${student.phone}`} className="inline-flex items-center gap-1 text-accent-text hover:underline">
                   <Phone className="h-3.5 w-3.5" /> {student.phone}
@@ -202,6 +202,9 @@ async function StudentPanel({ account, today }: { account: NonNullable<Awaited<R
               )}
             </p>
           </div>
+          <ButtonLink href={`/admin/fees/students/${student.id}/ledger`} variant="secondary" icon={BookOpenCheck}>
+            Fee ledger
+          </ButtonLink>
           {student.status === "ACTIVE" && payNow ? (
             <span className="flex flex-col items-end gap-1">
               <ButtonLink href={href(payNow.key)} icon={IndianRupee} size="lg">
@@ -217,6 +220,16 @@ async function StudentPanel({ account, today }: { account: NonNullable<Awaited<R
             )
           )}
         </div>
+        <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-4">
+          <Tile label={`Fees for ${session.name}`} value={rupees(totals.total)} />
+          <Tile label="Paid" value={rupees(totals.paid)} tone="text-success" />
+          <Tile label="Due now" value={rupees(totals.dueNow)} tone={totals.dueNow ? "text-danger" : "text-fg"} />
+          <Tile label="Upcoming" value={rupees(totals.upcoming)} />
+          {account.arrearsTotal > 0 && <Tile label="Arrears (last session)" value={rupees(account.arrearsTotal)} tone="text-danger" />}
+        </dl>
+        {totals.total > 0 && (
+          <ProgressBar value={(totals.paid / totals.total) * 100} tone="success" className="mt-3" label="Share of the session's fees paid" />
+        )}
       </section>
 
       {/* A mid-session admission is charged from the admission month, unless changed here (as on the classic fees page). */}
@@ -263,7 +276,6 @@ async function StudentPanel({ account, today }: { account: NonNullable<Awaited<R
         title={`Session ${session.name}`}
         description="Open a month to see its fees and collect."
         padded={false}
-        action={<span className="text-sm text-muted">Paid {rupees(totals.paid)}</span>}
       >
         <ul className="grid grid-cols-1 gap-2 p-3 min-[420px]:grid-cols-2 sm:p-4 xl:grid-cols-3">
           {months.map((m) => (
@@ -311,6 +323,15 @@ async function StudentPanel({ account, today }: { account: NonNullable<Awaited<R
         )}
       </Card>
     </>
+  );
+}
+
+function Tile({ label, value, tone = "text-fg" }: { label: string; value: string; tone?: string }) {
+  return (
+    <div>
+      <dt className="text-eyebrow uppercase text-muted">{label}</dt>
+      <dd className={`mt-0.5 text-lg font-semibold tabular-nums ${tone}`}>{value}</dd>
+    </div>
   );
 }
 

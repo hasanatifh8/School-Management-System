@@ -243,7 +243,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               action={
                 <>
                   <PrintButton />
-                  <ButtonLink href={from === "desk" ? "/admin/fee-desk" : "/admin/fees/collect"} variant="secondary" icon={HandCoins}>
+                  <ButtonLink href="/admin/fee-desk" variant="secondary" icon={HandCoins}>
                     Collect another
                   </ButtonLink>
                 </>

@@ -456,7 +456,7 @@ export default async function DashboardPage() {
           <QuickAction href="/admin/students/new" icon={UserPlus} tone="indigo" title="New admission" text="Admit a new student" />
           <QuickAction href="/admin/teachers/new" icon={Presentation} tone="emerald" title="Add teacher" text="Create a teacher profile" />
           <QuickAction href="/admin/staff/new" icon={Users} tone="sky" title="Add staff" text="Non-teaching staff member" />
-          <QuickAction href="/admin/fees/collect" icon={Receipt} tone="amber" title="Collect fee" text="Record a fee payment" />
+          <QuickAction href="/admin/fee-desk" icon={Receipt} tone="amber" title="Collect fee" text="Record a fee payment" />
           <QuickAction href="/admin/notices" icon={Megaphone} tone="teal" title="Send notice" text="WhatsApp or SMS to parents" />
           <QuickAction href="/admin/attendance" icon={CalendarCheck} tone="violet" title="Mark attendance" text="Take today's attendance" />
           <QuickAction href="/admin/id-cards" icon={IdCard} tone="slate" title="Generate ID cards" text="Print student ID cards" />

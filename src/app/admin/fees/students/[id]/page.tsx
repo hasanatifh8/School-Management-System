@@ -52,8 +52,7 @@ export default async function StudentFeesPage({ params, searchParams }: PageProp
           <div className="min-w-0 flex-1">
             <Breadcrumbs
               items={[
-                { label: "Collect fees", href: "/admin/fees/collect" },
-                ...(student.section ? [{ label: sectionLabel(student.section), href: `/admin/fees/collect?section=${student.section.id}` }] : []),
+                { label: "Fee desk", href: `/admin/fee-desk?s=${student.id}` },
                 { label: name },
               ]}
             />

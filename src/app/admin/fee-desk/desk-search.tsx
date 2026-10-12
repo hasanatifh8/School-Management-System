@@ -14,16 +14,18 @@ import { searchDeskStudents, type DeskStudent } from "./actions";
  */
 export function DeskSearch({
   selectedId,
+  initialSection,
   sections,
   recent,
 }: {
   selectedId: string | null;
+  initialSection?: string;
   sections: { id: string; label: string }[];
   recent: DeskStudent[];
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [section, setSection] = useState("");
+  const [section, setSection] = useState(initialSection ?? "");
   const [results, setResults] = useState<DeskStudent[] | null>(null);
   const [active, setActive] = useState(0);
   const [pending, start] = useTransition();
