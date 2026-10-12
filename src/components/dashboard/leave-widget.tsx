@@ -52,7 +52,23 @@ export function LeaveWidget({
       title="Leave"
       icon={Plane}
       description={`${overview.today.total} on leave today · ${overview.pending.total} waiting for a decision`}
-      action={<TextLink href="/admin/leave">All leave</TextLink>}
+      action={
+        // With more than the cards show, a notification-style count of them all on the link to the full list.
+        more > 0 ? (
+          <Link
+            href={listHref}
+            aria-label={`${allLabel} (${total})`}
+            className="inline-flex items-center gap-2 rounded-full text-sm font-medium text-accent-text hover:underline"
+          >
+            All leave
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[11px] font-semibold tabular-nums leading-none text-white shadow-sm">
+              {total > 99 ? "99+" : total}
+            </span>
+          </Link>
+        ) : (
+          <TextLink href="/admin/leave">All leave</TextLink>
+        )
+      }
       padded={false}
       className={className}
     >
