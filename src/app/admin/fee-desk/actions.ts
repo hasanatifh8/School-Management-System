@@ -7,9 +7,9 @@ import type { Prisma } from "@/generated/prisma/client";
 import { type ActionState, validationError } from "@/lib/action-state";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { receiptLine, saveReceipt } from "@/lib/fee-receipts";
+import { receiptLine, saveReceipts } from "@/lib/fee-receipts";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
-import { PAYMENT_MODES, billOf, deskMonths, isOwing, lateFeeOwed, lateMonthCount, payMonths, rupees } from "@/lib/fees-shared";
+import { PAYMENT_MODES, allocateBill, billOf, deskMonths, payBill, rupees } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -89,9 +89,12 @@ const quickSchema = z.object({
 });
 
 /**
- * The Fee desk's collection: one month's bill (its fees, plus balances of
- * part-paid months carried into it) is paid in full, or in part when less is
- * received, then a receipt is made and opened.
+ * The Fee desk's collection: one month's bill. Previous dues carried into it
+ * (balances of part-paid earlier months) are settled first, each month on its
+ * own add-on receipt tied back to that month; only then are the month's own
+ * fees collected, on their own receipt. Less received is a part payment, oldest
+ * month first; what a month is not cleared of holds the later ones back.
+ * The receipt (the month's own, else the last made) opens next.
  */
 export async function quickCollect(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const access = await getFeesAccess();
@@ -125,29 +128,47 @@ export async function quickCollect(studentId: string, _: ActionState, formData: 
     ...formData.getAll("lateOff").map((k) => [String(k), false] as const),
     ...formData.getAll("lateOn").map((k) => [String(k), true] as const),
   ]);
-  const plan = payMonths(account.dues, bill.keys, { discount, waiveLate: formData.get("waiveLate") === "on", lateChoice, received: received ?? undefined, payDate: date });
-  if (plan.unusedDiscount > 0) return { error: "The discount is more than the fees on this bill.", fieldErrors: { discount: ["Too large"] } };
-  if (plan.excess > 0) return { error: `That is ${rupees(plan.excess)} more than the bill. Collect ${rupees(plan.full)} at most.`, fieldErrors: { received: ["More than the bill"] } };
-  if (!plan.lines.length) return { error: "This bill is already paid. Reload the page." };
-
-  const saved = await saveReceipt({
-    access,
-    account,
-    lines: plan.lines.map((l) => receiptLine(l.item, l.amount, l.discount, l.lateFee, { charged: l.lateCharged, months: l.lateMonths })),
-    date,
-    mode,
-    reference,
-    remarks,
-    discountNote: discount > 0 ? discountNote : null,
-    lateWaived: plan.lateWaived,
-    // What a part payment leaves moves to the next bill with fees (as the bill said), else stays here.
-    bill: { month: bill.month.key, leftOwing: plan.full - plan.total, leftTo: plan.full > plan.total ? (desk.slice(desk.indexOf(bill.month) + 1).find((m) => m.items.length > 0)?.key ?? null) : null },
+  // With previous dues on the bill, the month's own fees can be left for later ("own" unticked).
+  const own = !bill.carried.length || formData.get("own") === "on";
+  const pay = payBill(account.dues, { carried: bill.carried.map((c) => c.key), month: bill.month.key }, {
+    own,
+    discount,
+    waiveLate: formData.get("waiveLate") === "on",
+    lateChoice,
+    received: received ?? undefined,
+    payDate: date,
   });
+  if (pay.unusedDiscount > 0) return { error: "The discount is more than this month's fees.", fieldErrors: { discount: ["Too large"] } };
+  if (pay.excess > 0) return { error: `That is ${rupees(pay.excess)} more than the bill. Collect ${rupees(pay.full)} at most.`, fieldErrors: { received: ["More than the bill"] } };
+  if (!pay.parts.length) return { error: "This bill is already paid. Reload the page." };
+
+  // What a part payment of the month's own fees leaves moves to the next bill with fees (as the bill said), else stays here.
+  const nextBill = desk.slice(desk.indexOf(bill.month) + 1).find((m) => m.items.length > 0)?.key ?? null;
+  const saved = await saveReceipts(
+    { access, account, date, mode, reference, remarks },
+    pay.parts.map(({ month, lines, full, total, lateWaived }, i) => {
+      const isOwn = month === bill.month.key;
+      const left = full - total;
+      // Later months' late fees fixed by this payment ride on the last receipt; they are owed on their own bills.
+      const owed = i === pay.parts.length - 1 ? pay.owed : [];
+      return {
+        lines: [...lines, ...owed].map(receiptLine),
+        discountNote: isOwn && discount > 0 ? discountNote : null,
+        lateWaived,
+        // Previous dues: an add-on receipt for the month that owed them, collected at this bill; what is left stays on it.
+        bill: isOwn
+          ? { month, leftOwing: left, leftTo: left > 0 ? nextBill : null }
+          : { month, leftOwing: left, leftTo: left > 0 ? bill.month.key : null, collectedOn: bill.month.key },
+      };
+    }),
+  );
   if ("error" in saved) return { error: saved.error };
   revalidatePath("/admin/fees", "layout");
   revalidatePath("/admin/fee-desk");
-  // Straight to the receipt, which confirms the payment and is ready to print.
-  redirect(`/admin/fees/receipts/${saved.id}?new=1&from=desk`);
+  // Straight to the receipt, which confirms the payment and is ready to print; it links the add-on receipts made with it.
+  const main = saved.at(-1)!;
+  const addOns = saved.slice(0, -1).map((r) => r.id);
+  redirect(`/admin/fees/receipts/${main.id}?new=1&from=desk${addOns.length ? `&with=${addOns.join(",")}` : ""}`);
 }
 
 const waiveSchema = z.object({
@@ -158,8 +179,10 @@ const waiveSchema = z.object({
 /**
  * Writes off the previous dues carried into a month's bill (what part-paid
  * earlier months left: fees and late fees), without collecting money. Admins
- * only; the reason and who did it are kept on a numbered waiver ("…/W0001")
- * that shows in the ledger and can be cancelled like a receipt to undo it.
+ * only. Each earlier month gets its own numbered waiver ("…/W0001"), tied back
+ * to that month like an add-on receipt, with the reason and who did it; it
+ * shows in the ledger and can be cancelled like a receipt to undo it. The
+ * month's own fees can then be collected as usual.
  */
 export async function waiveDues(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   const access = await getFeesAccess();
@@ -172,28 +195,24 @@ export async function waiveDues(studentId: string, _: ActionState, formData: For
   const { month, reason } = parsed.data;
   const bill = billOf(deskMonths(account.dues, session.startDate.toISOString().slice(0, 10), today), month);
   if (!bill) return { error: "Month not found." };
-  const items = bill.carried.flatMap((m) => m.items).filter(isOwing);
-  if (!items.length) return { error: "There are no previous dues on this bill. Reload the page." };
-
-  // Each fee's balance comes off as a discount; a late fee fixed earlier, and any run up since, is waived.
-  const lines = items.map((d) => receiptLine(d, 0, d.balance, 0, { charged: 0, waived: d.lateLeft, months: lateMonthCount(d, today) }));
-  const lateWaived = items.reduce((n, d) => n + d.lateLeft + lateFeeOwed(d, today), 0);
-  const total = items.reduce((n, d) => n + d.balance, 0) + lateWaived;
-  const saved = await saveReceipt({
-    access,
-    account,
-    lines,
-    date: today,
-    mode: "OTHER",
-    reference: null,
-    remarks: null,
-    discountNote: reason,
-    lateWaived,
-    waiver: true,
-    bill: { month, leftOwing: 0, leftTo: null },
-  });
+  // Each earlier month's fees come off as a discount, and its late fees (fixed earlier or run up since) are waived.
+  const off = allocateBill(account.dues, bill.carried.map((m) => m.key), { writeOff: true, payDate: today });
+  const months = off.months.filter((m) => m.waived > 0);
+  if (!months.length) return { error: "There are no previous dues on this bill. Reload the page." };
+  const saved = await saveReceipts(
+    { access, account, date: today, mode: "OTHER", reference: null, remarks: null },
+    months.map((m, i) => ({
+      // A later month's late fee fixed on the way stays owed on that month's bill.
+      lines: [...m.lines, ...(i === months.length - 1 ? off.owed : [])].map(receiptLine),
+      discountNote: reason,
+      lateWaived: m.lateWaived,
+      waiver: true,
+      bill: { month: m.month, leftOwing: 0, leftTo: null, collectedOn: month },
+    })),
+  );
   if ("error" in saved) return { error: saved.error };
+  const total = months.reduce((n, m) => n + m.waived, 0);
   revalidatePath("/admin/fees", "layout");
   revalidatePath("/admin/fee-desk", "layout");
-  return { ok: true, message: `${rupees(total)} of previous dues waived (${saved.number}).` };
+  return { ok: true, message: `${rupees(total)} of previous dues waived (${saved.map((r) => r.number).join(", ")}).` };
 }

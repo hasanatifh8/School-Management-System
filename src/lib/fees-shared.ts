@@ -142,8 +142,15 @@ export function stopFare(student: { transportStop: string | null; transportRoute
 
 export type DueStatus = "PAID" | "PARTIAL" | "OVERDUE" | "UPCOMING";
 
-/** Late fee booked on an instalment by earlier payments (dueKey → totals across its receipts). */
-export type LateLog = { charged: number; waived: number; months: number };
+/** One month's late fee on an instalment, booked by earlier payments: fixed (charged), paid and written off. */
+export type LateBooking = { charged: number; paid: number; waived: number };
+
+/**
+ * Late fee booked on an instalment by earlier payments (dueKey → totals across its receipts),
+ * and by the month it belongs to: "" for the instalment's own month, else a later month
+ * ("2026-09") whose fine it is because the fee was still unpaid then.
+ */
+export type LateLog = { charged: number; waived: number; months: number; by?: Record<string, LateBooking> };
 
 export type DueItem = {
   headId: string;
@@ -166,6 +173,8 @@ export type DueItem = {
   lateCharged: number;
   /** Of the fixed late fee, what is still unpaid: owed even once the fee itself is paid. */
   lateLeft: number;
+  /** The fixed late fee by the month it belongs to ("" = the instalment's own month, else a later month's fine), with what is left of each. */
+  lateBy: Record<string, LateBooking & { left: number }>;
   /** Late months already counted (charged or waived) by earlier payments; later months start from here. */
   lateFrom: number;
   /** Written off by an admin (dues waived), fee and late fee. */
@@ -269,7 +278,11 @@ export function studentDues({
       const balance = Math.max(0, due - paidSoFar - discount);
       const lateFeePaid = lateFeesPaid.get(k) ?? 0;
       const log = lateLog.get(k);
-      const lateLeft = Math.max(0, (log?.charged ?? 0) - lateFeePaid - (log?.waived ?? 0));
+      // Older receipts booked every late fee on the instalment's own month.
+      const lateBy = Object.fromEntries(
+        Object.entries(log?.by ?? (log ? { "": { charged: log.charged, paid: lateFeePaid, waived: log.waived } } : {})).map(([m, b]) => [m, { ...b, left: Math.max(0, b.charged - b.paid - b.waived) }]),
+      );
+      const lateLeft = Object.values(lateBy).reduce((n, b) => n + b.left, 0);
       // Nobody is late for a month before they joined (even when charged for it): those
       // instalments fall late only after the first due day on or after admission.
       const lateAfter = p.due >= admissionDate ? p.due : firstDueOnOrAfter(admissionDate, head.dueDay);
@@ -296,6 +309,7 @@ export function studentDues({
         lateFeePaid,
         lateCharged: log?.charged ?? 0,
         lateLeft,
+        lateBy,
         lateFrom: log?.months ?? 0,
         waived: waived.get(k) ?? 0,
         beforeAdmission: beforeAdmission && head.frequency !== "ONE_TIME",
@@ -307,8 +321,12 @@ export function studentDues({
   return items.sort((a, b) => a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName));
 }
 
-/** One month's late fee on an instalment: "<dueKey>@<n>", the month it covers, and whether it is charged unless changed. */
-export type LateMonth = { key: string; label: string; from: string; amount: number; onByDefault: boolean; beforeAdmission: boolean };
+/**
+ * One month's late fee on an instalment: "<dueKey>@<n>", the month it covers, the bill it
+ * belongs to (the month it is charged in: "2026-09", or "arrears" for last session's fees),
+ * and whether it is charged unless changed.
+ */
+export type LateMonth = { key: string; label: string; from: string; bill: string; amount: number; onByDefault: boolean; beforeAdmission: boolean };
 
 /** `iso` date plus `n` months, on the same day (or the month's last day). */
 function addMonths(date: string, n: number) {
@@ -342,7 +360,9 @@ export function lateFeeMonths(d: DueItem, payDate: string): LateMonth[] {
   for (let n = 0; n < 120; n++) {
     const from = addMonths(d.due, n);
     if (payDate <= from) break;
-    if (n >= d.lateFrom) out.push({ key: `${dueKey(d.headId, d.period)}@${n}`, label: monthLabel(from.slice(0, 7)), from, amount: d.lateFeeRate, onByDefault: true, beforeAdmission: from < d.lateAfter });
+    if (n >= d.lateFrom) {
+      out.push({ key: `${dueKey(d.headId, d.period)}@${n}`, label: monthLabel(from.slice(0, 7)), from, bill: d.arrears ? "arrears" : from.slice(0, 7), amount: d.lateFeeRate, onByDefault: true, beforeAdmission: from < d.lateAfter });
+    }
     if (!d.lateFeeMonthly) break;
   }
   return out;
@@ -376,6 +396,58 @@ export function dueTotals(items: DueItem[], today: string) {
     else upcoming += i.balance;
   }
   return { total, paid, discount, dueNow, upcoming };
+}
+
+/** A receipt line as payments are tallied from it (valid receipts only). */
+export type BookedLine = {
+  studentId: string;
+  headId: string;
+  period: string;
+  amount: number;
+  discount: number;
+  lateFee: number;
+  lateCharged: number;
+  lateWaived: number;
+  lateMonths: number;
+  lateMonth: string | null;
+  charged: number;
+  waiver: boolean;
+};
+
+/**
+ * Rupees paid, discounted and late fees per instalment (dueKey) by each
+ * student, from their receipt lines in the order they were made: the inputs
+ * studentDues takes. Late fees are kept by the month they belong to.
+ */
+export function bookPayments(lines: BookedLine[]) {
+  /** The price each instalment was paid at (the latest payment's), so it isn't repriced later. */
+  const priced = new Map<string, Map<string, number>>();
+  const paid = new Map<string, Map<string, number>>();
+  const discounts = new Map<string, Map<string, number>>();
+  const lateFees = new Map<string, Map<string, number>>();
+  const lateLog = new Map<string, Map<string, LateLog>>();
+  const waived = new Map<string, Map<string, number>>();
+  const of = <T,>(map: Map<string, Map<string, T>>, sid: string) => {
+    if (!map.has(sid)) map.set(sid, new Map());
+    return map.get(sid)!;
+  };
+  const add = (map: Map<string, Map<string, number>>, sid: string, k: string, n: number) => of(map, sid).set(k, (of(map, sid).get(k) ?? 0) + n);
+  for (const i of lines) {
+    const k = dueKey(i.headId, i.period);
+    add(paid, i.studentId, k, i.amount);
+    if (i.discount) add(discounts, i.studentId, k, i.discount);
+    if (i.lateFee) add(lateFees, i.studentId, k, i.lateFee);
+    if (i.waiver && i.discount + i.lateWaived) add(waived, i.studentId, k, i.discount + i.lateWaived);
+    if (i.lateCharged || i.lateWaived || i.lateMonths || i.lateFee) {
+      const log = of(lateLog, i.studentId).get(k) ?? { charged: 0, waived: 0, months: 0, by: {} };
+      // Each late fee by the month it belongs to ("" = the instalment's own), so a later month's fine stays on that month's bill.
+      const by = log.by![i.lateMonth ?? ""] ?? { charged: 0, paid: 0, waived: 0 };
+      log.by![i.lateMonth ?? ""] = { charged: by.charged + i.lateCharged, paid: by.paid + i.lateFee, waived: by.waived + i.lateWaived };
+      of(lateLog, i.studentId).set(k, { charged: log.charged + i.lateCharged, waived: log.waived + i.lateWaived, months: Math.max(log.months, i.lateMonths), by: log.by });
+    }
+    if (i.charged) of(priced, i.studentId).set(k, i.charged);
+  }
+  return { paid, discounts, lateFees, lateLog, waived, priced };
 }
 
 /* ───────────────────────── Dues for a target month ───────────────────────── */
@@ -458,118 +530,93 @@ export function allocateDiscount(chosen: { key: string; balance: number; month: 
   return out;
 }
 
-/* ───────────────────────── Paying an amount (Fee desk) ───────────────────────── */
-
-export type PaymentLine = {
-  item: DueItem;
-  amount: number;
-  discount: number;
-  /** Late fee paid now (fixed now or earlier). */
-  lateFee: number;
-  /** New late fee fixed on the instalment by this payment (paid now or owed). */
-  lateCharged: number;
-  /** Late months counted from the due date as of this payment. */
-  lateMonths: number;
-  full: boolean;
-};
-
-/**
- * Applies an amount received to a student's unpaid instalments, oldest first
- * (last session's arrears, then earlier months, this month, then months ahead):
- * first their fees, then their late fees. A discount comes off the bill's fees
- * as a whole: it is shared across the instalments in proportion to what each
- * owes (so no one fee looks cut), to settle them in the books.
- *
- * Every instalment on the bill has its late fee (by the payment date, as
- * ticked) fixed by the payment, so a part payment leaves exactly the bill's
- * total less the amount received owing, late fee included, and those months
- * are never charged again. Shared by the Fee desk's preview and its server
- * action, so both always agree.
- */
-export function allocatePayment(
-  items: DueItem[],
-  { amount, discount = 0, waiveLate = false, lateChoice, payDate }: { amount: number; discount?: number; waiveLate?: boolean; lateChoice?: Record<string, boolean>; payDate: string },
-) {
-  const open = items
-    .filter(isOwing)
-    .sort((a, b) => (a.arrears ? 0 : 1) - (b.arrears ? 0 : 1) || a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName));
-  let cash = Math.max(0, amount);
-  const share = shareDiscount(open, Math.max(0, discount));
-  // Discount beyond everything owed is left over (unusedDiscount).
-  const disc = Math.max(0, discount) - [...share.values()].reduce((n, v) => n + v, 0);
-  let lateWaived = 0;
-  // Fees first, oldest first.
-  const rows = open.map((d) => {
-    const dsc = share.get(d) ?? 0;
-    const pay = Math.min(cash, d.balance - dsc);
-    cash -= pay;
-    // The usual new late fee, and what is charged after any months were ticked off (or on).
-    const usual = lateFeeOwed(d, payDate);
-    const lateCharged = waiveLate ? 0 : lateFeeOwed(d, payDate, lateChoice);
-    lateWaived += Math.max(0, usual - lateCharged);
-    return { d, dsc, pay, lateCharged, lateOwed: d.lateLeft + lateCharged, lateFee: 0 };
-  });
-  // Then late fees, oldest first; what the cash doesn't reach stays owing.
-  for (const r of rows) {
-    r.lateFee = Math.min(cash, r.lateOwed);
-    cash -= r.lateFee;
-  }
-  const lines: PaymentLine[] = rows
-    .filter((r) => r.pay + r.dsc + r.lateFee + r.lateCharged > 0 || lateMonthCount(r.d, payDate) > r.d.lateFrom)
-    .map((r) => ({
-      item: r.d,
-      amount: r.pay,
-      discount: r.dsc,
-      lateFee: r.lateFee,
-      lateCharged: r.lateCharged,
-      lateMonths: lateMonthCount(r.d, payDate),
-      full: r.pay + r.dsc === r.d.balance && r.lateFee === r.lateOwed,
-    }));
-  return {
-    lines,
-    /** Received but more than everything owed for the session. */
-    excess: cash,
-    /** Discount left over because the amount didn't reach enough instalments. */
-    unusedDiscount: disc,
-    lateWaived,
-    total: lines.reduce((n, l) => n + l.amount + l.lateFee, 0),
-  };
-}
+/* ───────────────────────── Fee desk months and bills ───────────────────────── */
 
 /** The Fee desk row an instalment belongs to: its due month ("2026-07"), or "arrears" for last session's. */
 export const deskMonth = (d: DueItem) => (d.arrears ? "arrears" : d.due.slice(0, 7));
+
+/** The bill a booked late fee belongs to: "" is the instalment's own month. */
+const lateBill = (d: DueItem, key: string) => key || deskMonth(d);
+
+/** Late fee fixed on an instalment earlier and still unpaid that belongs to `month`'s bill. */
+export function lateLeftIn(d: DueItem, month: string) {
+  return Object.entries(d.lateBy).reduce((n, [k, b]) => n + (lateBill(d, k) === month ? b.left : 0), 0);
+}
+
+/** Booked late fee (fixed, paid, written off) that belongs to `month`'s bill. */
+function lateBookedIn(d: DueItem, month: string) {
+  const out = { charged: 0, paid: 0, waived: 0 };
+  for (const [k, b] of Object.entries(d.lateBy)) {
+    if (lateBill(d, k) !== month) continue;
+    out.charged += b.charged;
+    out.paid += b.paid;
+    out.waived += b.waived;
+  }
+  return out;
+}
+
+/** The tick key for a late fee fixed earlier, so a bill can write it off ("<dueKey>#<month>"). */
+export const fixedLateKey = (d: DueItem, month: string) => `${dueKey(d.headId, d.period)}#${month}`;
+
+/**
+ * A late fee on a bill: a month's new late fee (tick it off to waive it) or one
+ * fixed by an earlier payment and still owed. `own` is false for a fine on an
+ * earlier month's fee that was still unpaid in this one.
+ */
+export type BillFine = { key: string; item: DueItem; month: string; amount: number; fixed: boolean; label: string; own: boolean; beforeAdmission: boolean; onByDefault: boolean };
+
+/** The late fees that belong to `month`'s bill, as of `payDate`: fixed ones still owed, then new ones. */
+export function finesIn(dues: DueItem[], month: string, payDate: string): BillFine[] {
+  const out: BillFine[] = [];
+  for (const d of dues) {
+    const own = deskMonth(d) === month;
+    const left = lateLeftIn(d, month);
+    if (left > 0) out.push({ key: fixedLateKey(d, month), item: d, month, amount: left, fixed: true, label: month === "arrears" ? "Late fee" : monthLabel(month), own, beforeAdmission: false, onByDefault: true });
+    for (const l of lateFeeMonths(d, payDate)) {
+      if (l.bill === month) out.push({ key: l.key, item: d, month, amount: l.amount, fixed: false, label: l.label, own, beforeAdmission: l.beforeAdmission, onByDefault: l.onByDefault });
+    }
+  }
+  return out;
+}
 
 export type DeskMonthStatus = "PAID" | "WAIVED" | "PARTIAL" | "OVERDUE" | "DUE" | "UPCOMING" | "NONE";
 
 /**
  * A student's fees as Fee desk months: one per month of the session (and one
- * for last session's arrears, first), each with its instalments, what is left
- * (fees, and late fee fixed by a part payment), the new late fee owing by
- * `payDate`, and a status. A month stays part paid until all of it is paid or
- * an admin waives the rest.
+ * for last session's arrears, first), each with its instalments and what is
+ * left (fees, and late fee fixed by an earlier payment), the new late fee
+ * owing by `payDate`, and a status. A late fee belongs to the month it is
+ * charged in: a fee still unpaid a month later is fined in that later month's
+ * bill, never its own. A month stays part paid until all of it is paid or an
+ * admin waives the rest.
  */
 export function deskMonths(dues: DueItem[], sessionStart: string, payDate: string) {
   const keys = [...(dues.some((d) => d.arrears) ? ["arrears"] : []), ...sessionMonths(sessionStart)];
   return keys.map((key) => {
     const items = dues.filter((d) => deskMonth(d) === key);
+    const fines = finesIn(dues, key, payDate);
+    const booked = dues.map((d) => lateBookedIn(d, key));
     const charged = items.reduce((n, d) => n + d.amount, 0);
-    const balance = items.reduce((n, d) => n + d.balance + d.lateLeft, 0);
-    const late = items.reduce((n, d) => n + lateFeeOwed(d, payDate), 0);
-    const status: DeskMonthStatus = !items.length
-      ? "NONE"
-      : balance === 0
-        ? items.some((d) => d.waived > 0)
-          ? "WAIVED"
-          : "PAID"
-        : items.some((d) => d.paid + d.discount + d.lateFeePaid > 0)
-          ? "PARTIAL"
-          : items.some((d) => d.balance > 0 && d.due < payDate)
-            ? "OVERDUE"
-            : key.slice(0, 7) <= payDate.slice(0, 7) || key === "arrears"
-              ? "DUE"
-              : "UPCOMING";
+    const balance = items.reduce((n, d) => n + d.balance, 0) + fines.filter((f) => f.fixed).reduce((n, f) => n + f.amount, 0);
+    const late = fines.filter((f) => !f.fixed).reduce((n, f) => n + f.amount, 0);
+    /** This month's late fee: fixed by payments (paid, written off or owed) and new. */
+    const lateFee = { charged: booked.reduce((n, b) => n + b.charged, 0), paid: booked.reduce((n, b) => n + b.paid, 0), waived: booked.reduce((n, b) => n + b.waived, 0), due: late };
+    const status: DeskMonthStatus =
+      !items.length && !fines.length && !lateFee.charged
+        ? "NONE"
+        : balance + late === 0
+          ? items.some((d) => d.waived > 0)
+            ? "WAIVED"
+            : "PAID"
+          : items.some((d) => d.paid + d.discount > 0) || lateFee.paid > 0
+            ? "PARTIAL"
+            : items.some((d) => d.balance > 0 && d.due < payDate) || fines.length > 0
+              ? "OVERDUE"
+              : key.slice(0, 7) <= payDate.slice(0, 7) || key === "arrears"
+                ? "DUE"
+                : "UPCOMING";
     const label = key === "arrears" ? `Unpaid from ${items[0]?.arrears ?? "last session"}` : monthLabel(key);
-    return { key, label, items, charged, balance, late, status };
+    return { key, label, items, fines, charged, balance, late, lateFee, status };
   });
 }
 
@@ -597,35 +644,193 @@ export function billOf(months: DeskMonth[], key: string) {
   const month = months.find((m) => m.key === key);
   if (!month) return null;
   const target = billMonthFor(months, key);
-  const carried = months.filter((m) => m.key !== key && m.status === "PARTIAL" && m.balance > 0 && billMonthFor(months, m.key) === key);
+  const carried = months.filter((m) => m.key !== key && m.status === "PARTIAL" && m.balance + m.late > 0 && billMonthFor(months, m.key) === key);
   return { month, carried, keys: [...carried.map((m) => m.key), key], movedTo: target !== key ? months.find((m) => m.key === target)! : null };
 }
 
+/* ───────────────────────── Paying a bill (Fee desk) ───────────────────────── */
+
 /**
- * Pays the chosen months: every unpaid instalment in them, with late fees (as
- * of `payDate`, unless waived), less any discount; or, given `received`, only
- * that much (oldest first: a part payment, the rest left owing).
- * Shared by the Fee desk's preview and its server action, so both always agree.
+ * What a payment does to one instalment, for one month's bill: its fee (paid,
+ * discounted) when it is the instalment's own month, and that month's late fee
+ * on it (paid now, newly fixed, written off).
  */
-export function payMonths(
-  items: DueItem[],
-  months: string[],
-  {
-    discount = 0,
-    waiveLate = false,
-    lateChoice,
-    received,
-    payDate,
-  }: { discount?: number; waiveLate?: boolean; lateChoice?: Record<string, boolean>; received?: number; payDate: string },
-) {
-  const chosen = new Set(months);
-  const open = items.filter((d) => isOwing(d) && chosen.has(deskMonth(d)));
-  const fees = open.reduce((n, d) => n + d.balance, 0);
-  // Late fee fixed by earlier part payments, plus the new months (as ticked).
-  const late = open.reduce((n, d) => n + d.lateLeft + (waiveLate ? 0 : lateFeeOwed(d, payDate, lateChoice)), 0);
-  const full = Math.max(0, fees - discount) + late;
-  const amount = received == null ? full : Math.min(received, full);
-  return { ...allocatePayment(open, { amount, discount, waiveLate, lateChoice, payDate }), fees, late, full, excess: received == null ? 0 : Math.max(0, received - full) };
+export type BillLine = {
+  item: DueItem;
+  /** The bill this line belongs to: the instalment's own month, or a later month whose late fee it is. */
+  month: string;
+  amount: number;
+  discount: number;
+  /** Late fee paid now (fixed now or earlier). */
+  lateFee: number;
+  /** New late fee fixed now (paid now or owed). */
+  lateCharged: number;
+  /** Late fee fixed earlier that is written off now. */
+  lateWaived: number;
+  /** Late months counted on the instalment as of this payment (every month run up by then is fixed). */
+  lateMonths: number;
+};
+
+type BillOptions = {
+  /** Taken off the fees of `discountMonth` (the bill's own month), shared in proportion. */
+  discount?: number;
+  discountMonth?: string;
+  /** Charge no new late fee at all. */
+  waiveLate?: boolean;
+  /** Late fee ticks: a month's new late fee ("<dueKey>@<n>") or a fixed one ("<dueKey>#<month>"), charged or not. */
+  lateChoice?: Record<string, boolean>;
+  /** Amount received; none = everything. */
+  received?: number;
+  /** Write everything off instead (an admin's waiver): fees discounted, late fees waived, nothing collected. */
+  writeOff?: boolean;
+  payDate: string;
+};
+
+const byAge = (a: DueItem, b: DueItem) => (a.arrears ? 0 : 1) - (b.arrears ? 0 : 1) || a.due.localeCompare(b.due) || a.headName.localeCompare(b.headName);
+
+/**
+ * Pays bills month by month, oldest first: each month's fees (oldest first),
+ * then that month's late fees (fixed earlier, then new as ticked). A month not
+ * cleared holds the later ones back. A late fee is always part of the month it
+ * belongs to: a fee still unpaid a month later is fined in that later month.
+ *
+ * Every instalment the payment touches has all the late fee it has run up by
+ * the payment date fixed, so a part payment leaves exactly the bill less what
+ * was received owing, and no month is charged twice; a later month's fine fixed
+ * this way is owed on that month's bill (in `owed`). Shared by the Fee desk's
+ * preview and its server actions, so both always agree.
+ */
+export function allocateBill(items: DueItem[], months: string[], { discount = 0, discountMonth, waiveLate = false, lateChoice, received, writeOff = false, payDate }: BillOptions) {
+  const lines = new Map<string, BillLine>();
+  const lineFor = (d: DueItem, month: string) => {
+    const k = `${dueKey(d.headId, d.period)}|${month}`;
+    if (!lines.has(k)) lines.set(k, { item: d, month, amount: 0, discount: 0, lateFee: 0, lateCharged: 0, lateWaived: 0, lateMonths: lateMonthCount(d, payDate) });
+    return lines.get(k)!;
+  };
+  let cash = writeOff ? 0 : (received ?? Infinity);
+  let held = false;
+  let unusedDiscount = Math.max(0, discount);
+  const out: { month: string; full: number; total: number; late: number; lateWaived: number; waived: number; held: boolean }[] = [];
+  const charged = (f: BillFine) => !writeOff && (f.fixed ? (lateChoice?.[f.key] ?? true) : !waiveLate && (lateChoice?.[f.key] ?? f.onByDefault));
+
+  for (const month of months) {
+    const fees = items.filter((d) => deskMonth(d) === month && d.balance > 0).sort(byAge);
+    const fines = finesIn(items, month, payDate).sort((a, b) => byAge(a.item, b.item) || Number(b.fixed) - Number(a.fixed));
+    const share = month === discountMonth && !writeOff ? shareDiscount(fees, Math.max(0, discount)) : new Map<DueItem, number>();
+    if (month === discountMonth) unusedDiscount = Math.max(0, discount) - [...share.values()].reduce((n, v) => n + v, 0);
+    const lateOwed = fines.reduce((n, f) => n + (charged(f) ? f.amount : 0), 0);
+    const full = fees.reduce((n, d) => n + d.balance - (share.get(d) ?? 0), 0) + lateOwed;
+    const lateWaived = fines.reduce((n, f) => n + (charged(f) ? 0 : f.amount), 0);
+    const row = { month, full, total: 0, late: fines.reduce((n, f) => n + (!f.fixed && charged(f) ? f.amount : 0), 0), lateWaived, waived: 0, held };
+    out.push(row);
+    if (held) continue;
+    // Fees first, oldest first; an admin's waiver discounts them all.
+    for (const d of fees) {
+      const l = lineFor(d, month);
+      l.discount += writeOff ? d.balance : (share.get(d) ?? 0);
+      const pay = Math.min(cash, d.balance - l.discount);
+      l.amount += pay;
+      cash -= pay;
+      row.total += pay;
+      row.waived += writeOff ? d.balance : 0;
+    }
+    // Then the month's late fees: what is charged is fixed (or was), what isn't is written off.
+    for (const f of fines) {
+      const l = lineFor(f.item, month);
+      if (!charged(f)) {
+        if (f.fixed) l.lateWaived += f.amount;
+        row.waived += writeOff ? f.amount : 0;
+        continue;
+      }
+      if (!f.fixed) l.lateCharged += f.amount;
+      const pay = Math.min(cash, f.amount);
+      l.lateFee += pay;
+      cash -= pay;
+      row.total += pay;
+    }
+    if (!writeOff && row.total < full) held = true;
+  }
+
+  // Every touched instalment: the late fee it has run up in other months is fixed too, owed on those bills.
+  const touched = new Set([...lines.values()].filter((l) => !out.find((r) => r.month === l.month)?.held).map((l) => l.item));
+  const paidMonths = new Set(out.filter((r) => !r.held).map((r) => r.month));
+  for (const d of touched) {
+    for (const l of lateFeeMonths(d, payDate)) {
+      if (paidMonths.has(l.bill)) continue;
+      const line = lineFor(d, l.bill);
+      // Not on this bill, so not ticked here: charged as usual (even by a waiver of other months), to be paid or ticked off on its own bill.
+      line.lateCharged += !waiveLate && (lateChoice?.[l.key] ?? l.onByDefault) ? l.amount : 0;
+    }
+  }
+  const keep = (l: BillLine) => l.amount + l.discount + l.lateFee + l.lateCharged + l.lateWaived > 0 || l.lateMonths > l.item.lateFrom;
+  const all = [...lines.values()].filter((l) => touched.has(l.item) && keep(l));
+  const full = out.reduce((n, r) => n + r.full, 0);
+  const total = out.reduce((n, r) => n + r.total, 0);
+  return {
+    /** Month by month, in order: what it came to, what was paid (or waived) and its lines; a held month gets nothing yet. */
+    months: out.map((r) => ({ ...r, lines: r.held ? [] : all.filter((l) => l.month === r.month) })),
+    /** Later months' late fees fixed by this payment and owed on those bills (they go on the last receipt). */
+    owed: all.filter((l) => !paidMonths.has(l.month)),
+    full,
+    total,
+    late: out.reduce((n, r) => n + r.late, 0),
+    lateWaived: out.filter((r) => !r.held).reduce((n, r) => n + r.lateWaived, 0),
+    unusedDiscount,
+    excess: received == null || writeOff ? 0 : Math.max(0, received - full),
+  };
+}
+
+/**
+ * The classic collect page pays an instalment on its own: its fee (amount and
+ * discount) and every late fee on it, whichever month's, in full, or written
+ * off with `waive`. Lines are split by the month each late fee belongs to.
+ */
+export function instalmentLines(d: DueItem, { amount, discount, waive, payDate }: { amount: number; discount: number; waive: boolean; payDate: string }) {
+  const lines = new Map<string, BillLine>();
+  const lineFor = (month: string) => {
+    if (!lines.has(month)) lines.set(month, { item: d, month, amount: 0, discount: 0, lateFee: 0, lateCharged: 0, lateWaived: 0, lateMonths: lateMonthCount(d, payDate) });
+    return lines.get(month)!;
+  };
+  Object.assign(lineFor(deskMonth(d)), { amount, discount });
+  let lateWaived = 0;
+  for (const [k, b] of Object.entries(d.lateBy)) {
+    if (!b.left) continue;
+    const l = lineFor(lateBill(d, k));
+    if (waive) l.lateWaived += b.left;
+    else l.lateFee += b.left;
+    lateWaived += waive ? b.left : 0;
+  }
+  for (const m of lateFeeMonths(d, payDate)) {
+    if (waive) lateWaived += m.amount;
+    else {
+      const l = lineFor(m.bill);
+      l.lateCharged += m.amount;
+      l.lateFee += m.amount;
+    }
+  }
+  return { lines: [...lines.values()], lateWaived };
+}
+
+/**
+ * A month's bill paid as separate receipts: each earlier month's previous dues
+ * first, oldest first, each settled on its own add-on receipt tied back to that
+ * month; only once all of them are cleared does the rest go to the bill's own
+ * fees, on their own receipt (`own` false leaves the month's fees for later).
+ * A discount comes off the month's own fees; previous dues are waived instead.
+ */
+export function payBill(items: DueItem[], bill: { carried: string[]; month: string }, { own = true, ...opts }: Omit<BillOptions, "discountMonth" | "writeOff"> & { own?: boolean }) {
+  const res = allocateBill(items, [...bill.carried, ...(own ? [bill.month] : [])], { ...opts, discountMonth: bill.month });
+  const parts = res.months.filter((m) => m.lines.some((l) => l.amount + l.discount + l.lateFee > 0));
+  return {
+    ...res,
+    /** One per receipt to make, in order: previous dues month by month, then the month's own fees. */
+    parts,
+    /** Months whose payment waits until the earlier ones are cleared. */
+    held: res.months.filter((m) => m.held).map((m) => m.month),
+    /** Previous dues owing before this payment (all carried months). */
+    previous: res.months.filter((m) => m.month !== bill.month).reduce((n, m) => n + m.full, 0),
+    unusedDiscount: own ? res.unusedDiscount : (opts.discount ?? 0),
+  };
 }
 
 /**

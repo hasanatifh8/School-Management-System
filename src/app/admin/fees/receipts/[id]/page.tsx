@@ -8,8 +8,8 @@ import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { ButtonLink, Card, SuccessState, buttonVariants, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { earlierPayments, getFeesAccess } from "@/lib/fees";
-import { MODE_LABELS, amountInWords, monthLabel, rupees } from "@/lib/fees-shared";
-import { billStatusNote, receiptRows } from "@/lib/receipt-rows";
+import { MODE_LABELS, amountInWords, rupees } from "@/lib/fees-shared";
+import { billLine, billStatusNote, receiptRows, waiverNotice } from "@/lib/receipt-rows";
 import { schoolLogoUrl } from "@/lib/school";
 import { cancelReceipt } from "../../actions";
 import { PrintButton } from "./print-button";
@@ -38,14 +38,21 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
     include: { items: { orderBy: { id: "asc" } }, session: { select: { name: true } }, student: { select: { fatherName: true, rollNumber: true } } },
   });
   if (!receipt) notFound();
-  const [logo, earlier] = await Promise.all([
+  // Add-on receipts made with this one (previous dues settled first, each on its own receipt).
+  const withIds = typeof sp.with === "string" ? sp.with.split(",").slice(0, 12) : [];
+  const [logo, earlier, addOns] = await Promise.all([
     db.schoolLogo.findUnique({ where: { schoolId: school.id }, select: { updatedAt: true } }),
     earlierPayments(receipt),
+    withIds.length
+      ? db.feeReceipt.findMany({ where: { id: { in: withIds }, schoolId: school.id, studentId: receipt.studentId }, orderBy: { createdAt: "asc" }, select: { id: true, number: true, total: true, billMonth: true, collectedOn: true } })
+      : [],
   ]);
   const logoUrl = schoolLogoUrl({ id: school.id, logo });
   // Previous dues and the bill's own fees, each late fee by month (see receiptRows).
   const rows = receiptRows(receipt);
   const billNote = billStatusNote(receipt);
+  const waived = waiverNotice(receipt);
+  const collectedNow = receipt.total + addOns.reduce((n, r) => n + r.total, 0);
   const discount = receipt.items.reduce((n, i) => n + i.discount, 0);
   // Two copies share an A4 page; a long receipt prints as one copy instead.
   const fitsTwo = rows.length <= 7;
@@ -73,7 +80,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
           <p className="text-[8pt] text-slate-600">{[school.phone, school.email].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="text-right">
-          <p className="rounded bg-slate-900 px-2 py-0.5 text-[8pt] font-semibold uppercase tracking-wider text-white">{receipt.waiver ? "Dues waived" : "Fee receipt"}</p>
+          <p className="rounded bg-slate-900 px-2 py-0.5 text-[8pt] font-semibold uppercase tracking-wider text-white">{receipt.waiver ? "Dues waived" : receipt.collectedOn ? "Add-on receipt" : "Fee receipt"}</p>
           <p className="mt-1 text-[7.5pt] uppercase tracking-wider text-slate-500">{label}</p>
         </div>
       </header>
@@ -97,7 +104,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
         {receipt.billMonth && (
           <>
             <dt className="text-slate-500">Bill</dt>
-            <dd className="font-semibold">{receipt.billMonth === "arrears" ? "Last session's dues" : monthLabel(receipt.billMonth)}</dd>
+            <dd className="col-span-3 font-semibold">{billLine(receipt)}</dd>
           </>
         )}
       </dl>
@@ -143,7 +150,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
               </tr>
               <tr>
                 <td colSpan={3} className="py-[0.5mm] pl-1 text-right text-slate-600">
-                  Discount
+                  {receipt.waiver ? "Waived off" : "Discount"}
                 </td>
                 <td className="py-[0.5mm] pr-1 text-right tabular-nums">− {rupees(discount)}</td>
               </tr>
@@ -151,13 +158,14 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
           )}
           <tr className="border-b-2 border-slate-400">
             <td colSpan={3} className="py-[1.5mm] pl-1 text-right font-semibold">
-              {discount > 0 ? "Total paid" : "Total"}
+              {receipt.waiver ? "Net collected" : discount > 0 ? "Total paid" : "Total"}
             </td>
             <td className="py-[1.5mm] pr-1 text-right text-[11pt] font-bold tabular-nums">{rupees(receipt.total)}</td>
           </tr>
         </tfoot>
       </table>
       <p className="mt-[2mm] text-[8.5pt] italic">{amountInWords(receipt.total)}</p>
+      {waived && <p className="mt-[1.5mm] rounded border-2 border-slate-400 px-2 py-[1mm] text-[9pt] font-semibold">{waived}</p>}
       {billNote && <p className="mt-[1.5mm] rounded border border-slate-300 bg-slate-50 px-2 py-[1mm] text-[8.5pt] font-medium">{billNote}</p>}
       {earlier.count > 0 && (
         <p className="mt-[1.5mm] text-[8.5pt]">
@@ -189,13 +197,12 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
           )}
           {(discount > 0 || receipt.waiver) && (
             <p>
-              <span className="text-slate-500">
-                {receipt.waiver ? "Waived" : "Discount of"} {rupees(discount + (receipt.waiver ? receipt.lateWaived : 0))}:
-              </span> {receipt.discountNote}
+              <span className="text-slate-500">{receipt.waiver ? "Reason" : `Discount of ${rupees(discount)}`}:</span> {receipt.discountNote}
             </p>
           )}
           <p>
-            <span className="text-slate-500">{receipt.waiver ? "Waived by" : "Received by"}:</span> {receipt.collectedBy}
+            <span className="text-slate-500">{receipt.waiver ? "Approved by" : "Received by"}:</span> {receipt.collectedBy}
+            {receipt.waiver && <span className="text-slate-500"> · {stamp.format(receipt.createdAt)}</span>}
           </p>
           {receipt.cancelledAt && (
             <p className="font-semibold text-rose-600">
@@ -213,15 +220,24 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
     <div className="space-y-6">
       <div className="space-y-4 print:hidden">
         {sp.new === "1" && !receipt.cancelledAt && (
-          <CollectedToast receiptId={receipt.id} title={`${rupees(receipt.total)} collected`} description={`Receipt ${receipt.number} · ${receipt.studentName}`} />
+          <CollectedToast receiptId={receipt.id} title={`${rupees(collectedNow)} collected`} description={`Receipt ${receipt.number} · ${receipt.studentName}`} />
         )}
         {sp.new === "1" && !receipt.cancelledAt && (
           <Card>
             <SuccessState
-              title={`${rupees(receipt.total)} collected`}
+              title={`${rupees(collectedNow)} collected`}
               description={
                 <>
                   Receipt <span className="font-mono font-medium text-fg">{receipt.number}</span> for {receipt.studentName} is ready to print.
+                  {addOns.map((r) => (
+                    <span key={r.id} className="mt-1 block">
+                      Previous dues of {billLine(r)?.split(" · ")[0]} were cleared first on their own receipt,{" "}
+                      <a href={`/admin/fees/receipts/${r.id}?print=1`} target="_blank" rel="noopener" className="font-mono font-medium text-accent-text hover:underline">
+                        {r.number}
+                      </a>{" "}
+                      ({rupees(r.total)}): print it too.
+                    </span>
+                  ))}
                 </>
               }
               action={

@@ -135,7 +135,7 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
                     <span className="mt-2 text-lg font-semibold tabular-nums text-fg">{rupees(m.charged)}</span>
                     <span className="text-xs text-muted">
                       {m.paid + m.late > 0 ? `Paid ${rupees(m.paid + m.late)}` : "Nothing paid"}
-                      {m.balance > 0 && <span className={m.status === "UPCOMING" ? "" : "text-danger"}> · {rupees(m.balance)} left</span>}
+                      {m.balance + m.lateDue > 0 && <span className={m.status === "UPCOMING" ? "" : "text-danger"}> · {rupees(m.balance + m.lateDue)} left</span>}
                     </span>
                     <span className="mt-2 flex flex-wrap gap-1 text-[11px]">
                       {m.late + m.lateDue > 0 && <span className="rounded bg-danger-soft px-1.5 py-0.5 text-danger">Late {rupees(m.late + m.lateDue)}</span>}
@@ -179,15 +179,15 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
                       <tr key={`${d.name}|${d.label}`}>
                         <td className={td}>
                           <p className="font-medium text-fg">{d.name}</p>
-                          <p className="text-xs text-muted">Due {fmt(d.due)}</p>
+                          <p className="text-xs text-muted">{d.amount ? `Due ${fmt(d.due)}` : d.label}</p>
                         </td>
                         <td className={`${td} text-right tabular-nums`}>
-                          <p className="text-fg">{rupees(d.amount)}</p>
+                          {d.amount > 0 && <p className="text-fg">{rupees(d.amount)}</p>}
                           {d.discount > 0 && <p className="text-xs text-accent-text">− {rupees(d.discount)} discount</p>}
                           {d.lateFeePaid + d.lateFee > 0 && <p className="text-xs text-danger">+ {rupees(d.lateFeePaid + d.lateFee)} late{d.lateFee > 0 ? " (due)" : ""}</p>}
                         </td>
                         <td className={`${td} text-right tabular-nums`}>
-                          {d.balance > 0 ? <span className="font-medium text-danger">{rupees(d.balance)} left</span> : <span className="font-medium text-success">Paid</span>}
+                          {d.balance + d.lateFee > 0 ? <span className="font-medium text-danger">{rupees(d.balance + d.lateFee)} left</span> : <span className="font-medium text-success">Paid</span>}
                         </td>
                       </tr>
                     ))}
@@ -237,7 +237,7 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
               <MonthFigure label="Late fee" value={selected.late + selected.lateDue} tone="text-danger" />
               <MonthFigure label="Discount" value={selected.discount} tone="text-accent-text" />
               <MonthFigure label="Paid" value={selected.paid + selected.late} tone="text-success" />
-              <MonthFigure label="Left" value={selected.balance + selected.lateDue} tone={selected.balance ? "text-danger" : "text-success"} />
+              <MonthFigure label="Left" value={selected.balance + selected.lateDue} tone={selected.balance + selected.lateDue ? "text-danger" : "text-success"} />
             </dl>
           </Card>
         )}

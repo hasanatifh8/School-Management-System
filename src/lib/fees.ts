@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { MODE_LABELS, MONTH_NAMES, deskMonths, monthLabel, dueKey, dueTotals, headAmount, rupees, stopFare, studentDues, type DueItem, type FeeHeadInfo, type LateLog } from "@/lib/fees-shared";
+import { MODE_LABELS, MONTH_NAMES, bookPayments, deskMonths, monthLabel, dueKey, dueTotals, headAmount, rupees, stopFare, studentDues, type DueItem, type FeeHeadInfo } from "@/lib/fees-shared";
 import { getPortalSchool, getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 import { ensureTransportFee } from "@/lib/transport-fees";
@@ -81,37 +81,13 @@ async function paidByStudent(sessionId: string, studentIds?: string[]) {
       lateWaived: true,
       lateMonths: true,
       charged: true,
+      lateMonth: true,
       receipt: { select: { studentId: true, waiver: true } },
     },
+    // Oldest first, so an instalment keeps the price of its latest payment.
+    orderBy: { receipt: { createdAt: "asc" } },
   });
-  /** The price each instalment was paid at (the latest payment's), so it isn't repriced later. */
-  const priced = new Map<string, Map<string, number>>();
-  const paid = new Map<string, Map<string, number>>();
-  const discounts = new Map<string, Map<string, number>>();
-  const lateFees = new Map<string, Map<string, number>>();
-  const lateLog = new Map<string, Map<string, LateLog>>();
-  const waived = new Map<string, Map<string, number>>();
-  const add = (map: Map<string, Map<string, number>>, sid: string, k: string, n: number) => {
-    if (!map.has(sid)) map.set(sid, new Map());
-    map.get(sid)!.set(k, (map.get(sid)!.get(k) ?? 0) + n);
-  };
-  for (const i of items) {
-    const k = dueKey(i.headId!, i.period);
-    add(paid, i.receipt.studentId!, k, i.amount);
-    if (i.discount) add(discounts, i.receipt.studentId!, k, i.discount);
-    if (i.lateFee) add(lateFees, i.receipt.studentId!, k, i.lateFee);
-    if (i.receipt.waiver && i.discount + i.lateWaived) add(waived, i.receipt.studentId!, k, i.discount + i.lateWaived);
-    if (i.lateCharged || i.lateWaived || i.lateMonths) {
-      if (!lateLog.has(i.receipt.studentId!)) lateLog.set(i.receipt.studentId!, new Map());
-      const log = lateLog.get(i.receipt.studentId!)!.get(k) ?? { charged: 0, waived: 0, months: 0 };
-      lateLog.get(i.receipt.studentId!)!.set(k, { charged: log.charged + i.lateCharged, waived: log.waived + i.lateWaived, months: Math.max(log.months, i.lateMonths) });
-    }
-    if (i.charged) {
-      if (!priced.has(i.receipt.studentId!)) priced.set(i.receipt.studentId!, new Map());
-      priced.get(i.receipt.studentId!)!.set(k, i.charged);
-    }
-  }
-  return { paid, discounts, lateFees, lateLog, waived, priced };
+  return bookPayments(items.map((i) => ({ ...i, headId: i.headId!, studentId: i.receipt.studentId!, waiver: i.receipt.waiver })));
 }
 
 async function optInsByStudent(sessionId: string, studentIds?: string[]) {
@@ -410,7 +386,7 @@ export async function loadLedger(schoolId: string, studentId: string) {
   const receipts = await db.feeReceipt.findMany({
     where: { studentId, schoolId, sessionId: session.id },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-    include: { items: { select: { headId: true, period: true, amount: true, discount: true, lateFee: true, cleared: true } } },
+    include: { items: { select: { headId: true, period: true, amount: true, discount: true, lateFee: true, cleared: true, month: true } } },
   });
   const arrearsKeys = new Set(dues.filter((d) => d.arrears).map((d) => dueKey(d.headId, d.period)));
 
@@ -467,35 +443,56 @@ export async function loadLedger(schoolId: string, studentId: string) {
     upcoming: dues.filter((d) => d.due > today).reduce((n, d) => n + d.balance, 0),
   };
 
+  const billName = (at: string | null) => (at ? (at === "arrears" ? "last session's dues" : monthLabel(at)) : null);
   const monthPayments = (month: string, items: DueItem[]) => {
     const keys = new Set(items.map((d) => dueKey(d.headId, d.period)));
     return valid.flatMap((r) => {
-      const parts = r.items.filter((i) => i.headId && keys.has(dueKey(i.headId, i.period)));
-      if (!parts.length) return [];
+      // The month's lines: its fees and late fees, and an earlier fee's late fee charged in it (older lines carry no month).
+      const parts = r.items.filter((i) => (i.month ? i.month === month : i.headId && keys.has(dueKey(i.headId, i.period))));
+      if (!parts.some((i) => i.amount + i.discount + i.lateFee > 0) && !(r.waiver && r.billMonth === month)) return [];
       const sum = (f: (i: (typeof parts)[number]) => number) => parts.reduce((n, i) => n + f(i), 0);
       return [{ id: r.id, number: r.number, date: isoDate(r.date), mode: r.mode, fees: sum((i) => i.amount), late: sum((i) => i.lateFee), discount: sum((i) => i.discount), lateWaived: r.lateWaived, note: r.discountNote, waiver: r.waiver,
         // Paid on a later month's bill, as previous dues; and whether it cleared this month's fees.
-        onBill: r.billMonth && r.billMonth !== month ? (r.billMonth === "arrears" ? "last session's dues" : monthLabel(r.billMonth)) : null,
+        onBill: billName(r.collectedOn ?? (r.billMonth !== month ? r.billMonth : null)),
         cleared: parts.some((i) => i.cleared) }];
     });
   };
 
   // Month by month: what each month charged, its late fee, discount, payments and what is left.
   const months = deskMonths(dues, isoDate(session.startDate), today)
-    .filter((m) => m.items.length)
+    .filter((m) => m.items.length || m.fines.length || m.lateFee.charged)
     .map((m) => ({
       key: m.key,
       label: m.label,
       fees: m.items.map((d) => d.headName),
       // Each fee of the month, and every collection made towards it (the part of each receipt for this month).
-      items: m.items.map((d) => ({ name: d.headName, label: d.label, due: d.due, amount: d.amount, paid: d.paid, discount: d.discount, balance: d.balance, lateFeePaid: d.lateFeePaid, lateFee: d.lateFee })),
+      // A late fee belongs to the month it is charged in: each fee shows its own month's, and an earlier fee
+      // still unpaid in this month is fined here (as its own line), never in its own month.
+      items: [
+        ...m.items.map((d) => {
+          const own = m.fines.filter((f) => f.item === d);
+          return { name: d.headName, label: d.label, due: d.due, amount: d.amount, paid: d.paid, discount: d.discount, balance: d.balance, lateFeePaid: d.lateBy[""]?.paid ?? 0, lateFee: own.reduce((n, f) => n + f.amount, 0) };
+        }),
+        ...[...new Set(m.fines.filter((f) => !f.own).map((f) => f.item))].map((d) => ({
+          name: `Late fee · ${d.headName}`,
+          label: `${d.label} fee, still unpaid in ${m.label}`,
+          due: `${m.key}-01`,
+          amount: 0,
+          paid: 0,
+          discount: 0,
+          balance: 0,
+          lateFeePaid: d.lateBy[m.key]?.paid ?? 0,
+          lateFee: m.fines.filter((f) => f.item === d).reduce((n, f) => n + f.amount, 0),
+        })),
+      ],
       payments: monthPayments(m.key, m.items),
       charged: m.charged,
-      late: m.items.reduce((n, d) => n + d.lateFeePaid, 0),
-      lateDue: m.items.reduce((n, d) => n + d.lateFee, 0),
+      late: m.lateFee.paid,
+      lateDue: m.fines.reduce((n, f) => n + f.amount, 0),
       discount: m.items.reduce((n, d) => n + d.discount, 0),
       paid: m.items.reduce((n, d) => n + d.paid, 0),
-      balance: m.balance,
+      // Fees left; late fees left are in lateDue.
+      balance: m.items.reduce((n, d) => n + d.balance, 0),
       status: m.status,
     }));
 

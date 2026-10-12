@@ -8,7 +8,7 @@ import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { type ReceiptLine, receiptLine, saveReceipt } from "@/lib/fee-receipts";
 import { getFeesAccess, loadStudentAccount, requireFeesManager } from "@/lib/fees";
-import { FREQUENCIES, PAYMENT_MODES, dueKey, lateFeeOwed, lateMonthCount, rupees, monthLabel, sessionMonths } from "@/lib/fees-shared";
+import { FREQUENCIES, PAYMENT_MODES, dueKey, instalmentLines, rupees, monthLabel, sessionMonths } from "@/lib/fees-shared";
 
 const MAX_AMOUNT = 10_000_000; // ₹1 crore per instalment is plenty
 
@@ -285,16 +285,11 @@ export async function collectFee(studentId: string, _: ActionState, formData: Fo
     if (!Number.isInteger(amount) || amount < 0 || !Number.isInteger(discount) || discount < 0) return { error: `Enter whole rupees for ${item.headName} (${item.label}).` };
     if (amount + discount > item.balance) return { error: `${item.headName} (${item.label}): only ${rupees(item.balance)} is left, including any discount.` };
     if (amount + discount > 0) {
-      // Late only if paid after the due date (or admission), going by the payment date entered;
-      // a late fee left from an earlier part payment is taken (or waived) with it.
-      const due = lateFeeOwed(item, date);
-      const months = lateMonthCount(item, date);
-      if (waiveLateFee) {
-        lateWaived += due + item.lateLeft;
-        lines.push(receiptLine(item, amount, discount, 0, { charged: 0, waived: item.lateLeft, months }));
-      } else {
-        lines.push(receiptLine(item, amount, discount, due + item.lateLeft, { charged: due, months }));
-      }
+      // Late only if paid after the due date (or admission), going by the payment date entered; a late
+      // fee left from an earlier part payment is taken (or waived) with it. Each late fee stays with its month.
+      const pay = instalmentLines(item, { amount, discount, waive: waiveLateFee, payDate: date });
+      lateWaived += pay.lateWaived;
+      lines.push(...pay.lines.map(receiptLine));
     }
   }
   if (!lines.length) return { error: "Choose at least one fee and enter the amount paid." };
@@ -319,6 +314,18 @@ export async function cancelReceipt(receiptId: string, _: ActionState, formData:
   const { school, who } = await requireFeesManager();
   const parsed = cancelSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationError(parsed.error);
+  // Receipts are undone newest first: a later receipt on the same fees built on this one (its balance, its late fee).
+  const receipt = await db.feeReceipt.findFirst({ where: { id: receiptId, schoolId: school.id, cancelledAt: null }, include: { items: { select: { headId: true, period: true } } } });
+  if (!receipt) return { error: "Receipt not found or already cancelled." };
+  const fees = receipt.items.filter((i) => i.headId).map((i) => ({ headId: i.headId, period: i.period }));
+  const later = receipt.studentId && fees.length
+    ? await db.feeReceipt.findMany({
+        where: { studentId: receipt.studentId, cancelledAt: null, createdAt: { gt: receipt.createdAt }, items: { some: { OR: fees } } },
+        orderBy: { createdAt: "desc" },
+        select: { number: true },
+      })
+    : [];
+  if (later.length) return { error: `Cancel the later receipt${later.length === 1 ? "" : "s"} for these fees first: ${later.map((r) => r.number).join(", ")}.` };
   const { count } = await db.feeReceipt.updateMany({
     where: { id: receiptId, schoolId: school.id, cancelledAt: null },
     data: { cancelledAt: new Date(), cancelledBy: who, cancelReason: parsed.data.reason },

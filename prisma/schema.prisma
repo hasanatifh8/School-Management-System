@@ -895,6 +895,7 @@ model FeeReceipt {
   billMonth    String? // the Fee desk bill it was collected on ("2026-06", "arrears"); null = collected elsewhere
   leftOwing    Int         @default(0) // still owed on that bill after this payment
   leftTo       String? // the bill what was left moved to as previous dues ("2026-07"); null = stays on the same bill
+  collectedOn  String? // an add-on receipt: settles billMonth's balance, collected at this later bill ("2026-09"); null = collected on billMonth itself
 
   school  School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   session AcademicSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -923,6 +924,7 @@ model FeeReceiptItem {
   month       String? // the Fee desk month the instalment belongs to ("2026-05", "arrears"), to tell previous dues from the bill's own fees
   paidBefore  Int     @default(0) // paid (and discounted) on the instalment before this receipt, fee and late fee
   cleared     Boolean @default(false) // this receipt settled what was left of the instalment, fee and late fee
+  lateMonth   String? // the later month whose late fee this line is ("2026-09"): a fee still unpaid then is fined in that month's bill, not its own; null = the instalment's own month
 
   receipt FeeReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   head    FeeHead?   @relation(fields: [headId], references: [id], onDelete: SetNull)

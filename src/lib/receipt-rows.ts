@@ -13,8 +13,9 @@ type Item = {
   month: string | null;
   paidBefore: number;
   cleared: boolean;
+  lateMonth?: string | null;
 };
-type Receipt = { billMonth: string | null; leftOwing: number; leftTo: string | null; waiver: boolean; cancelledAt: Date | null; items: Item[] };
+type Receipt = { billMonth: string | null; leftOwing: number; leftTo: string | null; collectedOn: string | null; waiver: boolean; cancelledAt: Date | null; items: Item[] };
 
 export type ReceiptRow =
   | { kind: "section"; key: string; label: string }
@@ -31,9 +32,11 @@ const billLabel = (month: string) => (month === "arrears" ? "last session's dues
  */
 export function receiptRows(receipt: Receipt): ReceiptRow[] {
   const { billMonth } = receipt;
-  if (!billMonth) return flatRows(receipt.items);
-  const previous = receipt.items.filter((i) => i.month && i.month !== billMonth);
-  const own = receipt.items.filter((i) => !i.month || i.month === billMonth);
+  // Lines that only fixed a later month's late fee on the way (owed on that bill) print nothing.
+  const items = receipt.items.filter((i) => i.amount + i.discount + i.lateFee > 0);
+  if (!billMonth) return flatRows(items);
+  const previous = items.filter((i) => i.month && i.month !== billMonth);
+  const own = items.filter((i) => !i.month || i.month === billMonth);
   const rows = (items: Item[]) => items.flatMap((i) => itemRows(i, i.month !== billMonth));
   if (!previous.length) return rows(own);
   return [
@@ -58,7 +61,9 @@ function itemRows(i: Item, earlier: boolean): ReceiptRow[] {
   }
   if (i.lateFee > 0) {
     // A late fee paid on its own (the fee was paid earlier) says when the instalment cleared.
-    out.push({ kind: "late", key: `${i.id}:late`, name: "Late fee", period: `${i.headName} · ${i.periodLabel}${fee === 0 && i.cleared ? " · clears it" : ""}`, amount: i.lateFee });
+    // A later month's late fee on an earlier fee says which month it is for.
+    const period = i.lateMonth ? `${monthLabel(i.lateMonth)} · on ${i.headName} (${i.periodLabel}), still unpaid then` : `${i.headName} · ${i.periodLabel}${fee === 0 && i.cleared ? " · clears it" : ""}`;
+    out.push({ kind: "late", key: `${i.id}:late`, name: "Late fee", period, amount: i.lateFee });
   }
   return out;
 }
@@ -86,6 +91,23 @@ function flatRows(items: Item[]): ReceiptRow[] {
   return lateFee ? [...rows, { kind: "late", key: "late", name: "Late fee", period: `${late.length} late instalment${late.length === 1 ? "" : "s"}`, amount: lateFee }] : rows;
 }
 
+/** The month a receipt is for, as its "Bill" line says: "August 2026", or "August 2026 · add-on, collected at September 2026". */
+export function billLine(receipt: Pick<Receipt, "billMonth" | "collectedOn">) {
+  if (!receipt.billMonth) return null;
+  const label = receipt.billMonth === "arrears" ? "Last session's dues" : monthLabel(receipt.billMonth);
+  return receipt.collectedOn ? `${label} · add-on, collected at ${billLabel(receipt.collectedOn)}` : label;
+}
+
+/**
+ * The notice a waiver prints: what was written off, that nothing was collected, and who approved it.
+ * Null for a payment.
+ */
+export function waiverNotice(receipt: { waiver: boolean; lateWaived: number; items: Pick<Item, "discount">[] }) {
+  if (!receipt.waiver) return null;
+  const amount = receipt.items.reduce((n, i) => n + i.discount, 0) + receipt.lateWaived;
+  return `This amount of ${rupees(amount)} has been waived off by the school administration. Nothing was collected: net amount ${rupees(0)}.`;
+}
+
 /**
  * What the receipt did to its Fee desk bill, in a sentence or two: "June 2026
  * bill paid in full. Clears May 2026 (Tuition Fees)." or "₹100 left moves to
@@ -94,6 +116,13 @@ function flatRows(items: Item[]): ReceiptRow[] {
 export function billStatusNote(receipt: Receipt): string | null {
   const { billMonth } = receipt;
   if (!billMonth || receipt.waiver) return null;
+  // An add-on receipt: an earlier month's balance, settled on its own before the later bill's fees.
+  if (receipt.collectedOn) {
+    const at = `collected at the ${billLabel(receipt.collectedOn)} bill`;
+    return receipt.leftOwing > 0
+      ? `Add-on receipt for the ${billLabel(billMonth)} bill, ${at}: ${rupees(receipt.leftOwing)} of it is still due, as previous dues on the ${billLabel(receipt.leftTo ?? receipt.collectedOn)} bill.`
+      : `Add-on receipt for the ${billLabel(billMonth)} bill, ${at}: ${billLabel(billMonth)} is now cleared.`;
+  }
   const cleared = [...new Set(receipt.items.filter((i) => i.cleared && i.month && i.month !== billMonth).map((i) => i.month!))];
   const clears = cleared.length
     ? ` Clears ${cleared

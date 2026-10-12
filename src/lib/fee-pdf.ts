@@ -6,8 +6,8 @@ import path from "node:path";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, degrees, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { db } from "@/lib/db";
-import { MODE_LABELS, amountInWords, monthLabel, rupees } from "@/lib/fees-shared";
-import { billStatusNote, receiptRows } from "@/lib/receipt-rows";
+import { MODE_LABELS, amountInWords, rupees } from "@/lib/fees-shared";
+import { billLine, billStatusNote, receiptRows, waiverNotice } from "@/lib/receipt-rows";
 import { earlierPayments, type Ledger } from "@/lib/fees";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -184,6 +184,8 @@ function footer(w: Writer, note: string) {
 
 /* ───────────────────────── Receipt ───────────────────────── */
 
+const stamp = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
+
 export async function receiptPdf(schoolId: string, receiptId: string) {
   const receipt = await db.feeReceipt.findFirst({
     where: { id: receiptId, schoolId },
@@ -201,7 +203,7 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
     ["Student ID", receipt.studentCode],
     ["Class", `${receipt.className ?? "—"}${receipt.student?.rollNumber != null ? ` · Roll ${receipt.student.rollNumber}` : ""}`],
     ["Father", receipt.student?.fatherName ?? "—"],
-    ...(receipt.billMonth ? [["Bill", receipt.billMonth === "arrears" ? "Last session's dues" : monthLabel(receipt.billMonth)] as [string, string]] : []),
+    ...(receipt.billMonth ? [["Bill", billLine(receipt)!] as [string, string]] : []),
   ]);
   w.y -= 6;
 
@@ -227,15 +229,21 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
       ...(discount
         ? [
             { cells: ["", "Subtotal", "", rupees(receipt.total + discount)] },
-            { cells: ["", receipt.waiver ? "Waived" : "Discount", "", `- ${rupees(discount)}`] },
+            { cells: ["", receipt.waiver ? "Waived off" : "Discount", "", `- ${rupees(discount)}`] },
           ]
         : []),
     ],
-    ["", discount ? "Total paid" : "Total", "", rupees(receipt.total)],
+    ["", receipt.waiver ? "Net collected" : discount ? "Total paid" : "Total", "", rupees(receipt.total)],
   );
   w.ensure(80);
   w.text(amountInWords(receipt.total), M, { size: 8.5, color: MUTED, width: A4.w - 2 * M });
   w.y -= 22;
+  // A waiver says plainly that the amount was written off, not collected.
+  const waived = waiverNotice(receipt);
+  if (waived) {
+    w.text(waived, M, { size: 9.5, bold: true, width: A4.w - 2 * M });
+    w.y -= 26;
+  }
   const billNote = billStatusNote(receipt);
   // One sentence a line: what the payment did to the bill, then any earlier month it clears.
   for (const sentence of billNote?.split(/(?<=\.) /) ?? []) {
@@ -261,8 +269,10 @@ export async function receiptPdf(schoolId: string, receiptId: string) {
   const notes: [string, string][] = [["Paid by", receipt.waiver ? "Not a payment: dues waived by the school" : receipt.total ? `${MODE_LABELS[receipt.mode]}${receipt.reference ? ` · ${receipt.reference}` : ""}` : "Nothing to pay (fully discounted)"]];
   if (receipt.lateWaived) notes.push(["Late fee waived", rupees(receipt.lateWaived)]);
   if (receipt.remarks) notes.push(["Remarks", receipt.remarks]);
-  if (discount || receipt.waiver) notes.push([`${receipt.waiver ? "Waived" : "Discount"} ${rupees(discount + (receipt.waiver ? receipt.lateWaived : 0))}`, receipt.discountNote ?? ""]);
-  notes.push(["Received by", receipt.collectedBy]);
+  if (receipt.waiver) notes.push(["Reason", receipt.discountNote ?? ""]);
+  else if (discount) notes.push([`Discount ${rupees(discount)}`, receipt.discountNote ?? ""]);
+  notes.push([receipt.waiver ? "Approved by" : "Received by", receipt.collectedBy]);
+  if (receipt.waiver) notes.push(["Recorded on", stamp.format(receipt.createdAt)]);
   for (const [k, v] of notes) {
     w.text(`${k}:`, M, { size: 8.5, color: MUTED });
     w.text(v, M + 90, { size: 8.5, width: 300 });

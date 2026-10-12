@@ -4,7 +4,7 @@ import "server-only";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import type { PaymentModeKey } from "@/lib/fees-shared";
-import { deskMonth, dueKey, monthLabel, type DueItem } from "@/lib/fees-shared";
+import { deskMonth, dueKey, lateLeftIn, monthLabel, type BillLine } from "@/lib/fees-shared";
 import { type getFeesAccess, type loadStudentAccount, nextReceiptNumber } from "@/lib/fees";
 import { fullName, sectionLabel } from "@/lib/queries";
 
@@ -24,78 +24,85 @@ export type ReceiptLine = {
   lateWaived: number;
   lateMonths: number;
   month: string;
+  lateMonth: string | null;
   paidBefore: number;
   cleared: boolean;
 };
 
 /**
- * One receipt line for an instalment. `late` books its late fee: the new late
- * fee fixed now (owed until paid), late fee fixed earlier written off now, and
- * the late months counted so far, so none is charged twice.
+ * A receipt line from what a payment does to an instalment for one month's
+ * bill: its fee and own late fee, or (a later month) that month's late fee on
+ * it, kept apart so each month's bill and receipt show only their own fines.
  */
-export function receiptLine(
-  item: DueItem,
-  amount: number,
-  discount: number,
-  lateFee: number,
-  late: { charged: number; waived?: number; months: number },
-): ReceiptLine {
+export function receiptLine(l: BillLine): ReceiptLine {
+  const { item } = l;
+  const own = l.month === deskMonth(item);
   return {
     headId: item.headId,
     headName: item.headName,
     period: item.period,
     // Months before admission are marked as such on the receipt.
     periodLabel: item.beforeAdmission ? `${item.label} · before admission` : item.label,
-    amount,
-    discount,
-    lateFee,
-    lateCharged: late.charged,
-    lateWaived: late.waived ?? 0,
-    lateMonths: late.months,
-    // Which month it belongs to, what was paid on it before, and whether this settles it: the
+    amount: l.amount,
+    discount: l.discount,
+    lateFee: l.lateFee,
+    lateCharged: l.lateCharged,
+    lateWaived: l.lateWaived,
+    lateMonths: l.lateMonths,
+    // The bill the line belongs to; a later month's late fee says which month it is.
+    month: l.month,
+    lateMonth: own ? null : l.month,
+    // What was paid on the instalment before, and whether this settles its own month: the
     // receipt and the month's bill say "clears May 2026 (₹2,000 paid earlier)".
-    month: deskMonth(item),
-    paidBefore: item.paid + item.discount + item.lateFeePaid,
-    cleared: amount + discount >= item.balance && lateFee + (late.waived ?? 0) >= item.lateLeft + late.charged,
+    paidBefore: own ? item.paid + item.discount + (item.lateBy[""]?.paid ?? 0) : 0,
+    cleared: own && l.amount + l.discount >= item.balance && l.lateFee + l.lateWaived >= lateLeftIn(item, l.month) + l.lateCharged,
     // The instalment keeps this price from now on (a later fee or class change won't reprice it).
-    charged: item.amount,
+    charged: own ? item.amount : 0,
   };
 }
 
-/**
- * Creates the receipt. Inside a serializable transaction it re-checks what is
- * already paid, so two counters (or tabs) can't collect the same instalments.
- */
-export async function saveReceipt({
-  access,
-  account,
-  lines,
-  date,
-  mode,
-  reference,
-  remarks,
-  discountNote,
-  lateWaived,
-  waiver = false,
-  bill,
-}: {
+type Common = {
   access: Access;
   account: Account;
-  lines: ReceiptLine[];
   date: string;
   mode: PaymentModeKey;
   reference: string | null;
   remarks: string | null;
+};
+
+export type ReceiptDraft = {
+  lines: ReceiptLine[];
   discountNote: string | null;
   lateWaived: number;
   /** Dues written off by an admin, not a payment: numbered apart, total 0. */
   waiver?: boolean;
-  /** Fee desk: the bill it was collected on, what it left owing and the bill that moved to (null = the same). */
-  bill?: { month: string; leftOwing: number; leftTo: string | null };
-}): Promise<{ id: string; number: string } | { error: string }> {
+  /**
+   * Fee desk: the bill it settles, what it left owing and the bill that moved to (null = the same),
+   * and for an add-on receipt (an earlier month's balance) the later bill it was collected at.
+   */
+  bill?: { month: string; leftOwing: number; leftTo: string | null; collectedOn?: string | null };
+};
+
+/** Creates the receipt (see saveReceipts). */
+export async function saveReceipt({ access, account, date, mode, reference, remarks, ...draft }: Common & ReceiptDraft): Promise<{ id: string; number: string } | { error: string }> {
+  const saved = await saveReceipts({ access, account, date, mode, reference, remarks }, [draft]);
+  return "error" in saved ? saved : saved[0];
+}
+
+/**
+ * Creates one or more receipts for one payment, in order, all or none (the Fee
+ * desk settles each earlier month's previous dues on its own receipt before the
+ * month's own). Inside a serializable transaction it re-checks what is already
+ * paid, so two counters (or tabs) can't collect the same instalments.
+ */
+export async function saveReceipts(
+  { access, account, date, mode, reference, remarks }: Common,
+  drafts: ReceiptDraft[],
+): Promise<{ id: string; number: string }[] | { error: string }> {
   const { school, session, who } = access;
   const { student } = account;
   const byKey = new Map(account.dues.map((d) => [dueKey(d.headId, d.period), d]));
+  const lines = drafts.flatMap((d) => d.lines);
   try {
     return await db.$transaction(
       async (tx) => {
@@ -116,33 +123,43 @@ export async function saveReceipt({
           )
             throw new PaymentChanged();
         }
-        return tx.feeReceipt.create({
-          data: {
-            schoolId: school.id,
-            sessionId: session.id,
-            studentId: student.id,
-            number: await nextReceiptNumber(tx, school.id, session.name, waiver),
-            waiver,
-            billMonth: bill?.month ?? null,
-            leftOwing: bill?.leftOwing ?? 0,
-            leftTo: bill?.leftTo ?? null,
-            date: parseISODate(date)!,
-            mode,
-            reference,
-            remarks,
-            // A waived late fee is recorded, so the waiver shows on the receipt and the ledger.
-            lateWaived,
-            discountNote,
-            feeNote: admissionFeeNote(account),
-            total: lines.reduce((n, l) => n + l.amount + l.lateFee, 0),
-            studentName: fullName(student),
-            studentCode: student.studentCode,
-            className: student.section ? sectionLabel(student.section) : null,
-            collectedBy: who,
-            items: { create: lines },
-          },
-          select: { id: true, number: true },
-        });
+        const out: { id: string; number: string }[] = [];
+        // A millisecond apart, so receipts made together keep their order (and "paid earlier" counts the first).
+        const at = Date.now();
+        for (const [i, { lines, discountNote, lateWaived, waiver = false, bill }] of drafts.entries()) {
+          out.push(
+            await tx.feeReceipt.create({
+              data: {
+                schoolId: school.id,
+                sessionId: session.id,
+                studentId: student.id,
+                number: await nextReceiptNumber(tx, school.id, session.name, waiver),
+                waiver,
+                billMonth: bill?.month ?? null,
+                leftOwing: bill?.leftOwing ?? 0,
+                leftTo: bill?.leftTo ?? null,
+                collectedOn: bill?.collectedOn ?? null,
+                date: parseISODate(date)!,
+                mode,
+                reference,
+                remarks,
+                // A waived late fee is recorded, so the waiver shows on the receipt and the ledger.
+                lateWaived,
+                discountNote,
+                feeNote: admissionFeeNote(account),
+                total: lines.reduce((n, l) => n + l.amount + l.lateFee, 0),
+                studentName: fullName(student),
+                studentCode: student.studentCode,
+                className: student.section ? sectionLabel(student.section) : null,
+                collectedBy: who,
+                createdAt: new Date(at + i),
+                items: { create: lines },
+              },
+              select: { id: true, number: true },
+            }),
+          );
+        }
+        return out;
       },
       { isolationLevel: "Serializable" },
     );

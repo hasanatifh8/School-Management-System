@@ -5,7 +5,7 @@ import { Avatar, Badge, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/fees";
-import { MODE_LABELS, billMonthFor, billOf, deskMonths, monthLabel, rupees, sessionMonths, type DeskMonthStatus } from "@/lib/fees-shared";
+import { MODE_LABELS, billMonthFor, billOf, deskMonth, deskMonths, dueKey, monthLabel, rupees, sessionMonths, type DeskMonth, type DeskMonthStatus } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { setFeesFrom } from "../fees/actions";
@@ -146,7 +146,7 @@ function DeskHeader() {
 }
 
 /** The chosen student: who they are, their twelve months at a glance, and recent receipts. */
-function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnType<typeof loadStudentAccount>>>; today: string }) {
+async function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnType<typeof loadStudentAccount>>>; today: string }) {
   const { student, dues, totals, receipts, session } = account;
   const name = fullName(student);
   const months = deskMonths(dues, session.startDate.toISOString().slice(0, 10), today);
@@ -164,6 +164,22 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
   const payAmount = payBill ? [...payBill.carried, payBill.month].reduce((n, m) => n + m.balance + m.late, 0) : 0;
   const unpaidCount = months.filter((m) => m.status === "OVERDUE" || m.status === "DUE" || m.status === "PARTIAL").length;
   const href = (month: string) => `/admin/fee-desk/${student.id}/${month}`;
+  // Each month's receipts (numbers only), for its card: matched by instalment, so add-on receipts count too.
+  const monthOf = new Map(dues.map((d) => [dueKey(d.headId, d.period), deskMonth(d)]));
+  const lines = await db.feeReceiptItem.findMany({
+    where: { receipt: { studentId: student.id, sessionId: session.id, cancelledAt: null } },
+    orderBy: { receipt: { createdAt: "asc" } },
+    select: { headId: true, period: true, month: true, amount: true, discount: true, lateFee: true, lateWaived: true, receipt: { select: { id: true, number: true } } },
+  });
+  const receiptsOf = new Map<string, { id: string; number: string }[]>();
+  for (const l of lines) {
+    // The month the line belongs to (a later month's late fee says so); older lines go by their instalment.
+    const m = l.month ?? (l.headId && monthOf.get(dueKey(l.headId, l.period)));
+    if (!m || l.amount + l.discount + l.lateFee + l.lateWaived === 0) continue;
+    const list = receiptsOf.get(m) ?? [];
+    if (!list.some((r) => r.id === l.receipt.id)) list.push(l.receipt);
+    receiptsOf.set(m, list);
+  }
 
   return (
     <>
@@ -249,27 +265,19 @@ function StudentPanel({ account, today }: { account: NonNullable<Awaited<ReturnT
         padded={false}
         action={<span className="text-sm text-muted">Paid {rupees(totals.paid)}</span>}
       >
-        <ul className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 sm:p-4 xl:grid-cols-4">
-          {months.map((m) => {
-            const s = MONTH_STYLE[m.status];
-            return (
-              <li key={m.key} className={m.key === "arrears" ? "col-span-full" : undefined}>
-                <Link href={href(m.key)} className={`group flex h-full flex-col rounded-xl border px-3 py-2.5 transition hover:-translate-y-px hover:shadow-card ${s.box}`}>
-                  <span className="flex items-center justify-between gap-2 text-sm font-medium text-fg">
-                    {m.key === "arrears" ? m.label : m.label.split(" ")[0]}
-                    {(m.status === "PAID" || m.status === "WAIVED") && <Check className="h-4 w-4 text-success" aria-hidden />}
-                  </span>
-                  <span className="mt-1 text-base font-semibold tabular-nums text-fg">
-                    {m.status === "NONE" ? <span className="text-sm font-normal text-subtle">—</span> : rupees(m.status === "PAID" || m.status === "WAIVED" ? m.charged : m.balance + m.late)}
-                  </span>
-                  <span className={`mt-0.5 text-xs font-medium ${s.text}`}>
-                    {s.label}
-                    {m.status === "PARTIAL" && billMonthFor(months, m.key) !== m.key && ` · to ${months.find((n) => n.key === billMonthFor(months, m.key))!.label.split(" ")[0]}`}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
+        <ul className="grid grid-cols-1 gap-2 p-3 min-[420px]:grid-cols-2 sm:p-4 xl:grid-cols-3">
+          {months.map((m) => (
+            <li key={m.key} className={m.key === "arrears" ? "col-span-full" : undefined}>
+              <MonthCard
+                month={m}
+                href={href(m.key)}
+                receipts={receiptsOf.get(m.key) ?? []}
+                // Where a part-paid month's balance went, and what earlier months' balances came into this one.
+                movedTo={m.status === "PARTIAL" && billMonthFor(months, m.key) !== m.key ? months.find((n) => n.key === billMonthFor(months, m.key))!.label : null}
+                carriedIn={billOf(months, m.key)!.carried.map((c) => ({ label: c.label, amount: c.balance }))}
+              />
+            </li>
+          ))}
         </ul>
       </Card>
 
@@ -315,3 +323,86 @@ const MONTH_STYLE: Record<DeskMonthStatus, { label: string; box: string; text: s
   UPCOMING: { label: "Upcoming", box: "border-line bg-surface hover:border-line-strong", text: "text-muted" },
   NONE: { label: "No fees", box: "border-dashed border-line bg-surface opacity-60", text: "text-subtle" },
 };
+
+const short = (label: string) => (label.startsWith("Unpaid") ? "last session" : label.split(" ")[0]);
+
+/**
+ * A month on the desk as a small ledger: what it billed (fees and late fees),
+ * what was paid towards it and on which receipts, and what is left; flagged
+ * when its balance moved on to a later bill, or earlier months' came into it.
+ */
+function MonthCard({
+  month: m,
+  href,
+  receipts,
+  movedTo,
+  carriedIn,
+}: {
+  month: DeskMonth;
+  href: string;
+  receipts: { id: string; number: string }[];
+  movedTo: string | null;
+  carriedIn: { label: string; amount: number }[];
+}) {
+  const s = MONTH_STYLE[m.status];
+  const sum = (f: (d: DeskMonth["items"][number]) => number) => m.items.reduce((n, d) => n + f(d), 0);
+  // This month's late fees only (never a later month's): fixed by payments, plus any run up in it by today.
+  const fines = m.lateFee.charged + m.late;
+  const paid = sum((d) => d.paid) + m.lateFee.paid;
+  const waived = sum((d) => d.discount) + m.lateFee.waived;
+  const left = m.balance + m.late;
+  const done = m.status === "PAID" || m.status === "WAIVED";
+  return (
+    <Link href={href} className={`group flex h-full flex-col rounded-xl border px-3 py-2.5 transition hover:-translate-y-px hover:shadow-card ${s.box}`}>
+      <span className="flex items-center justify-between gap-2 text-sm font-medium text-fg">
+        {m.key === "arrears" ? m.label : m.label.split(" ")[0]}
+        <span className={`flex items-center gap-1 text-xs font-medium ${s.text}`}>
+          {s.label}
+          {done && <Check className="h-4 w-4 text-success" aria-hidden />}
+        </span>
+      </span>
+      {m.status === "NONE" ? (
+        <span className="mt-1 text-sm text-subtle">—</span>
+      ) : (
+        <dl className="mt-1.5 space-y-0.5 text-xs">
+          <div className="flex justify-between gap-2">
+            <dt className="text-muted">Billed</dt>
+            <dd className="tabular-nums text-fg">
+              {fines > 0 && (
+                <span className="text-muted">
+                  {rupees(m.charged)} + <span className="text-danger">{rupees(fines)} late</span> ={" "}
+                </span>
+              )}
+              <span className="font-semibold">{rupees(m.charged + fines)}</span>
+            </dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt className="text-muted">Paid</dt>
+            <dd className="tabular-nums text-success">{rupees(paid)}</dd>
+          </div>
+          {waived > 0 && (
+            <div className="flex justify-between gap-2">
+              <dt className="text-muted">{m.items.some((d) => d.waived > 0) ? "Waived / discount" : "Discount"}</dt>
+              <dd className="tabular-nums text-success">{rupees(waived)}</dd>
+            </div>
+          )}
+          <div className="flex justify-between gap-2 border-t border-line/70 pt-0.5">
+            <dt className="text-muted">Left</dt>
+            <dd className={`tabular-nums font-semibold ${left > 0 ? "text-danger" : "text-fg"}`}>{rupees(left)}</dd>
+          </div>
+        </dl>
+      )}
+      {receipts.length > 0 && (
+        <span className="mt-1 truncate font-mono text-[11px] text-muted" title={receipts.map((r) => r.number).join(", ")}>
+          {receipts.map((r) => `#${r.number.split("/").at(-1)}`).join(" ")}
+        </span>
+      )}
+      {movedTo && <span className="mt-1 text-xs font-medium text-warning">↳ {rupees(m.balance + m.late)} carried to {short(movedTo)}</span>}
+      {carriedIn.map((c) => (
+        <span key={c.label} className="mt-1 text-xs font-medium text-warning">
+          ↰ +{rupees(c.amount)} due from {short(c.label)}
+        </span>
+      ))}
+    </Link>
+  );
+}

@@ -6,7 +6,7 @@ import { Banknote, BadgeMinus, Building2, CreditCard, FileCheck2, GraduationCap,
 import { FormMessage } from "@/components/forms";
 import { Button, SegmentedControl, checkboxClass, inputClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { MODE_LABELS, PAYMENT_MODES, dueKey, isOwing, lateFeeMonths, lateFeeOwed, payMonths, rupees, type DueItem } from "@/lib/fees-shared";
+import { MODE_LABELS, PAYMENT_MODES, dueKey, finesIn, payBill, rupees, type BillFine, type DueItem } from "@/lib/fees-shared";
 
 const MODE_ICONS = { CASH: Banknote, UPI: QrCode, CARD: CreditCard, CHEQUE: FileCheck2, BANK_TRANSFER: Building2, OTHER: Wallet };
 const NEEDS_REF = new Set(["CHEQUE", "UPI", "BANK_TRANSFER"]);
@@ -17,24 +17,28 @@ const day = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
 export type BillData = {
   school: { name: string; address: string | null; phone: string | null; logoUrl: string | null };
   student: { name: string; className: string; code: string; father: string; roll: string; active: boolean };
-  month: { key: string; label: string; items: DueItem[]; charged: number; balance: number };
+  /** All the student's instalments: a month's late fees can be on an earlier month's fee still unpaid then. */
+  dues: DueItem[];
+  month: { key: string; label: string; items: DueItem[]; charged: number; balance: number; late: number; lateFee: { charged: number; paid: number; waived: number } };
   /** Balances of part-paid earlier months, collected on this bill as previous dues. */
-  carried: { key: string; label: string; items: DueItem[]; balance: number }[];
+  carried: { key: string; label: string; items: DueItem[]; balance: number; late: number }[];
   /** This month was part paid; what is left is collected on that month's bill. */
   movedTo: { key: string; label: string } | null;
   /** Where a part payment's remainder would go: the next month with fees. */
   nextBill: { key: string; label: string } | null;
-  /** Receipts that paid this month's fees: how much of each went to them, and the bill it was collected on when a later one. */
-  receipts: { id: string; number: string; date: string; mode: string; amount: number; onBill: string | null; cleared: boolean }[];
+  /** Receipts that paid this month's fees: how much of each went to them, the later bill it was collected at (an add-on receipt), and whether it cleared the month. */
+  receipts: { id: string; number: string; date: string; mode: string; amount: number; onBill: string | null; cleared: boolean; waiver: boolean }[];
 };
 
 /**
  * A month's fee bill that reads like the receipt it becomes: the month's fees,
- * any previous dues carried in from a part-paid month, one late fee per month
- * each fee has stayed unpaid (tick or untick each), and the total; underneath,
- * the amount received (less is a part payment: what is left, late fee
- * included, moves to the next bill), how it was paid and Collect. Admins can
- * also waive the previous dues, with a reason.
+ * any previous dues carried in from a part-paid month (ticked and settled
+ * first, each on its own receipt for that month), the late fees charged in this
+ * month (on its fees, or on an earlier fee still unpaid now; tick or untick
+ * each; never a later month's), and the total; underneath, the
+ * amount received (less is a part payment: what is left, late fee included,
+ * moves to the next bill), how it was paid and Collect. Admins can also waive
+ * the previous dues, with a reason.
  */
 export function FeeBill({
   data,
@@ -50,40 +54,48 @@ export function FeeBill({
   /** Admins only: writes off the previous dues on this bill. */
   waive?: (state: ActionState, formData: FormData) => Promise<ActionState>;
 }) {
-  const { school, student, month, carried, movedTo, nextBill, receipts } = data;
+  const { school, student, dues, month, carried, movedTo, nextBill, receipts } = data;
   const [date, setDate] = useState(today);
   const [mode, setMode] = useState("CASH");
   const [discountText, setDiscountText] = useState("");
   const [extras, setExtras] = useState(false);
   const [lateChoice, setLateChoice] = useState<Record<string, boolean>>({});
   const [receivedText, setReceivedText] = useState("");
+  // With previous dues on the bill, the month's own fees can be left for later.
+  const [own, setOwn] = useState(true);
   const [state, formAction, pending] = useActionState(action, {});
 
-  // What this bill collects: previous dues carried in, then the month's own fees.
-  const billItems = useMemo(() => [...carried.flatMap((c) => c.items), ...month.items], [carried, month]);
-  const billKeys = useMemo(() => [...carried.map((c) => c.key), month.key], [carried, month]);
-  const unpaid = useMemo(() => billItems.filter(isOwing), [billItems]);
-  const paid = month.items.length > 0 && month.balance === 0 && carried.length === 0;
-  const waivedOff = paid && month.items.some((d) => d.waived > 0);
-  // The receipt that settled the month: the last one that cleared any of its fees.
-  const closing = receipts.findLast((r) => r.cleared);
-  // Every month's late fee on each unpaid fee, up to the payment date.
-  const lateMonths = useMemo(() => unpaid.flatMap((d) => lateFeeMonths(d, date).map((l) => ({ ...l, fee: d.headName }))), [unpaid, date]);
-  const isOn = (l: { key: string; onByDefault: boolean }) => lateChoice[l.key] ?? l.onByDefault;
+  const withOwn = own || !carried.length;
+  // The late fees on this bill, as of the payment date: each carried month's, then this month's (only its own).
+  const finesOf = useMemo(() => new Map([...carried.map((c) => c.key), month.key].map((k) => [k, finesIn(dues, k, date)])), [dues, carried, month.key, date]);
+  // Ticks: new late fees on every month of the bill; a fixed one only on this month's (earlier months' are previous dues).
+  const tickable = useMemo(
+    () => [...carried.flatMap((c) => finesOf.get(c.key)!.filter((f) => !f.fixed)), ...(withOwn ? finesOf.get(month.key)! : [])],
+    [carried, finesOf, month.key, withOwn],
+  );
+  const isOn = (f: { key: string; onByDefault: boolean }) => lateChoice[f.key] ?? f.onByDefault;
   const discount = Number(discountText) || 0;
   const received = receivedText ? Number(receivedText) : undefined;
-  const plan = useMemo(() => payMonths(billItems, billKeys, { discount, lateChoice, received, payDate: date }), [billItems, billKeys, discount, lateChoice, received, date]);
+  const plan = useMemo(
+    () => payBill(dues, { carried: carried.map((c) => c.key), month: month.key }, { own: withOwn, discount, lateChoice, received, payDate: date }),
+    [dues, carried, month.key, withOwn, discount, lateChoice, received, date],
+  );
   const part = received != null && received > 0 && received < plan.full;
-  const carriedTotal = carried.reduce((n, c) => n + c.balance, 0);
-  const lateCollected = month.items.reduce((n, d) => n + d.lateFeePaid, 0);
-  // Late fee fixed on this month's fees by earlier payments, and what of it was waived since.
-  const lateFixed = month.items.reduce((n, d) => n + d.lateCharged, 0);
-  const lateWrittenOff = month.items.reduce((n, d) => n + d.lateCharged - d.lateFeePaid - d.lateLeft, 0);
-  // Late fee for the months since: the bill's late fee less what was fixed earlier (in the dues above).
-  const newLate = plan.late - unpaid.reduce((n, d) => n + d.lateLeft, 0);
+  // The receipts this collection makes: an add-on one per earlier month, then the month's own.
+  const receiptsMade = plan.parts.map((p) => ({ month: p.month, total: p.total, cleared: p.total === p.full, label: p.month === month.key ? month.label : (carried.find((c) => c.key === p.month)?.label ?? p.month) }));
+  const ownOwing = month.balance + month.late > 0;
+  const paid = month.items.length > 0 && !ownOwing && carried.length === 0;
+  const waivedOff = paid && (month.items.some((d) => d.waived > 0) || month.lateFee.waived > 0);
+  // The receipt that settled the month: the last one that cleared any of its fees.
+  const closing = receipts.findLast((r) => r.cleared);
   const discounted = month.items.reduce((n, d) => n + d.discount, 0);
-  const paidSoFar = month.items.reduce((n, d) => n + d.paid + d.lateFeePaid, 0);
-  const canCollect = student.active && unpaid.length > 0 && !movedTo;
+  // Paid towards this month so far: its fees and its late fees.
+  const paidSoFar = month.items.reduce((n, d) => n + d.paid, 0) + month.lateFee.paid;
+  // This month's late fee now: fixed earlier and still owed, plus new, as ticked.
+  const lateNow = withOwn ? finesOf.get(month.key)!.reduce((n, f) => n + (isOn(f) ? f.amount : 0), 0) : 0;
+  const canCollect = student.active && (carried.length > 0 || ownOwing) && !movedTo;
+  // An earlier fee fined in this month says so: "on Aug 2026 Tuition".
+  const fineName = (f: BillFine) => (f.own ? f.item.headName : `${f.item.headName} · ${f.item.label} fee, still unpaid in ${f.label.split(" ")[0]}`);
 
   return (
     <div className="space-y-4">
@@ -148,55 +160,69 @@ export function FeeBill({
               </table>
 
               {carried.length > 0 && (
-                <table className="mt-4 w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted">
-                      <th className="pb-2 font-medium">Previous dues</th>
-                      <th className="pb-2 font-medium">Left unpaid</th>
-                      <th className="pb-2 text-right font-medium">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <fieldset className="mt-4">
+                  <legend className="mb-1 text-xs font-medium uppercase tracking-wider text-muted">Previous dues · settled first, each on its own receipt</legend>
+                  <ul className="divide-y divide-line/60 rounded-xl border border-warning-line bg-warning-soft/30">
                     {carried.map((c) => (
-                      <tr key={c.key} className="border-b border-line/60">
-                        <td className="py-2.5 text-fg">{c.label} (part paid)</td>
-                        <td className="py-2.5 text-xs text-muted">
-                          {c.items
-                            .flatMap((d) => [d.balance > 0 && `${d.headName} ${rupees(d.balance)}`, d.lateLeft > 0 && `${d.headName} late fee ${rupees(d.lateLeft)}`])
-                            .filter(Boolean)
-                            .join(", ")}
-                        </td>
-                        <td className="py-2.5 text-right tabular-nums text-fg">{rupees(c.balance)}</td>
-                      </tr>
+                      <li key={c.key} className="flex items-center gap-3 px-3 py-2 text-sm">
+                        {/* Always collected (or waived) before this month's fees, so it can't be unticked. */}
+                        <input type="checkbox" checked disabled aria-label={`Previous due, ${c.label}`} className={checkboxClass} />
+                        <span className="min-w-0 flex-1">
+                          <span className="font-medium text-fg">Previous due · {c.label}</span>
+                          <span className="block text-xs text-muted">
+                            {[
+                              ...c.items.filter((d) => d.balance > 0).map((d) => `${d.headName} ${rupees(d.balance)}`),
+                              ...finesOf
+                                .get(c.key)!
+                                .filter((f) => f.fixed)
+                                .map((f) => `${c.label.split(" ")[0]} late fee${f.own ? ` (${f.item.headName})` : ` on ${f.item.label} ${f.item.headName}`} ${rupees(f.amount)}`),
+                            ].join(", ")}{" "}
+                            · left by a part payment
+                          </span>
+                        </span>
+                        <span className="tabular-nums font-medium text-fg">{rupees(c.balance)}</span>
+                      </li>
                     ))}
-                  </tbody>
-                </table>
+                    {ownOwing && (
+                      <li>
+                        <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm transition hover:bg-surface-2">
+                          <input type="checkbox" checked={own} onChange={(e) => setOwn(e.target.checked)} className={checkboxClass} />
+                          <span className={`min-w-0 flex-1 ${own ? "text-fg" : "text-muted line-through"}`}>
+                            {month.label} fees <span className="text-xs text-muted">· collected after the previous dues are cleared</span>
+                          </span>
+                          <span className={`tabular-nums ${own ? "text-fg" : "text-subtle line-through"}`}>{rupees(month.balance + month.late)}</span>
+                        </label>
+                      </li>
+                    )}
+                  </ul>
+                </fieldset>
               )}
 
-              {/* Late fees: one per month a fee has stayed unpaid, each can be ticked off */}
-              {lateMonths.length > 0 && (
+              {/* Late fees charged in this bill's months, each can be ticked off; a later month's never shows here */}
+              {tickable.length > 0 && (
                 <fieldset className="mt-4">
                   <legend className="mb-1 flex w-full items-center justify-between text-xs font-medium uppercase tracking-wider text-muted">
                     <span>Late fee</span>
                     <span className="flex gap-3 normal-case tracking-normal">
-                      <button type="button" onClick={() => setLateChoice(Object.fromEntries(lateMonths.map((l) => [l.key, true])))} className="font-medium text-accent-text hover:underline">
+                      <button type="button" onClick={() => setLateChoice(Object.fromEntries(tickable.map((f) => [f.key, true])))} className="font-medium text-accent-text hover:underline">
                         All
                       </button>
-                      <button type="button" onClick={() => setLateChoice(Object.fromEntries(lateMonths.map((l) => [l.key, false])))} className="font-medium text-accent-text hover:underline">
+                      <button type="button" onClick={() => setLateChoice(Object.fromEntries(tickable.map((f) => [f.key, false])))} className="font-medium text-accent-text hover:underline">
                         None
                       </button>
                     </span>
                   </legend>
                   <ul className="divide-y divide-line/60 rounded-xl border border-line">
-                    {lateMonths.map((l) => (
-                      <li key={l.key}>
+                    {tickable.map((f) => (
+                      <li key={f.key}>
                         <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm transition hover:bg-surface-2">
-                          <input type="checkbox" checked={isOn(l)} onChange={(e) => setLateChoice((c) => ({ ...c, [l.key]: e.target.checked }))} className={checkboxClass} />
-                          <span className={`min-w-0 flex-1 ${isOn(l) ? "text-fg" : "text-muted line-through"}`}>
-                            {l.label} <span className="text-muted">· {l.fee}</span>
-                            {l.beforeAdmission && <span className="ml-1 text-xs text-muted">(before admission)</span>}
+                          <input type="checkbox" checked={isOn(f)} onChange={(e) => setLateChoice((c) => ({ ...c, [f.key]: e.target.checked }))} className={checkboxClass} />
+                          <span className={`min-w-0 flex-1 ${isOn(f) ? "text-fg" : "text-muted line-through"}`}>
+                            {f.label} <span className="text-muted">· {fineName(f)}</span>
+                            {f.fixed && <span className="ml-1 text-xs text-muted">(fixed earlier)</span>}
+                            {f.beforeAdmission && <span className="ml-1 text-xs text-muted">(before admission)</span>}
                           </span>
-                          <span className={`tabular-nums ${isOn(l) ? "text-danger" : "text-subtle line-through"}`}>{rupees(l.amount)}</span>
+                          <span className={`tabular-nums ${isOn(f) ? "text-danger" : "text-subtle line-through"}`}>{rupees(f.amount)}</span>
                         </label>
                       </li>
                     ))}
@@ -205,36 +231,34 @@ export function FeeBill({
               )}
 
               <div className="mt-4 space-y-1.5 text-sm">
-                {(discounted > 0 || discount > 0 || paidSoFar > 0 || carriedTotal > 0 || lateFixed > 0) && <Row label="Fees" value={rupees(month.charged)} />}
+                {(discounted > 0 || discount > 0 || paidSoFar > 0 || carried.length > 0 || month.lateFee.charged > 0 || lateNow > 0) && <Row label="Fees" value={rupees(month.charged)} />}
                 {discounted > 0 && <Row label={month.items.some((d) => d.waived > 0) ? "Discount / waived" : "Discount"} value={`− ${rupees(discounted)}`} tone="text-success" />}
-                {lateFixed > 0 && <Row label="Late fee" value={rupees(lateFixed)} tone="text-danger" />}
-                {lateWrittenOff > 0 && <Row label="Late fee waived" value={`− ${rupees(lateWrittenOff)}`} tone="text-success" />}
+                {/* This month's late fee: what earlier payments fixed (paid or written off), then what is owed now. */}
+                {month.lateFee.paid > 0 && <Row label="Late fee (paid)" value={rupees(month.lateFee.paid)} tone="text-danger" />}
+                {month.lateFee.waived > 0 && <Row label="Late fee waived" value={`${rupees(month.lateFee.waived)}`} tone="text-success" />}
                 {!paid && paidSoFar > 0 && <Row label="Paid so far" value={`− ${rupees(paidSoFar)}`} tone="text-success" />}
-                {movedTo && <Row label={`Moved to ${movedTo.label} bill`} value={`− ${rupees(month.balance)}`} tone="text-muted" />}
-                {carriedTotal > 0 && <Row label="Previous dues" value={rupees(carriedTotal)} />}
-                {!paid && !movedTo && newLate > 0 && (
-                  <Row label={`Late fee (${lateMonths.filter(isOn).length} month${lateMonths.filter(isOn).length === 1 ? "" : "s"})`} value={rupees(newLate)} tone="text-danger" />
-                )}
+                {movedTo && <Row label={`Moved to ${movedTo.label} bill`} value={`− ${rupees(month.balance + month.late)}`} tone="text-muted" />}
+                {plan.previous > 0 && <Row label="Previous dues" value={rupees(plan.previous)} />}
+                {!paid && !movedTo && lateNow > 0 && <Row label={`Late fee (${month.label.split(" ")[0]})`} value={rupees(lateNow)} tone="text-danger" />}
                 {!paid && discount > 0 && <Row label="Discount now" value={`− ${rupees(discount - plan.unusedDiscount)}`} tone="text-success" />}
                 <div className="flex items-baseline justify-between border-t-2 border-fg/80 pt-3">
                   <span className="font-semibold text-fg">{paid ? "Paid in full" : movedTo ? "Left on this bill" : "Total payable"}</span>
-                  <span className={`text-2xl font-semibold tabular-nums ${paid ? "text-success" : "text-fg"}`}>
-                    {rupees(paid ? month.charged - discounted + lateCollected : movedTo ? 0 : plan.full)}
-                  </span>
+                  <span className={`text-2xl font-semibold tabular-nums ${paid ? "text-success" : "text-fg"}`}>{rupees(paid ? paidSoFar : movedTo ? 0 : plan.full)}</span>
                 </div>
                 {movedTo && (
                   <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
-                    Part paid. The {rupees(month.balance)} left is collected on the{" "}
+                    Part paid. The {rupees(month.balance + month.late)} left is collected on the{" "}
                     <Link href={`./${movedTo.key}`} className="font-semibold underline">
                       {movedTo.label} bill
                     </Link>{" "}
                     as previous dues.
                   </p>
                 )}
-                {!paid && lateMonths.length === 0 && unpaid.some((d) => d.lateFeeRate > 0) && (
+                {!paid && !movedTo && tickable.length === 0 && month.items.some((d) => d.balance > 0 && d.lateFeeRate > 0) && (
                   <p className="text-xs text-muted">
-                    A late fee of {rupees(unpaid.reduce((n, d) => n + d.lateFeeRate, 0))} applies if paid after {day(unpaid.map((d) => d.due).sort()[0])}
-                    {unpaid.some((d) => d.lateFeeMonthly) && ", and again each month it stays unpaid"}.
+                    A late fee of {rupees(month.items.filter((d) => d.balance > 0).reduce((n, d) => n + d.lateFeeRate, 0))} applies if paid after{" "}
+                    {day(month.items.filter((d) => d.balance > 0).map((d) => d.due).sort()[0])}
+                    {month.items.some((d) => d.lateFeeMonthly) && ", and again in each later month it stays unpaid (on that month's bill)"}.
                   </p>
                 )}
               </div>
@@ -260,7 +284,7 @@ export function FeeBill({
                   </Link>
                   <span className="text-muted">
                     {day(r.date)} · {r.mode}
-                    {r.onBill && ` · with the ${r.onBill} bill`}
+                    {r.onBill && ` · add-on receipt, collected at the ${r.onBill} bill`}
                     {r.cleared && " · cleared it"}
                   </span>
                   <span className="tabular-nums font-medium text-fg">{rupees(r.amount)}</span>
@@ -274,7 +298,7 @@ export function FeeBill({
         )}
       </article>
 
-      {waive && student.active && carriedTotal > 0 && <WaiveDues month={month.key} total={carriedTotal + carried.reduce((n, c) => n + c.items.reduce((m, d) => m + lateFeeOwed(d, today), 0), 0)} action={waive} />}
+      {waive && student.active && carried.length > 0 && <WaiveDues month={month.key} total={carried.reduce((n, c) => n + c.balance + c.late, 0)} action={waive} />}
 
       {canCollect && (
         <form
@@ -286,8 +310,9 @@ export function FeeBill({
         >
           <input type="hidden" name="month" value={month.key} />
           <input type="hidden" name="date" value={date} />
-          {lateMonths.map((l) => (
-            <input key={l.key} type="hidden" name={isOn(l) ? "lateOn" : "lateOff"} value={l.key} />
+          {own && <input type="hidden" name="own" value="on" />}
+          {tickable.map((f) => (
+            <input key={f.key} type="hidden" name={isOn(f) ? "lateOn" : "lateOff"} value={f.key} />
           ))}
           <SegmentedControl
             name="mode"
@@ -321,11 +346,29 @@ export function FeeBill({
           {part ? (
             <p className="mt-1.5 text-sm text-warning">
               Part payment: {rupees(plan.full - plan.total)} left
-              {nextBill ? ` moves to the ${nextBill.label} bill as previous dues.` : " stays due on this bill."}
+              {plan.total < plan.previous
+                ? ". The previous dues are not cleared, so nothing goes to this month's fees yet."
+                : nextBill
+                  ? ` moves to the ${nextBill.label} bill as previous dues.`
+                  : " stays due on this bill."}
             </p>
           ) : (
             <p className="mt-1.5 text-xs text-muted">Leave it for the full {rupees(plan.full)}, or enter less for a part payment.</p>
           )}
+          {/* Previous dues are never mixed into the month's receipt: say which receipts this makes. */}
+          {receiptsMade.length > 1 || (receiptsMade.length === 1 && receiptsMade[0].month !== month.key) ? (
+            <ol className="mt-3 space-y-1 rounded-lg border border-line bg-surface-2/60 px-3 py-2 text-sm">
+              {receiptsMade.map((r, i) => (
+                <li key={r.month} className="flex justify-between gap-3">
+                  <span className="text-muted">
+                    Receipt {i + 1}: {r.month === month.key ? `${r.label} fees` : `previous due, ${r.label} (add-on receipt)`}
+                    {r.cleared ? (r.month === month.key ? "" : " · clears it") : " · part"}
+                  </span>
+                  <span className="tabular-nums font-medium text-fg">{rupees(r.total)}</span>
+                </li>
+              ))}
+            </ol>
+          ) : null}
           {plan.excess > 0 && <p className="mt-1 text-sm text-danger">That is {rupees(plan.excess)} more than the bill.</p>}
 
           {extras ? (
@@ -365,10 +408,10 @@ export function FeeBill({
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
             <p className="text-sm text-muted">
               {plan.lateWaived > 0 && `Late fee ${rupees(plan.lateWaived)} waived`}
-              {plan.unusedDiscount > 0 && <span className="block text-danger">The discount is more than the fees.</span>}
+              {plan.unusedDiscount > 0 && <span className="block text-danger">The discount is more than this month&apos;s fees.</span>}
             </p>
-            <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={plan.unusedDiscount > 0 || plan.excess > 0 || plan.lines.length === 0}>
-              {part ? `Collect ${rupees(plan.total)} (part)` : `Collect ${rupees(plan.total)}`}
+            <Button type="submit" size="lg" loading={pending} icon={IndianRupee} disabled={plan.unusedDiscount > 0 || plan.excess > 0 || plan.parts.length === 0}>
+              {`Collect ${rupees(plan.total)}${part ? " (part)" : ""}${receiptsMade.length > 1 ? ` · ${receiptsMade.length} receipts` : ""}`}
             </Button>
           </div>
         </form>

@@ -31,11 +31,15 @@ export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk
 
   const [logo, receiptItems] = await Promise.all([
     db.schoolLogo.findUnique({ where: { schoolId: school.id }, select: { updatedAt: true } }),
-    bill.items.length
+    bill.items.length || bill.lateFee.charged
       ? db.feeReceiptItem.findMany({
-          where: { receipt: { schoolId: school.id, studentId: student.id, cancelledAt: null }, OR: bill.items.map((d) => ({ headId: d.headId, period: d.period })) },
+          // Lines for this month: its fees and late fees, and a later fee's late fee charged in this month; older lines carry no month.
+          where: {
+            receipt: { schoolId: school.id, studentId: student.id, cancelledAt: null },
+            OR: [{ month: bill.key }, ...(bill.items.length ? [{ month: null, OR: bill.items.map((d) => ({ headId: d.headId, period: d.period })) }] : [])],
+          },
           orderBy: { receipt: { date: "asc" } },
-          select: { amount: true, discount: true, lateFee: true, cleared: true, receipt: { select: { id: true, number: true, date: true, mode: true, waiver: true, billMonth: true } } },
+          select: { amount: true, discount: true, lateFee: true, lateWaived: true, cleared: true, receipt: { select: { id: true, number: true, date: true, mode: true, waiver: true, billMonth: true, collectedOn: true } } },
         })
       : [],
   ]);
@@ -44,11 +48,16 @@ export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk
   for (const i of receiptItems) {
     const r = byReceipt.get(i.receipt.id) ?? { ...i.receipt, towards: 0, waived: 0, cleared: false };
     r.towards += i.amount + i.lateFee;
-    r.waived += i.discount;
+    r.waived += i.discount + i.lateWaived;
     r.cleared ||= i.cleared;
     byReceipt.set(i.receipt.id, r);
   }
-  const receipts = [...byReceipt.values()];
+  // A receipt that only fixed this month's late fee on the way (paid later, here) isn't a payment towards it.
+  const receipts = [...byReceipt.values()].filter((r) => r.towards + r.waived > 0);
+  const onBill = (r: { billMonth: string | null; collectedOn: string | null }) => {
+    const at = r.collectedOn ?? (r.billMonth !== bill.key ? r.billMonth : null);
+    return at ? (months.find((m) => m.key === at)?.label ?? null) : null;
+  };
   const name = fullName(student);
   const deskHref = `/admin/fee-desk?s=${student.id}`;
   const prev = months[at - 1]?.key !== "arrears" ? months[at - 1] : undefined;
@@ -87,8 +96,9 @@ export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk
             roll: student.rollNumber != null ? String(student.rollNumber) : "—",
             active: student.status === "ACTIVE",
           },
-          month: { key: bill.key, label: bill.label, items: bill.items, charged: bill.charged, balance: bill.balance },
-          carried: carried.map((c) => ({ key: c.key, label: c.label, items: c.items, balance: c.balance })),
+          dues: account.dues,
+          month: { key: bill.key, label: bill.label, items: bill.items, charged: bill.charged, balance: bill.balance, late: bill.late, lateFee: bill.lateFee },
+          carried: carried.map((c) => ({ key: c.key, label: c.label, items: c.items, balance: c.balance, late: c.late })),
           movedTo: movedTo && { key: movedTo.key, label: movedTo.label },
           nextBill: nextBill ? { key: nextBill.key, label: nextBill.label } : null,
           receipts: receipts.map((r) => ({
@@ -97,9 +107,10 @@ export default async function FeeBillPage({ params }: PageProps<"/admin/fee-desk
             date: r.date.toISOString().slice(0, 10),
             mode: r.waiver ? "Dues waived" : MODE_LABELS[r.mode],
             amount: r.waiver ? r.waived : r.towards,
-            // Collected on a later bill, as previous dues: "with the June 2026 bill".
-            onBill: r.billMonth && r.billMonth !== bill.key ? (months.find((m) => m.key === r.billMonth)?.label ?? null) : null,
+            // Collected at a later bill, as previous dues (an add-on receipt for this month, or an older receipt for that bill).
+            onBill: onBill(r),
             cleared: r.cleared,
+            waiver: r.waiver,
           })),
         }}
         today={today}
