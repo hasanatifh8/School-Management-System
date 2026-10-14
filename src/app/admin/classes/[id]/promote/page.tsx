@@ -23,6 +23,7 @@ import { fullName } from "@/lib/queries";
 import { getCurrentSchool } from "@/lib/school";
 import { getCurrentSession, getUpcomingSession, sessionName } from "@/lib/sessions";
 import { promoteClass } from "../../../sessions/actions";
+import { classSectionName } from "@/lib/names";
 
 export default async function PromoteClassPage({ params }: PageProps<"/admin/classes/[id]/promote">) {
   const { id } = await params;
@@ -153,7 +154,7 @@ export default async function PromoteClassPage({ params }: PageProps<"/admin/cla
                     </td>
                     <td className={tdClass}>
                       <Badge tone="slate">
-                        {schoolClass.name} – {s.section?.name}
+                        {classSectionName(schoolClass.name, s.section?.name)}
                       </Badge>
                     </td>
                     <td className={`${tdClass} w-80`}>

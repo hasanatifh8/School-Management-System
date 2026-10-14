@@ -21,6 +21,8 @@ type Props = {
   columns: ImportColumn[];
   templateHref: string;
   listHref: string;
+  /** Step 1 text; defaults to the people-import wording. */
+  intro?: string;
   action: (state: ImportState, formData: FormData) => Promise<ImportState>;
 };
 
@@ -45,7 +47,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-function ImportFlow({ noun, columns, templateHref, listHref, action, onRestart }: Props & { onRestart: () => void }) {
+function ImportFlow({ noun, columns, templateHref, listHref, intro, action, onRestart }: Props & { onRestart: () => void }) {
   const [state, formAction, pending] = useActionState(action, {});
   const [file, setFile] = useState<File | null>(null);
   const [checkedFile, setCheckedFile] = useState<File | null>(null);
@@ -78,8 +80,13 @@ function ImportFlow({ noun, columns, templateHref, listHref, action, onRestart }
           title={`${created} ${created === 1 ? noun.one : noun.many} added`}
           description={
             <>
-              {skipped ? `${skipped} row(s) with errors were skipped. ` : ""}IDs {codes[0]}
-              {codes.length > 1 && <> to {codes[codes.length - 1]}</>} were generated.
+              {skipped ? `${skipped} row(s) with errors were skipped. ` : ""}
+              {codes.length > 0 && (
+                <>
+                  IDs {codes[0]}
+                  {codes.length > 1 && <> to {codes[codes.length - 1]}</>} were generated.
+                </>
+              )}
             </>
           }
           action={
@@ -102,7 +109,7 @@ function ImportFlow({ noun, columns, templateHref, listHref, action, onRestart }
       <Step n={1} title="Download the template">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl text-sm text-fg-2">
-            <p>Fill one {noun.one} per row. Columns marked * are required; the rest can be left blank and added later.</p>
+            <p>{intro ?? `Fill one ${noun.one} per row. Columns marked * are required; the rest can be left blank and added later.`}</p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {columns.map((c) => (
                 <Badge key={c.key} tone={c.required ? "indigo" : "slate"}>

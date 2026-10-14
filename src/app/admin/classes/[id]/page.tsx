@@ -22,7 +22,7 @@ import {
 } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
-import { sectionLabel } from "@/lib/queries";
+import { sectionLabel, sectionTag } from "@/lib/queries";
 import {
   addSection,
   assignClassTeacher,
@@ -66,6 +66,8 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
   const studentCount = schoolClass.sections.reduce((n, s) => n + s._count.students, 0);
   // The chosen section tab (?section=), or the first one.
   const section = schoolClass.sections.find((s) => s.id === sp.section) ?? schoolClass.sections[0];
+  // Not divided into sections: just its one unnamed section, so no section tabs.
+  const unsectioned = schoolClass.sections.length === 1 && !schoolClass.sections[0].name;
   const base = `/admin/classes/${schoolClass.id}`;
   // What the section shows: its overview, timetable or attendance. Kept when switching sections.
   const view = VIEWS.find((v) => v.key === sp.view)?.key ?? "overview";
@@ -93,7 +95,7 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
       />
 
       <div className="mb-6 grid grid-cols-3 gap-3 sm:gap-4">
-        <StatCard icon={Layers} tone="sky" label="Sections" value={schoolClass.sections.length} />
+        <StatCard icon={Layers} tone="sky" label="Sections" value={unsectioned ? 0 : schoolClass.sections.length} />
         <StatCard icon={Users} tone="indigo" label="Students" value={studentCount} href={`/admin/students?classId=${schoolClass.id}`} />
         <StatCard icon={BookOpen} tone="violet" label="Subjects" value={curriculum.length} />
       </div>
@@ -101,7 +103,7 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
       {/* Section tabs, with Add section and Curriculum beside them */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <nav aria-label="Sections" className="flex flex-wrap items-center gap-2">
-          {schoolClass.sections.map((s) => {
+          {!unsectioned && schoolClass.sections.map((s) => {
             const active = s.id === section?.id;
             return (
               <Link
@@ -118,7 +120,7 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
                     active ? "bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-accent" : "bg-surface-3 text-fg-2"
                   }`}
                 >
-                  {s.name}
+                  {sectionTag(s.name)}
                 </span>
                 <span className="text-left leading-tight">
                   <span className={`block text-sm font-medium ${active ? "text-accent-text" : "text-fg"}`}>Section {s.name}</span>
@@ -127,7 +129,17 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
               </Link>
             );
           })}
-          <DialogButton label="Add section" icon={<Plus className="h-4 w-4" />} variant="ghost" title="Add section" description={`Add one or more sections to ${schoolClass.name}, e.g. C or C, D.`}>
+          <DialogButton
+            label={unsectioned ? "Divide into sections" : "Add section"}
+            icon={<Plus className="h-4 w-4" />}
+            variant="ghost"
+            title={unsectioned ? "Divide into sections" : "Add section"}
+            description={
+              unsectioned
+                ? `${schoolClass.name} has no sections. Add them, e.g. A, B — students already in the class move to the first one.`
+                : `Add one or more sections to ${schoolClass.name}, e.g. C or C, D.`
+            }
+          >
             <ActionForm action={addSection.bind(null, schoolClass.id)} className="flex gap-2">
               <input name="name" required autoFocus placeholder="Section name" className={inputClass} />
               <SubmitButton icon={<Plus className="h-4 w-4" />}>Add</SubmitButton>
@@ -179,7 +191,7 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
         </Card>
       ) : (
         <>
-          <nav aria-label={`Section ${section.name}`} className="mb-4 flex flex-wrap gap-1 rounded-xl border border-line bg-surface-2 p-1 sm:inline-flex">
+          <nav aria-label={sectionLabel({ ...section, class: schoolClass })} className="mb-4 flex flex-wrap gap-1 rounded-xl border border-line bg-surface-2 p-1 sm:inline-flex">
             {VIEWS.map((v) => {
               const active = v.key === view;
               return (
@@ -192,7 +204,7 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
                 >
                   <v.icon className="h-4 w-4" aria-hidden />
                   {v.label}
-                  <span className="text-xs font-normal text-subtle">· {section.name}</span>
+                  {section.name && <span className="text-xs font-normal text-subtle">· {section.name}</span>}
                 </Link>
               );
             })}
@@ -262,7 +274,7 @@ function SectionPanel({
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-4">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-base font-semibold text-white shadow-accent">
-            {section.name}
+            {sectionTag(section.name)}
           </span>
           <div>
             <h2 className="font-semibold text-fg">{label}</h2>
@@ -271,11 +283,13 @@ function SectionPanel({
             </Link>
           </div>
         </div>
-        <ActionForm action={deleteSection.bind(null, section.id)} compact className="flex flex-row-reverse items-center gap-3">
-          <SubmitButton variant="ghost" size="sm" confirm={`Delete ${label}?`} icon={<Trash2 className="h-4 w-4" />}>
-            Delete section
-          </SubmitButton>
-        </ActionForm>
+        {section.name && (
+          <ActionForm action={deleteSection.bind(null, section.id)} compact className="flex flex-row-reverse items-center gap-3">
+            <SubmitButton variant="ghost" size="sm" confirm={`Delete ${label}?`} icon={<Trash2 className="h-4 w-4" />}>
+              Delete section
+            </SubmitButton>
+          </ActionForm>
+        )}
       </header>
 
       {section._count.students > 0 && (

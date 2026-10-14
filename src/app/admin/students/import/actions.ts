@@ -10,6 +10,7 @@ import { getCurrentSession } from "@/lib/sessions";
 import { DEFAULT_NATIONALITY, GUARDIAN_RELATIONS } from "@/lib/student-options";
 import { createStudentRecord } from "@/lib/students";
 import { studentSchema, type StudentInput } from "../schema";
+import { sectionLabel } from "@/lib/names";
 
 type Section = { id: string; name: string; class: { name: string; subjects: { subjectId: string }[] } };
 
@@ -70,7 +71,7 @@ export async function importStudents(_: ImportState, formData: FormData): Promis
       if (!cls) errors.push(`Class “${className}” doesn't exist`);
       else if (sectionName) {
         section = cls.sections.find((s) => s.name.toUpperCase() === sectionName) ?? null;
-        if (!section) errors.push(`Section “${sectionName}” doesn't exist in ${cls.name} (${cls.sections.map((s) => s.name).join(", ") || "no sections"})`);
+        if (!section) errors.push(`Section “${sectionName}” doesn't exist in ${cls.name} (${cls.sections.map((s) => s.name).filter(Boolean).join(", ") || "no sections"})`);
       } else if (cls.sections.length === 1) {
         section = cls.sections[0];
       } else {
@@ -106,7 +107,7 @@ export async function importStudents(_: ImportState, formData: FormData): Promis
     if (roll != null && !section && !errors.length) errors.push("Roll number needs a Class and Section");
     if (roll != null && section) {
       const taken = takenRolls.get(section.id) ?? new Set<number>();
-      if (taken.has(roll)) errors.push(`Roll number ${roll} is already used in ${section.class.name} – ${section.name}`);
+      if (taken.has(roll)) errors.push(`Roll number ${roll} is already used in ${sectionLabel(section)}`);
       else takenRolls.set(section.id, taken.add(roll));
     }
 
@@ -122,7 +123,7 @@ export async function importStudents(_: ImportState, formData: FormData): Promis
     results.push({
       rowNumber,
       name: fullName({ firstName: v.firstName || "—", middleName: v.middleName, lastName: v.lastName ?? "" }),
-      detail: section ? `${section.class.name} – ${section.name}${roll != null ? ` · Roll ${roll}` : ""}` : "No class",
+      detail: section ? `${sectionLabel(section)}${roll != null ? ` · Roll ${roll}` : ""}` : "No class",
       errors,
       warnings,
       ...(errors.length === 0 && parsed.success && { data: parsed.data, section }),

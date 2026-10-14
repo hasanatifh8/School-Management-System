@@ -308,7 +308,7 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
   const className = new Map(classes.map((c) => [c.id, c.name]));
   // The exam's sections, and their class, for papers set for one section.
   const sectionClass = new Map(exam.sections.map((s) => [s.sectionId, s.section.classId]));
-  const sectionName = new Map(exam.sections.map((s) => [s.sectionId, `${s.section.class.name} – ${s.section.name}`]));
+  const sectionName = new Map(exam.sections.map((s) => [s.sectionId, sectionLabel(s.section)]));
   const { subjects, allowed } = await subjectOptions(actor, exam.sections.map((s) => s.sectionId));
   const subjectName = new Map(subjects.map((s) => [s.id, s.name]));
   const start = isoDate(exam.session.startDate);

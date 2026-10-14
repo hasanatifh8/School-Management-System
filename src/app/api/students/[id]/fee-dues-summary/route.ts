@@ -2,6 +2,7 @@ import { loadStudentAccount, getFeesAccess } from "@/lib/fees";
 import { feeSummary, sessionMonths, type DueItem } from "@/lib/fees-shared";
 import { fullName } from "@/lib/queries";
 import { getViewer } from "@/lib/school";
+import { classSectionName } from "@/lib/names";
 
 const FREQUENCY_NAMES = { ONE_TIME: "ONE_TIME", MONTHLY: "MONTHLY", QUARTERLY: "QUARTERLY", HALF_YEARLY: "HALF_YEARLY", YEARLY: "ANNUAL" } as const;
 
@@ -50,7 +51,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/students/[id
         id: student.id,
         code: student.studentCode,
         name: fullName(student),
-        class: student.section ? `${student.section.class.name}-${student.section.name}` : null,
+        class: student.section ? classSectionName(student.section.class.name, student.section.name, "-") : null,
         session: session.name,
       },
       billing_period: s.label,

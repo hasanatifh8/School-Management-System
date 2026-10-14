@@ -6,6 +6,7 @@ import { Badge, ButtonLink, Card, EmptyState, IconTile, Table, tbodyClass, tdCla
 import { db } from "@/lib/db";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
 import { paginate } from "@/lib/pagination";
+import { sectionLabel, sectionTag, sectionTitle } from "@/lib/names";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const base = "/admin/fees/receipts?view=class";
@@ -72,7 +73,7 @@ export async function ClassWiseReceipts({ schoolId, sessionId, sessionName, sp }
                   className="group rounded-2xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-accent-line hover:shadow-lift"
                 >
                   <span className="flex items-center justify-between">
-                    <span className="text-xl font-semibold text-fg">Section {s.name}</span>
+                    <span className="text-xl font-semibold text-fg">{sectionTitle(s.name)}</span>
                     <ChevronRight className="h-5 w-5 text-subtle transition group-hover:translate-x-0.5 group-hover:text-accent-text" aria-hidden />
                   </span>
                   <span className="mt-2 flex items-center gap-1.5 text-sm text-muted">
@@ -116,7 +117,7 @@ export async function ClassWiseReceipts({ schoolId, sessionId, sessionName, sp }
             </span>
             <span className="mt-3 flex flex-wrap gap-1">
               {c.sections.map((s) => (
-                <Badge key={s.id}>{s.name}</Badge>
+                <Badge key={s.id}>{sectionTag(s.name)}</Badge>
               ))}
               {!c.sections.length && <span className="text-xs text-subtle">No sections</span>}
             </span>
@@ -164,7 +165,7 @@ async function SectionReceipts({
         <div>
           <p className="text-eyebrow uppercase text-muted">Receipts · {sessionName}</p>
           <h2 className="text-h2 font-semibold text-fg">
-            {section.class.name} – {section.name}
+            {sectionLabel(section)}
           </h2>
         </div>
       </div>

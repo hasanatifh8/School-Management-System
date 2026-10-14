@@ -6,6 +6,7 @@ import { FormMessage } from "@/components/forms";
 import { buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { MAX_PAPERS, emptyPaper, formatDay, type PaperInput } from "@/lib/exams-shared";
+import { classSectionName } from "@/lib/names";
 
 type Option = { id: string; name: string };
 
@@ -254,7 +255,7 @@ export function TimetableEditor(props: Props) {
                                 {classes.length > 1 && <option value={`${c.id}|`}>{c.name} (all sections)</option>}
                                 {c.sections.map((s) => (
                                   <option key={s.id} value={`${c.id}|${s.id}`}>
-                                    {c.name} – {s.name}
+                                    {classSectionName(c.name, s.name)}
                                   </option>
                                 ))}
                               </optgroup>

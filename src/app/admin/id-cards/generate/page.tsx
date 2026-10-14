@@ -6,6 +6,7 @@ import { IdCardSteps } from "@/components/id-card/steps";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { MAX_CARDS_PER_BATCH, loadIdCards } from "@/lib/id-cards";
 import { getCurrentSchool } from "@/lib/school";
+import { classSectionName } from "@/lib/names";
 
 /** Step 3: the chosen students' cards (?ids=a,b,c), to download or print. */
 export default async function GenerateIdCardsPage({ searchParams }: PageProps<"/admin/id-cards/generate">) {
@@ -23,7 +24,7 @@ export default async function GenerateIdCardsPage({ searchParams }: PageProps<"/
       <div className="print:hidden">
         <PageHeader
           title={data.cards.length ? title : "ID cards"}
-          breadcrumbs={[{ label: "ID cards", href: "/admin/id-cards" }, ...(first ? [{ label: `${first.className} – ${first.sectionName}`, href: classHref }] : []), { label: "Generate" }]}
+          breadcrumbs={[{ label: "ID cards", href: "/admin/id-cards" }, ...(first ? [{ label: classSectionName(first.className, first.sectionName), href: classHref }] : []), { label: "Generate" }]}
           subtitle={`Valid till ${data.validTill}`}
         />
         <IdCardSteps steps={[{ label: "Choose class", href: "/admin/id-cards" }, { label: "Pick students", href: classHref }, { label: "Download or print" }]} current={2} />
@@ -32,7 +33,7 @@ export default async function GenerateIdCardsPage({ searchParams }: PageProps<"/
         <GeneratedCards
           data={data}
           layout={parseLayout(sp.layout)}
-          zipName={`id-cards-${first.className}-${first.sectionName}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
+          zipName={`id-cards-${classSectionName(first.className, first.sectionName, "-")}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
           profileHref={(id) => `/admin/students/${id}`}
         />
       ) : (

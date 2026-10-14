@@ -1,6 +1,6 @@
-import { CalendarOff, PartyPopper, Trash2 } from "lucide-react";
+import { CalendarOff, FileSpreadsheet, PartyPopper, Trash2 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, EmptyState, PageHeader, PagedList } from "@/components/ui";
+import { Badge, ButtonLink, Card, EmptyState, PageHeader, PagedList } from "@/components/ui";
 import { attendanceWindow } from "@/lib/attendance";
 import { groupHolidays, isoDate, parseISODate, shortDate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
@@ -31,6 +31,11 @@ export default async function HolidaysPage() {
         title="Holidays"
         breadcrumbs={[{ label: "Attendance", href: "/admin/attendance" }, { label: "Holidays" }]}
         subtitle={`School holidays for session ${win.session.name}. No class takes attendance on these days.`}
+        action={
+          <ButtonLink href="/admin/attendance/holidays/import" icon={FileSpreadsheet} variant="secondary">
+            Upload from Excel
+          </ButtonLink>
+        }
       />
       <div className="grid gap-6 xl:grid-cols-3">
         <Card title="Add a holiday" icon={PartyPopper} className="self-start">

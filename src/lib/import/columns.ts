@@ -1,7 +1,7 @@
 // Column layout of the bulk-upload Excel templates (shared by the template,
 // the importer and the upload page).
 
-export type ImportKind = "students" | "teachers";
+export type ImportKind = "students" | "teachers" | "holidays";
 
 export type ImportColumn = {
   key: string;
@@ -55,6 +55,11 @@ export const IMPORT_COLUMNS: Record<ImportKind, ImportColumn[]> = {
     { key: "address", header: "Address", example: "12 MG Road, Lucknow", width: 28 },
     { key: "joiningDate", header: "Joining date", example: "01-04-2026", note: "DD-MM-YYYY; blank = today", width: 14 },
     { key: "bloodGroup", header: "Blood group", example: "O+", list: BLOOD_GROUPS, width: 12 },
+  ],
+  holidays: [
+    { key: "name", header: "Holiday", required: true, example: "Diwali break", width: 28 },
+    { key: "fromDate", header: "From date", required: true, example: "20-10-2026", note: "DD-MM-YYYY", width: 14 },
+    { key: "toDate", header: "To date", example: "24-10-2026", note: "DD-MM-YYYY; blank = one day", width: 14 },
   ],
 };
 

@@ -6,6 +6,7 @@ import { Crown, Loader2 } from "lucide-react";
 import { TeacherOptions, type TeacherChoice } from "@/components/teaching/teacher-options";
 import { Badge, cx, selectClass, useToast } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
+import { classSectionName, sectionTag } from "@/lib/names";
 
 export type GridClass = {
   id: string;
@@ -98,11 +99,11 @@ export function AssignGrid({ classes, teachers, save }: { classes: GridClass[]; 
               <tbody className="divide-y divide-line">
                 {c.sections.map((s) => (
                   <tr key={s.id}>
-                    <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-semibold text-fg">{s.name}</td>
+                    <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-semibold text-fg">{sectionTag(s.name)}</td>
                     <td className="px-3 py-2">
                       <Cell
                         value={s.classTeacherId ?? ""}
-                        label={`Class teacher of ${c.name} ${s.name}`}
+                        label={`Class teacher of ${classSectionName(c.name, s.name, " ")}`}
                         onSave={(teacherId) => save(s.id, null, teacherId)}
                         onLocal={(v) => setState((st) => patch(st, c.id, s.id, (sec) => ({ ...sec, classTeacherId: v || null })))}
                       >
@@ -113,7 +114,7 @@ export function AssignGrid({ classes, teachers, save }: { classes: GridClass[]; 
                       <td key={sub.id} className="px-3 py-2">
                         <Cell
                           value={s.teachers[sub.id] ?? ""}
-                          label={`${sub.name} teacher of ${c.name} ${s.name}`}
+                          label={`${sub.name} teacher of ${classSectionName(c.name, s.name, " ")}`}
                           onSave={(teacherId) => save(s.id, sub.id, teacherId)}
                           onLocal={(v) => setState((st) => patch(st, c.id, s.id, (sec) => ({ ...sec, teachers: { ...sec.teachers, [sub.id]: v } })))}
                         >

@@ -13,6 +13,7 @@ import {
 import { ATTENDANCE_STATUSES, MAX_DAILY_DAYS, STATUS_META, isSunday, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { sectionLabel } from "@/lib/queries";
+import { classSectionName } from "@/lib/names";
 
 const FILLS = {
   holiday: "FFEDE9FE",
@@ -78,7 +79,7 @@ export async function GET(request: Request) {
 
   const span =
     range.period === "month" ? range.from.slice(0, 7) : range.period === "week" ? `week-${range.from}` : `${range.from}-to-${range.to}`;
-  return xlsx(wb, `attendance-${section.class.name}-${section.name}-${span}`);
+  return xlsx(wb, `attendance-${classSectionName(section.class.name, section.name, "-")}-${span}`);
 }
 
 async function xlsx(wb: ExcelJS.Workbook, baseName: string) {

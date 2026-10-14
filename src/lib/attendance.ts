@@ -25,6 +25,7 @@ import { photoUrl } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
 import { getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
+import { sectionLabel } from "@/lib/names";
 
 /** Dates attendance can be taken for: the current session up to today. */
 export async function attendanceWindow(schoolId: string) {
@@ -371,7 +372,7 @@ export async function loadClassSummaries(schoolId: string, from: string, to: str
     const percents = s.students.map((st) => attendancePercent(counts.get(st.id) ?? emptyCounts())).filter((p): p is number => p != null);
     return {
       id: s.id,
-      label: `${s.class.name} – ${s.name}`,
+      label: sectionLabel(s),
       classId: s.classId,
       classTeacher: s.classTeacher ? fullName(s.classTeacher) : null,
       students: s.students.length,

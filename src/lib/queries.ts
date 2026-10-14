@@ -28,10 +28,11 @@ export function findSchoolSection(schoolId: string, sectionId: string) {
 }
 
 // Pure name helpers live in names.ts so client components can use them too.
-export { fullName, sectionLabel } from "@/lib/names";
+export { classSectionName, fullName, sectionLabel, sectionTag, sectionTitle } from "@/lib/names";
 
-/** Short tile label under a class heading: "Class 1" + "A" → "1A", "Nursery" + "A" → "Nursery A". */
+/** Short tile label under a class heading: "Class 1" + "A" → "1A", "Nursery" + "A" → "Nursery A", "Class 1" + "" → "1". */
 export function shortSectionLabel(className: string, sectionName: string) {
   const c = className.replace(/^class\s+/i, "");
+  if (!sectionName) return c;
   return /\d$/.test(c) ? `${c}${sectionName}` : `${c} ${sectionName}`;
 }

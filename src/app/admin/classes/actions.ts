@@ -56,7 +56,8 @@ export async function createClass(_: ActionState, formData: FormData): Promise<A
       schoolId: school.id,
       name,
       sortOrder: (last?.sortOrder ?? 0) + 1,
-      sections: { create: (sections.length ? sections : ["A"]).map((n) => ({ name: n })) },
+      // No sections given: one unnamed section, so the class works as a single group.
+      sections: { create: (sections.length ? sections : [""]).map((n) => ({ name: n })) },
     },
   });
 
@@ -85,13 +86,25 @@ export async function addSection(classId: string, _: ActionState, formData: Form
   const names = parseSectionNames(String(formData.get("name") ?? ""));
   if (!names.length) return { error: "Enter a section name." };
 
-  const existing = await db.section.findMany({ where: { classId, name: { in: names } } });
+  const current = await db.section.findMany({ where: { classId }, select: { id: true, name: true } });
+  const existing = current.filter((s) => names.includes(s.name));
   if (existing.length) {
     return { error: `Section ${existing.map((s) => s.name).join(", ")} already exists.` };
   }
-  await db.section.createMany({ data: names.map((name) => ({ classId, name })) });
+  // A class without sections is splitting up: its unnamed section (with its students and records)
+  // becomes the first new section.
+  const unnamed = current.find((s) => !s.name);
+  await db.$transaction([
+    ...(unnamed ? [db.section.update({ where: { id: unnamed.id }, data: { name: names[0] } })] : []),
+    db.section.createMany({ data: names.slice(unnamed ? 1 : 0).map((name) => ({ classId, name })) }),
+  ]);
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `Added section ${names.join(", ")}.` };
+  return {
+    ok: true,
+    message: unnamed
+      ? `Added section ${names.join(", ")}. Students already in the class are now in section ${names[0]}.`
+      : `Added section ${names.join(", ")}.`,
+  };
 }
 
 export async function deleteSection(sectionId: string): Promise<ActionState> {

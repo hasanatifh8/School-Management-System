@@ -2,10 +2,11 @@ import "server-only";
 import ExcelJS from "exceljs";
 import { IMPORT_COLUMNS, MAX_IMPORT_ROWS, type ImportKind } from "@/lib/import/columns";
 
-const SHEET_NAMES: Record<ImportKind, string> = { students: "Students", teachers: "Teachers" };
+const SHEET_NAMES: Record<ImportKind, string> = { students: "Students", teachers: "Teachers", holidays: "Holidays" };
+const ROW_NOUNS: Record<ImportKind, string> = { students: "student", teachers: "teacher", holidays: "holiday" };
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const TEXT_COLUMNS = new Set(["phone", "whatsappNumber", "aadhaarNumber", "rollNumber", "sectionName"]);
-const DATE_COLUMNS = new Set(["dateOfBirth", "admissionDate", "joiningDate"]);
+const DATE_COLUMNS = new Set(["dateOfBirth", "admissionDate", "joiningDate", "fromDate", "toDate"]);
 
 /* ───────────────────────── Template ───────────────────────── */
 
@@ -77,9 +78,15 @@ export async function buildTemplate(kind: ImportKind, classNames: string[]) {
     });
   }
   help.addRow({});
-  help.addRow({ column: `Fill one ${kind === "students" ? "student" : "teacher"} per row on the "${SHEET_NAMES[kind]}" sheet, starting at row 2.` });
-  help.addRow({ column: `Up to ${MAX_IMPORT_ROWS} rows per file. IDs are generated automatically.` });
-  help.addRow({ column: "Other details (photo, address, documents…) can be added later on each profile." });
+  help.addRow({ column: `Fill one ${ROW_NOUNS[kind]} per row on the "${SHEET_NAMES[kind]}" sheet, starting at row 2.` });
+  if (kind === "holidays") {
+    help.addRow({ column: `Up to ${MAX_IMPORT_ROWS} rows per file. Dates must fall within the current session.` });
+    help.addRow({ column: "Sundays (and Saturdays, if they are off) are already off, so they are skipped. Don't list them." });
+    help.addRow({ column: "For a break of several days, fill From date and To date on one row." });
+  } else {
+    help.addRow({ column: `Up to ${MAX_IMPORT_ROWS} rows per file. IDs are generated automatically.` });
+    help.addRow({ column: "Other details (photo, address, documents…) can be added later on each profile." });
+  }
 
   // Put the data sheet first so it opens by default.
   wb.views = [{ activeTab: 0, x: 0, y: 0, width: 10000, height: 20000, firstSheet: 0, visibility: "visible" }];

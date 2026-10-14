@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { Select } from "@/components/select";
@@ -235,20 +235,7 @@ export function StudentForm({
             </AdmissionSection>
 
             <AdmissionSection step={4} title="Admission details" description="Class, roll number and house for this session. The class's subjects are allotted automatically.">
-              <Field label="Class & section" name="sectionId" errors={e}>
-                <Select name="sectionId" defaultValue={student?.sectionId ?? ""} className={selectClass}>
-                  <option value="">Not assigned</option>
-                  {classes.map((c) => (
-                    <optgroup key={c.id} label={c.name}>
-                      {c.sections.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {c.name} – {s.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </Select>
-              </Field>
+              <ClassSectionFields classes={classes} defaultSectionId={student?.sectionId ?? ""} errors={e} />
               <Field
                 label="Date of admission"
                 name="admissionDate"
@@ -344,6 +331,64 @@ export function StudentForm({
 }
 
 /** A numbered part of the admission form, like the sections of a printed form. */
+/**
+ * Class, then section. The section picker only appears when the class is divided into sections;
+ * a class without sections has one unnamed section, which is sent as the student's section.
+ */
+function ClassSectionFields({
+  classes,
+  defaultSectionId,
+  errors,
+}: {
+  classes: ClassOption[];
+  defaultSectionId: string;
+  errors: ActionState["fieldErrors"];
+}) {
+  const [classId, setClassId] = useState(() => classes.find((c) => c.sections.some((s) => s.id === defaultSectionId))?.id ?? "");
+  const [sectionId, setSectionId] = useState(defaultSectionId);
+  const cls = classes.find((c) => c.id === classId);
+  const sections = cls?.sections.filter((s) => s.name) ?? [];
+  // Unsectioned class: its one unnamed section. Otherwise the picked section, if it belongs to this class.
+  const unnamed = cls && !sections.length ? cls.sections[0] : undefined;
+  const value = unnamed?.id ?? (sections.some((s) => s.id === sectionId) ? sectionId : "");
+
+  return (
+    <>
+      <Field label="Class" name="classId" errors={sections.length ? undefined : errors}>
+        <select
+          value={classId}
+          onChange={(ev) => {
+            setClassId(ev.target.value);
+            setSectionId("");
+          }}
+          className={selectClass}
+        >
+          <option value="">Not assigned</option>
+          {classes.map((c) => (
+            <option key={c.id} value={c.id} disabled={!c.sections.length}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {sections.length > 0 ? (
+        <Field label="Section" name="sectionId" errors={errors} required>
+          <select name="sectionId" required value={value} onChange={(ev) => setSectionId(ev.target.value)} className={selectClass}>
+            <option value="">Choose section</option>
+            {sections.map((s) => (
+              <option key={s.id} value={s.id}>
+                Section {s.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : (
+        <input type="hidden" name="sectionId" value={value} />
+      )}
+    </>
+  );
+}
+
 function AdmissionSection({
   step,
   title,

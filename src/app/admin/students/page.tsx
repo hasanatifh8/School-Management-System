@@ -33,6 +33,7 @@ import {
   theadClass,
   trClass,
 } from "@/components/ui";
+import { sectionTitle } from "@/lib/names";
 
 export default async function StudentsPage({ searchParams }: PageProps<"/admin/students">) {
   const school = await getCurrentSchool();
@@ -114,7 +115,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
                 <FilterSelect
                   name="sectionId"
                   label="All sections"
-                  options={sections.map((sec) => ({ value: sec.id, label: `Section ${sec.name}` }))}
+                  options={sections.map((sec) => ({ value: sec.id, label: sectionTitle(sec.name) }))}
                 />
               )}
               <MoreFilters keys={["houseId", "gender", "category", "bloodGroup"]}>

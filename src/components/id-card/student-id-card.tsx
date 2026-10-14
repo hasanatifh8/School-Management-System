@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Globe, GraduationCap, Mail, MapPin, Phone, ShieldAlert, UserRound } from "lucide-react";
 import type { IdCardSchool, IdCardStaff, IdCardStudent } from "@/lib/id-cards";
+import { classSectionName } from "@/lib/names";
 
 // Standard ID card (CR80), portrait: 54 × 85.6 mm. Sizes are in mm/pt so the
 // printed card comes out at its real size.
@@ -118,7 +119,7 @@ function FrontFooter({ address, validTill }: { address: string; validTill: strin
 export function IdCardFront({ school, student, validTill }: { school: IdCardSchool; student: IdCardStudent; validTill: string }) {
   const rows: [string, string][] = [
     ["Father's Name", student.fatherName],
-    ["Class", [student.className, student.sectionName].filter(Boolean).join(" – ")],
+    ["Class", classSectionName(student.className, student.sectionName)],
     ["Roll No.", student.roll],
     ["Admission No.", student.admissionNo],
     ["Date of Birth", student.dob],

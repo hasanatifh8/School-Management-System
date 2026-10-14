@@ -96,7 +96,8 @@ export function ExamDetailsForm({
                           />
                           {c.name}
                         </label>
-                        {c.sections.length > 0 && (
+                        {/* A class without sections is picked by its own checkbox */}
+                        {c.sections.some((s) => s.name) && (
                           <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-6">
                             <span className="mr-0.5 text-xs text-muted">Sections</span>
                             {c.sections.map((s) => (

@@ -7,6 +7,7 @@ import { photoUrl } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
 import { schoolLogoUrl } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
+import { classSectionName } from "@/lib/names";
 
 const dmy = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
 const validTill = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -152,7 +153,7 @@ export async function loadIdCards(schoolId: string, where: Prisma.StudentWhereIn
         school.name,
         `Name: ${name}`,
         `Adm No: ${s.studentCode}`,
-        s.section && `Class: ${s.section.class.name}-${s.section.name}${s.rollNumber != null ? `, Roll ${s.rollNumber}` : ""}`,
+        s.section && `Class: ${classSectionName(s.section.class.name, s.section.name, "-")}${s.rollNumber != null ? `, Roll ${s.rollNumber}` : ""}`,
         dob && `DOB: ${dob}`,
         blood && `Blood: ${blood}`,
         parent && `Parent: ${parent}`,
@@ -250,7 +251,7 @@ export async function loadStaffIdCards(schoolId: string, keys: string[]) {
         teaching: true,
         name: fullName(t),
         employeeCode: t.employeeCode,
-        designation: t.classTeacherOf.length ? `Class teacher, ${t.classTeacherOf.map((s) => `${s.class.name}-${s.name}`).join(", ")}` : "Teacher",
+        designation: t.classTeacherOf.length ? `Class teacher, ${t.classTeacherOf.map((s) => classSectionName(s.class.name, s.name, "-")).join(", ")}` : "Teacher",
         department: t.specialization || "Teaching",
         bloodGroup: t.bloodGroup ? BLOOD_GROUP_LABELS[t.bloodGroup] : "",
         contact: t.phone ?? "",

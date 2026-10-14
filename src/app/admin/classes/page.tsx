@@ -5,7 +5,7 @@ import { Avatar, Badge, ButtonLink, EmptyState, IconTile, PageHeader, inputClass
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
-import { fullName } from "@/lib/queries";
+import { fullName, sectionTag } from "@/lib/queries";
 import { createClass } from "./actions";
 
 export default async function ClassesPage() {
@@ -57,8 +57,8 @@ export default async function ClassesPage() {
               <Field label="Class name" name="name" required>
                 <input name="name" required placeholder="e.g. Class 6" className={inputClass} />
               </Field>
-              <Field label="Sections" name="sections" hint="Comma-separated, e.g. A, B, C">
-                <input name="sections" placeholder="A, B, C" defaultValue="A" className={inputClass} />
+              <Field label="Sections" name="sections" hint="Comma-separated, e.g. A, B, C. Leave blank if this class isn't divided into sections.">
+                <input name="sections" placeholder="A, B, C" className={inputClass} />
               </Field>
               <SubmitButton icon={<Plus className="h-4 w-4" />}>Create class</SubmitButton>
             </ActionForm>
@@ -101,7 +101,7 @@ export default async function ClassesPage() {
                 {c.sections.map((s) => (
                   <li key={s.id} className="flex items-center gap-3 px-5 py-3">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-sm font-semibold text-fg-2">
-                      {s.name}
+                      {sectionTag(s.name)}
                     </span>
                     <div className="min-w-0 flex-1">
                       {s.classTeacher ? (

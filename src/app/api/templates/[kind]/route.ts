@@ -3,10 +3,10 @@ import { buildTemplate } from "@/lib/import/excel";
 import type { ImportKind } from "@/lib/import/columns";
 import { getCurrentSchool } from "@/lib/school";
 
-/** GET /api/templates/students or /api/templates/teachers: the bulk-upload Excel template. */
+/** GET /api/templates/students, /teachers or /holidays: the bulk-upload Excel template. */
 export async function GET(_: Request, ctx: RouteContext<"/api/templates/[kind]">) {
   const { kind } = await ctx.params;
-  if (kind !== "students" && kind !== "teachers") return new Response("Not found", { status: 404 });
+  if (kind !== "students" && kind !== "teachers" && kind !== "holidays") return new Response("Not found", { status: 404 });
 
   const school = await getCurrentSchool();
   const classes = await db.schoolClass.findMany({

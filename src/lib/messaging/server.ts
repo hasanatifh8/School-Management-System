@@ -134,7 +134,7 @@ export async function resolveRecipients(schoolId: string, spec: AudienceSpec, ro
     ...students.map((s) => ({
       ref: { studentId: s.id },
       name: fullName(s),
-      className: s.section ? `${s.section.class.name} – ${s.section.name}` : null,
+      className: s.section ? sectionLabel(s.section) : null,
       phone: s.phone,
       whatsapp: s.whatsappNumber,
       roll: s.rollNumber != null ? String(s.rollNumber) : "",
