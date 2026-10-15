@@ -37,11 +37,27 @@ async function findTeacher(schoolId: string, id: string) {
   return teacher;
 }
 
+/** Another of the school's teachers already using this phone or email, as field errors. */
+async function duplicateContact(schoolId: string, data: { phone: string | null; email: string | null }, exceptId?: string): Promise<ActionState | null> {
+  const fieldErrors: Record<string, string[]> = {};
+  const others = { schoolId, ...(exceptId && { id: { not: exceptId } }) };
+  const [byPhone, byEmail] = await Promise.all([
+    data.phone ? db.teacher.findFirst({ where: { ...others, phone: data.phone }, select: { firstName: true, lastName: true, employeeCode: true } }) : null,
+    data.email ? db.teacher.findFirst({ where: { ...others, email: { equals: data.email, mode: "insensitive" } }, select: { firstName: true, lastName: true, employeeCode: true } }) : null,
+  ]);
+  const who = (t: { firstName: string; lastName: string; employeeCode: string }) => `${t.firstName} ${t.lastName} (${t.employeeCode})`;
+  if (byPhone) fieldErrors.phone = [`Already used by ${who(byPhone)}`];
+  if (byEmail) fieldErrors.email = [`Already used by ${who(byEmail)}`];
+  return Object.keys(fieldErrors).length ? { error: "Each teacher needs their own phone number and email.", fieldErrors } : null;
+}
+
 export async function createTeacher(_: ActionState, formData: FormData): Promise<ActionState> {
   const school = await getCurrentSchool();
   const parsed = teacherSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationError(parsed.error);
   const { joiningDate, ...data } = parsed.data;
+  const duplicate = await duplicateContact(school.id, data);
+  if (duplicate) return duplicate;
 
   const upload = await readPhotoUpload(formData);
   if ("error" in upload) return { error: upload.error, fieldErrors: { photo: [upload.error] } };
@@ -87,6 +103,8 @@ export async function updateTeacher(
   const parsed = teacherSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationError(parsed.error);
   const { joiningDate, ...data } = parsed.data;
+  const duplicate = await duplicateContact(school.id, data, id);
+  if (duplicate) return duplicate;
 
   const upload = await readPhotoUpload(formData);
   if ("error" in upload) return { error: upload.error, fieldErrors: { photo: [upload.error] } };

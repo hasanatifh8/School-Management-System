@@ -1,6 +1,7 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { CalendarDays, ChevronRight, ClipboardList, Printer } from "lucide-react";
-import { Badge, IconTile } from "@/components/ui";
+import { Badge, ButtonLink, IconTile } from "@/components/ui";
 import { dateSpan } from "@/lib/exams-shared";
 import type { ExamSummary } from "@/lib/exams";
 
@@ -11,6 +12,7 @@ export function ExamList({
   printHref,
   showAuthor = false,
   showResults = false,
+  openLabel,
 }: {
   exams: ExamSummary[];
   href: (exam: ExamSummary) => string;
@@ -18,15 +20,17 @@ export function ExamList({
   showAuthor?: boolean;
   /** Show how many sections have published results, instead of the dates. */
   showResults?: boolean;
+  /** Open each exam only with a button of this label, e.g. "View results"; otherwise the whole row opens it. */
+  openLabel?: string;
 }) {
   return (
     <ul className="divide-y divide-line">
       {exams.map((e) => {
         const shown = e.sections.slice(0, 4);
         return (
-          <li key={e.id} className="group flex flex-wrap items-center gap-4 px-4 py-4 transition hover:bg-surface-2 sm:px-6">
+          <li key={e.id} className={`group flex flex-wrap items-center gap-4 px-4 py-4 sm:px-6 ${openLabel ? "" : "transition hover:bg-surface-2"}`}>
             <IconTile icon={e.kind === "EXAM" ? ClipboardList : CalendarDays} tone={e.kind === "EXAM" ? "indigo" : "emerald"} />
-            <Link href={href(e)} className="min-w-0 flex-1">
+            <Info href={openLabel ? undefined : href(e)}>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate font-semibold text-fg">{e.name}</p>
                 {e.kind === "EXAM" &&
@@ -51,7 +55,7 @@ export function ExamList({
                 ))}
                 {e.sections.length > shown.length && <Badge>+{e.sections.length - shown.length} more</Badge>}
               </div>
-            </Link>
+            </Info>
             <div className="flex items-center gap-1">
               {printHref && (
                 <Link
@@ -63,13 +67,30 @@ export function ExamList({
                   <Printer className="h-4 w-4" />
                 </Link>
               )}
-              <Link href={href(e)} aria-label={`Open ${e.name}`} className="rounded-lg p-2 text-subtle transition hover:bg-surface-3 hover:text-fg-2">
-                <ChevronRight className="h-4 w-4" />
-              </Link>
+              {openLabel ? (
+                <ButtonLink href={href(e)} variant="secondary" size="sm">
+                  {openLabel}
+                </ButtonLink>
+              ) : (
+                <Link href={href(e)} aria-label={`Open ${e.name}`} className="rounded-lg p-2 text-subtle transition hover:bg-surface-3 hover:text-fg-2">
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
+              )}
             </div>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** The exam's details: a link to it, or plain text when only its button opens it. */
+function Info({ href, children }: { href?: string; children: ReactNode }) {
+  return href ? (
+    <Link href={href} className="min-w-0 flex-1">
+      {children}
+    </Link>
+  ) : (
+    <div className="min-w-0 flex-1">{children}</div>
   );
 }

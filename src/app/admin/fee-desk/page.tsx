@@ -133,7 +133,12 @@ export default async function FeeDeskPage({ searchParams }: PageProps<"/admin/fe
 function DeskHeader({ canManage, session }: { canManage: boolean; session: string }) {
   return (
     <>
-      <PageHeader title="Fees" subtitle={`Collections, dues and receipts · Session ${session}`} />
+      <PageHeader
+        title="Fees"
+        subtitle={`Collections, dues and receipts · Session ${session}`}
+        // Back returns to where the desk was opened from (e.g. the dashboard's Collect fee), else the dashboard. Cashiers have no dashboard.
+        breadcrumbs={canManage ? [{ label: "Dashboard", href: "/admin" }, { label: "Fee desk" }] : undefined}
+      />
       <FeesTabs canManage={canManage} />
     </>
   );
@@ -299,7 +304,7 @@ async function StudentPanel({ account, today }: { account: NonNullable<Awaited<R
         padded={false}
         action={
           <Link href={`/admin/fees/students/${student.id}`} className="text-sm font-medium text-accent-text hover:underline">
-            Detailed view
+            Optional fees & all receipts
           </Link>
         }
       >

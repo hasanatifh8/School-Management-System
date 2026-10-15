@@ -27,7 +27,7 @@ export default async function IdCardsPage({ searchParams }: PageProps<"/admin/id
     const people = await loadStaffIdCardRoster(school.id);
     return (
       <>
-        <PageHeader title="ID cards" subtitle="Cards for teachers and non-teaching staff, with employee code, designation and department." action={backSettings} />
+        <PageHeader title="ID cards" breadcrumbs={[{ label: "Dashboard", href: "/admin" }, { label: "ID cards" }]} subtitle="Cards for teachers and non-teaching staff, with employee code, designation and department." action={backSettings} />
         <IdCardTabs active="staff" />
         <IdCardSteps steps={[{ label: "Pick teachers & staff" }, { label: "Download or print" }]} current={0} />
         {people.length ? (
@@ -79,7 +79,7 @@ export default async function IdCardsPage({ searchParams }: PageProps<"/admin/id
 
   return (
     <>
-      <PageHeader title="ID cards" subtitle="Make student ID cards class by class, then download them as images or print them." action={backSettings} />
+      <PageHeader title="ID cards" breadcrumbs={[{ label: "Dashboard", href: "/admin" }, { label: "ID cards" }]} subtitle="Make student ID cards class by class, then download them as images or print them." action={backSettings} />
       <IdCardTabs active="students" />
       <IdCardSteps steps={STEPS} current={0} />
       {sections.length === 0 ? (

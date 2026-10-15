@@ -73,10 +73,11 @@ export function paperViews(exam: LoadedExam): PaperView[] {
     classId: p.classId,
     sectionId: p.sectionId,
     sectionName: p.section?.name ?? null,
-    subject: paperName(p.subject?.name, p.title) + (p.optional ? " (Optional)" : ""),
+    subject: paperName(p.subject?.name, p.title, p.practical) + (p.optional ? " (Optional)" : ""),
     maxMarks: p.maxMarks,
     optional: p.optional,
     passMarks: p.passMarks,
+    practical: p.practical,
     room: p.room,
     notes: p.notes,
   }));
@@ -95,6 +96,7 @@ export function paperInputs(exam: LoadedExam): PaperInput[] {
     maxMarks: p.maxMarks == null ? "" : String(p.maxMarks),
     optional: p.optional,
     passMarks: p.passMarks == null ? "" : String(p.passMarks),
+    practical: p.practical,
     room: p.room ?? "",
     notes: p.notes ?? "",
   }));
@@ -294,7 +296,8 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
       title: String(r?.title ?? "").trim(),
       maxMarks: String(r?.maxMarks ?? "").trim(),
       optional: r?.optional === true,
-      passMarks: r?.optional === true ? String(r?.passMarks ?? "").trim() : "",
+      passMarks: String(r?.passMarks ?? "").trim(),
+      practical: r?.practical === true,
       room: String(r?.room ?? "").trim(),
       notes: String(r?.notes ?? "").trim(),
     }));
@@ -338,11 +341,15 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     if (r.maxMarks && !(/^\d{1,4}$/.test(r.maxMarks) && Number(r.maxMarks) >= 1 && Number(r.maxMarks) <= 1000)) {
       fail(i, "maxMarks", "1 to 1000");
     }
-    if (r.optional) {
-      if (!r.maxMarks) fail(i, "maxMarks", "An optional paper needs max marks");
-      if (!/^\d{1,4}$/.test(r.passMarks)) fail(i, "passMarks", "Enter the pass marks");
-      else if (r.maxMarks && Number(r.passMarks) > Number(r.maxMarks)) fail(i, "passMarks", "Can't be more than the max marks");
+    // Pass marks: required for an optional paper; for others, blank means PASS_PERCENT of the max.
+    if (r.optional && !r.maxMarks) fail(i, "maxMarks", "An optional paper needs max marks");
+    if (r.optional && !r.passMarks) fail(i, "passMarks", "Enter the pass marks");
+    else if (r.passMarks) {
+      if (!/^\d{1,4}$/.test(r.passMarks) || Number(r.passMarks) < 1) fail(i, "passMarks", "Whole marks from 1");
+      else if (!r.maxMarks) fail(i, "passMarks", "Enter the max marks first");
+      else if (Number(r.passMarks) > Number(r.maxMarks)) fail(i, "passMarks", "Can't be more than the max marks");
     }
+    if (r.practical && !r.subjectId) fail(i, "subjectId", "Pick the subject this practical is for");
     if (r.room.length > 40) fail(i, "room", "Keep it under 40 characters");
     if (r.notes.length > 120) fail(i, "notes", "Keep it under 120 characters");
   });
@@ -356,8 +363,8 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     for (let i = 0; i < rows.length; i++) {
       for (let j = 0; j < i; j++) {
         const [a, b] = [rows[i], rows[j]];
-        if (!a.subjectId || a.subjectId !== b.subjectId || (a.title || "") !== (b.title || "") || !overlaps(a, b)) continue;
-        fail(i, "subjectId", `${paperName(subjectName.get(a.subjectId), a.title)} is already on row ${j + 1} for ${scope(b)}`);
+        if (!a.subjectId || a.subjectId !== b.subjectId || a.practical !== b.practical || (a.title || "") !== (b.title || "") || !overlaps(a, b)) continue;
+        fail(i, "subjectId", `${paperName(subjectName.get(a.subjectId), a.title, a.practical)} is already on row ${j + 1} for ${scope(b)}`);
         break;
       }
     }
@@ -402,7 +409,7 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     return { error: `Fix ${count} row${count === 1 ? "" : "s"} in the timetable.`, fieldErrors: errors };
   }
   if (blocked.length) {
-    const names = blocked.map((p) => `${paperName(p.subject?.name, p.title)} (${isoDate(p.date)})`).join(", ");
+    const names = blocked.map((p) => `${paperName(p.subject?.name, p.title, p.practical)} (${isoDate(p.date)})`).join(", ");
     return { error: `Marks are entered for ${names}, so ${blocked.length === 1 ? "it" : "they"} can't be removed. Clear the marks first, or keep the paper.` };
   }
 
@@ -416,7 +423,8 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     title: r.title || null,
     maxMarks: r.maxMarks ? Number(r.maxMarks) : null,
     optional: r.optional,
-    passMarks: r.optional && r.passMarks ? Number(r.passMarks) : null,
+    passMarks: r.passMarks && r.maxMarks ? Number(r.passMarks) : null,
+    practical: r.practical,
     room: r.room || null,
     notes: r.notes || null,
   });

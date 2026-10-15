@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, CalendarPlus, Copy, Loader2, Plus, Sav
 import { FormMessage } from "@/components/forms";
 import { buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { MAX_PAPERS, emptyPaper, formatDay, type PaperInput } from "@/lib/exams-shared";
+import { MAX_PAPERS, PASS_PERCENT, emptyPaper, formatDay, type PaperInput } from "@/lib/exams-shared";
 import { classSectionName } from "@/lib/names";
 
 type Option = { id: string; name: string };
@@ -186,7 +186,7 @@ export function TimetableEditor(props: Props) {
                 <th className={th}>To</th>
                 {multiClass && <th className={th}>Class</th>}
                 <th className={th}>Subject / paper</th>
-                <th className={th}>Max marks</th>
+                <th className={th}>Max / pass marks</th>
                 <th className={th}>Room</th>
                 <th className={th}>Notes</th>
                 <th className={th}>
@@ -310,12 +310,16 @@ export function TimetableEditor(props: Props) {
                           value={r.title}
                           maxLength={60}
                           onChange={(e) => update(i, { title: e.target.value })}
-                          placeholder={r.subjectId ? "Paper name (optional), e.g. Practical" : "Paper name, e.g. Drawing"}
+                          placeholder={r.practical ? "Paper name (optional), shown as Practical" : r.subjectId ? "Paper name (optional), e.g. Paper 2" : "Paper name, e.g. Drawing"}
                           aria-label={`Row ${i + 1} paper name`}
                           className={`${small} ${bad(cellError(i, "title"))}`}
                         />
                       </div>
                       {err(cellError(i, "subjectId") ?? cellError(i, "title"))}
+                      <label className="mt-1.5 flex items-center gap-1.5 whitespace-nowrap text-xs text-muted" title="The practical part of this subject. The report card shows theory and practical side by side.">
+                        <input type="checkbox" checked={r.practical} onChange={(e) => update(i, { practical: e.target.checked })} className={checkboxClass} />
+                        Practical
+                      </label>
                     </td>
                     <td className={cell}>
                       <input
@@ -327,28 +331,20 @@ export function TimetableEditor(props: Props) {
                         className={`${small} w-24 ${bad(cellError(i, "maxMarks"))}`}
                       />
                       {err(cellError(i, "maxMarks"))}
+                      <input
+                        inputMode="numeric"
+                        value={r.passMarks}
+                        onChange={(e) => update(i, { passMarks: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                        placeholder={r.maxMarks && !r.optional ? `Pass ${Math.ceil((Number(r.maxMarks) * PASS_PERCENT) / 100)}` : "Pass marks"}
+                        title={r.optional ? "Pass marks for this optional paper" : `Pass marks. Blank: ${PASS_PERCENT}% of the max marks`}
+                        aria-label={`Row ${i + 1} passing marks`}
+                        className={`${small} mt-1.5 w-24 ${bad(cellError(i, "passMarks"))}`}
+                      />
+                      {err(cellError(i, "passMarks"))}
                       <label className="mt-1.5 flex items-center gap-1.5 whitespace-nowrap text-xs text-muted">
-                        <input
-                          type="checkbox"
-                          checked={r.optional}
-                          onChange={(e) => update(i, { optional: e.target.checked, passMarks: e.target.checked ? r.passMarks : "" })}
-                          className={checkboxClass}
-                        />
+                        <input type="checkbox" checked={r.optional} onChange={(e) => update(i, { optional: e.target.checked })} className={checkboxClass} />
                         Optional paper
                       </label>
-                      {r.optional && (
-                        <>
-                          <input
-                            inputMode="numeric"
-                            value={r.passMarks}
-                            onChange={(e) => update(i, { passMarks: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                            placeholder="Pass marks"
-                            aria-label={`Row ${i + 1} passing marks`}
-                            className={`${small} mt-1.5 w-24 ${bad(cellError(i, "passMarks"))}`}
-                          />
-                          {err(cellError(i, "passMarks"))}
-                        </>
-                      )}
                     </td>
                     <td className={cell}>
                       <input

@@ -12,7 +12,7 @@ export default async function NoticesLayout({ children }: LayoutProps<"/admin/no
   return (
     <>
       <TabCrumbs crumbs={{ "/admin/notices/settings": [{ label: "Settings", href: "/admin/settings" }, { label: "WhatsApp & SMS" }] }} />
-      <PageHeader title="Notices" subtitle="Send notices to parents, teachers and staff by WhatsApp or SMS, now or on a chosen date." />
+      <PageHeader title="Notices" breadcrumbs={[{ label: "Dashboard", href: "/admin" }, { label: "Notices" }]} subtitle="Send notices to parents, teachers and staff by WhatsApp or SMS, now or on a chosen date." />
       <NoticesTabs />
       {children}
     </>

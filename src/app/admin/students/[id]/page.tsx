@@ -9,7 +9,7 @@ import { AttendanceSummaryCard } from "@/components/attendance/attendance-summar
 import { PersonAttendanceView } from "@/components/attendance/person-attendance";
 import { attendanceWindow, loadStudentAttendance, pickMonth, getSaturdayOff } from "@/lib/attendance";
 import { ATTENDANCE_STATUSES, STATUS_META } from "@/lib/attendance-shared";
-import { Avatar, Badge, ButtonLink, Callout, Card, EmptyState, InfoItem, MenuLink, MoreMenu, PageHeader, StatusTab, TextLink, checkboxClass, tabBarClass } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, Callout, Card, EmptyState, InfoItem, MenuLink, MoreMenu, OverflowTabs, PageHeader, StatusTab, TextLink, checkboxClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
@@ -144,17 +144,12 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                 <MenuLink href={`/admin/id-cards/generate?ids=${student.id}`} icon={<IdCard />}>
                   Generate ID card
                 </MenuLink>
-                {student.section && (
-                  <MenuLink href={`/admin/attendance/register?section=${student.section.id}`} icon={<CalendarDays />}>
-                    Attendance register
-                  </MenuLink>
-                )}
                 <MenuLink href={tabHref("edit")} icon={<Pencil />}>
                   Edit details
                 </MenuLink>
               </MoreMenu>
             )}
-            <ButtonLink href={`/admin/fees/students/${student.id}`} icon={Wallet}>
+            <ButtonLink href={`/admin/fee-desk?s=${student.id}`} icon={Wallet}>
               Fees
             </ButtonLink>
           </>
@@ -169,7 +164,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           action={
             <span className="flex flex-wrap items-center gap-2">
               {student.section ? (
-                <ButtonLink href={`/admin/fees/students/${student.id}`} icon={Wallet} size="sm">
+                <ButtonLink href={`/admin/fee-desk?s=${student.id}`} icon={Wallet} size="sm">
                   Collect fees
                 </ButtonLink>
               ) : (
@@ -191,19 +186,18 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       )}
 
       <div className="mb-6 border-b border-line">
-        <nav aria-label="Student sections" className={tabBarClass}>
-          <StatusTab href={tabHref("overview")} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
-          <StatusTab href={tabHref("attendance")} active={tab === "attendance"} label="Attendance" icon={CalendarCheck} />
-          <StatusTab href={tabHref("exams")} active={tab === "exams"} label="Examinations" icon={ClipboardList} />
-          <StatusTab href={tabHref("results")} active={tab === "results"} label="Report card" icon={FileBarChart} />
-          <StatusTab href={tabHref("timetable")} active={tab === "timetable"} label="Timetable" icon={CalendarClock} />
-          <StatusTab href={tabHref("notices")} active={tab === "notices"} label="Notices" icon={Megaphone} />
-          <StatusTab href={tabHref("admit-card")} active={tab === "admit-card"} label="Admit card" icon={Ticket} />
-          <StatusTab href={tabHref("transport")} active={tab === "transport"} label="Transport" icon={Bus} />
-          <StatusTab href={tabHref("leave")} active={tab === "leave"} label="Leave" icon={Plane} />
-          <StatusTab href={tabHref("documents")} active={tab === "documents"} label="Documents" icon={FileText} count={student.documents.length} />
-          <StatusTab href={tabHref("edit")} active={tab === "edit"} label="Edit details" icon={Pencil} />
-        </nav>
+        <OverflowTabs label="Student sections">
+          <StatusTab replace href={tabHref("overview")} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
+          <StatusTab replace href={tabHref("attendance")} active={tab === "attendance"} label="Attendance" icon={CalendarCheck} />
+          <StatusTab replace href={tabHref("exams")} active={tab === "exams"} label="Examinations" icon={ClipboardList} />
+          <StatusTab replace href={tabHref("results")} active={tab === "results"} label="Report card" icon={FileBarChart} />
+          <StatusTab replace href={tabHref("timetable")} active={tab === "timetable"} label="Timetable" icon={CalendarClock} />
+          <StatusTab replace href={tabHref("notices")} active={tab === "notices"} label="Notices" icon={Megaphone} />
+          <StatusTab replace href={tabHref("admit-card")} active={tab === "admit-card"} label="Admit card" icon={Ticket} />
+          <StatusTab replace href={tabHref("transport")} active={tab === "transport"} label="Transport" icon={Bus} />
+          <StatusTab replace href={tabHref("leave")} active={tab === "leave"} label="Leave" icon={Plane} />
+          <StatusTab replace href={tabHref("documents")} active={tab === "documents"} label="Documents" icon={FileText} count={student.documents.length} />
+        </OverflowTabs>
       </div>
 
       {tab === "exams" && <ExamsPanel exams={exams} reportHref={(e) => `${tabHref("results")}&exam=${e.id}`} />}

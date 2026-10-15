@@ -91,60 +91,64 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
   const nextToMark = holiday ? null : rows.find((r) => !r.marked && !r.day?.holiday && r.section._count.students > 0);
 
   return (
-    <>
-      <PageHeader
-        title="Attendance"
-        subtitle={`${formatISO(date)} · Session ${win.session.name} · ${
-          holiday ? "School holiday" : `${markedCount} of ${withStudents.length} classes marked${toMark > 0 ? ` · ${toMark} still to mark` : ""}${classOff ? ` · ${classOff} off` : ""}`
-        }`}
-        action={
-          <>
-            <MoreMenu>
-              <MenuLink href="/admin/attendance/holidays" icon={<CalendarOff />}>
-                School holidays
-              </MenuLink>
-              {nextToMark && (
-                <MenuLink href={`/admin/attendance/${nextToMark.section.id}?date=${date}`} icon={<CalendarCheck />}>
-                  Take attendance · {sectionLabel(nextToMark.section)}
+    // Large screens: the page fits the window, with the header, KPIs and side panels fixed and only the class list scrolling.
+    <div className="xl:flex xl:h-[calc(100dvh-5rem)] xl:min-h-[44rem] xl:flex-col">
+      <div className="xl:shrink-0">
+        <PageHeader
+          title="Attendance"
+          breadcrumbs={[{ label: "Dashboard", href: "/admin" }, { label: "Attendance" }]}
+          subtitle={`${formatISO(date)} · Session ${win.session.name} · ${
+            holiday ? "School holiday" : `${markedCount} of ${withStudents.length} classes marked${toMark > 0 ? ` · ${toMark} still to mark` : ""}${classOff ? ` · ${classOff} off` : ""}`
+          }`}
+          action={
+            <>
+              <MoreMenu>
+                <MenuLink href="/admin/attendance/holidays" icon={<CalendarOff />}>
+                  School holidays
                 </MenuLink>
-              )}
-              {absentees.length > 0 && (
-                <MenuLink href={`/admin/notices?absent=${date}`} icon={<Megaphone />}>
-                  Message absent parents
-                </MenuLink>
-              )}
-            </MoreMenu>
-            <ButtonLink href={`/admin/attendance/register?period=month&month=${date.slice(0, 7)}`} icon={Table2}>
-              Attendance register
-            </ButtonLink>
-          </>
-        }
-      />
-      <AttendanceTabs active="students" date={date} />
-      <div className="mb-6">
-        <DateNav basePath="/admin/attendance" date={date} min={win.min} max={win.max} />
+                {nextToMark && (
+                  <MenuLink href={`/admin/attendance/${nextToMark.section.id}?date=${date}`} icon={<CalendarCheck />}>
+                    Take attendance · {sectionLabel(nextToMark.section)}
+                  </MenuLink>
+                )}
+                {absentees.length > 0 && (
+                  <MenuLink href={`/admin/notices?absent=${date}`} icon={<Megaphone />}>
+                    Message absent parents
+                  </MenuLink>
+                )}
+              </MoreMenu>
+              <ButtonLink href={`/admin/attendance/register?period=month&month=${date.slice(0, 7)}`} icon={Table2}>
+                Attendance register
+              </ButtonLink>
+            </>
+          }
+        />
+        <AttendanceTabs active="students" date={date} />
+        <div className="mb-6">
+          <DateNav basePath="/admin/attendance" date={date} min={win.min} max={win.max} />
+        </div>
+
+        {holiday ? (
+          <Callout icon={CalendarOff} className="mb-6">
+            <strong className="font-semibold">School holiday: {holiday.name}.</strong> No attendance is taken today.
+          </Callout>
+        ) : (
+          weeklyOff && (
+            <Callout icon={Sun} className="mb-6">
+              <strong className="font-semibold">{weeklyOff}: weekly off.</strong> No attendance is taken on a weekly off. Change weekly offs in{" "}
+              <Link href="/admin/settings/weekly-off" className="font-medium underline-offset-4 hover:underline">
+                Settings → Weekly off
+              </Link>
+              .
+            </Callout>
+          )
+        )}
+
+        {!weeklyOff && <DayKpis group="students" date={date} roster={roster} today={date === win.today} />}
       </div>
 
-      {holiday ? (
-        <Callout icon={CalendarOff} className="mb-6">
-          <strong className="font-semibold">School holiday: {holiday.name}.</strong> No attendance is taken today.
-        </Callout>
-      ) : (
-        weeklyOff && (
-          <Callout icon={Sun} className="mb-6">
-            <strong className="font-semibold">{weeklyOff}: weekly off.</strong> No attendance is taken on a weekly off. Change weekly offs in{" "}
-            <Link href="/admin/settings/weekly-off" className="font-medium underline-offset-4 hover:underline">
-              Settings → Weekly off
-            </Link>
-            .
-          </Callout>
-        )
-      )}
-
-      {!weeklyOff && <DayKpis group="students" date={date} roster={roster} today={date === win.today} />}
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="space-y-4 xl:col-span-2">
+      <div className="mt-6 grid gap-6 xl:min-h-0 xl:flex-1 xl:grid-cols-3">
+        <div className="space-y-4 xl:col-span-2 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pb-1 xl:pr-2 xl:[scrollbar-width:thin]">
           {classes.length === 0 ? (
             <Card>
               <EmptyState icon={Users} title="No classes yet" description="Create classes and sections to take attendance." />
@@ -230,7 +234,7 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
           )}
         </div>
 
-        <div className="space-y-6 self-start">
+        <div className="space-y-6 self-start xl:max-h-full xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:[scrollbar-width:thin]">
           <Card
             title="Absent"
             icon={UserRoundX}
@@ -280,6 +284,6 @@ export default async function AttendanceOverviewPage({ searchParams }: PageProps
           />
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, CalendarCheck, CalendarClock, Crown, Hash, Layers, LayoutGrid, Plus, Rocket, Trash2, UserCog, Users } from "lucide-react";
+import { BookOpen, CalendarCheck, CalendarClock, Crown, Hash, Layers, LayoutGrid, Pencil, Plus, Rocket, Trash2, UserCog, Users } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DialogButton } from "@/components/dialog-button";
 import { SectionAttendance, SectionTimetable } from "./section-views";
@@ -30,6 +30,7 @@ import {
   assignSubjectTeacher,
   deleteClass,
   deleteSection,
+  renameClass,
   setClassSubjects,
 } from "../actions";
 
@@ -81,6 +82,12 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
         subtitle="Manage sections, curriculum and teacher assignments."
         action={
           <>
+            <DialogButton label="Rename" icon={<Pencil className="h-4 w-4" />} title="Rename class" description="The new name shows everywhere the class appears.">
+              <ActionForm action={renameClass.bind(null, schoolClass.id)} className="flex gap-2">
+                <input name="name" required autoFocus defaultValue={schoolClass.name} placeholder="Class name" className={inputClass} />
+                <SubmitButton>Save</SubmitButton>
+              </ActionForm>
+            </DialogButton>
             <ButtonLink href="/admin/classes/assign" variant="secondary" icon={UserCog}>
               Assign teachers
             </ButtonLink>

@@ -236,11 +236,11 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
 
       <div className="mb-6 border-b border-line">
         <nav aria-label="Teacher sections" className={tabBarClass}>
-          <StatusTab href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
-          <StatusTab href={`${base}?tab=timetable`} active={tab === "timetable"} label="Timetable" icon={CalendarClock} count={timetable.count} />
-          <StatusTab href={`${base}?tab=attendance`} active={tab === "attendance"} label="Attendance" icon={CalendarCheck} />
-          <StatusTab href={`${base}?tab=leave`} active={tab === "leave"} label="Leave" icon={Plane} />
-          <StatusTab href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={teacher.documents.length} />
+          <StatusTab replace href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
+          <StatusTab replace href={`${base}?tab=timetable`} active={tab === "timetable"} label="Timetable" icon={CalendarClock} count={timetable.count} />
+          <StatusTab replace href={`${base}?tab=attendance`} active={tab === "attendance"} label="Attendance" icon={CalendarCheck} />
+          <StatusTab replace href={`${base}?tab=leave`} active={tab === "leave"} label="Leave" icon={Plane} />
+          <StatusTab replace href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={teacher.documents.length} />
         </nav>
       </div>
 

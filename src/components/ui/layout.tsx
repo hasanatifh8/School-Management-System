@@ -140,6 +140,37 @@ export function FormSection({
   );
 }
 
+/** A numbered part of a long form, like the sections of a printed form: 1 Student details, 2 Contact… */
+export function NumberedSection({
+  step,
+  title,
+  description,
+  wide,
+  children,
+}: {
+  step: number;
+  title: string;
+  description?: string;
+  /** Two columns instead of three, for long fields like addresses. */
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-line">
+      <header className="flex items-start gap-3 border-b border-line bg-surface-2 px-4 py-3 sm:px-5">
+        <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-fg tabular-nums">
+          {step}
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-fg">{title}</h3>
+          {description && <p className="mt-0.5 text-xs leading-5 text-muted">{description}</p>}
+        </div>
+      </header>
+      <div className={`grid gap-x-5 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 ${wide ? "" : "lg:grid-cols-3"}`}>{children}</div>
+    </section>
+  );
+}
+
 export function InfoItem({
   icon: Icon,
   label,

@@ -1,5 +1,6 @@
 "use client";
 
+import { MobileInput } from "@/components/mobile-input";
 import Link from "next/link";
 import { Save, Wallet } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
@@ -7,7 +8,7 @@ import { Select } from "@/components/select";
 import { PhotoInput } from "@/components/photo-input";
 import { SameAs } from "@/components/same-as";
 import { CredentialsNotice } from "@/components/credentials-notice";
-import { buttonVariants, checkboxClass, FormActions, FormSection, inputClass, selectClass } from "@/components/ui";
+import { buttonVariants, checkboxClass, FormActions, inputClass, NumberedSection, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { ageBounds, normalizeIndianMobile, shiftYears } from "@/lib/student-options";
@@ -56,7 +57,7 @@ export function StaffForm({
   const whatsappSameAsPhone = !!staff?.whatsappNumber && normalizeIndianMobile(staff.phone ?? "") === staff.whatsappNumber;
 
   return (
-    <ActionForm action={action} className="space-y-8">
+    <ActionForm action={action} className="space-y-6">
       {(state) => {
         const e = state.fieldErrors;
         if (state.credentials) {
@@ -75,13 +76,15 @@ export function StaffForm({
         }
         return (
           <>
-            <FormSection title="Photo" description="Shown on the profile and in lists.">
-              <PhotoInput currentUrl={photoUrl} error={e?.photo?.[0]} />
-            </FormSection>
-
-            <FormSection title="Personal information" description="Name and basic details.">
-              <Field label="Full name" name="name" errors={e} required className="sm:col-span-2">
+            <NumberedSection step={1} title="Staff details" description="As per their ID proof. The photo is shown on the profile, lists and ID card.">
+              <div className="sm:col-span-2 lg:col-span-3">
+                <PhotoInput currentUrl={photoUrl} error={e?.photo?.[0]} />
+              </div>
+              <Field label="Full name" name="name" errors={e} required className="sm:col-span-2 lg:col-span-1">
                 <input name="name" maxLength={100} required defaultValue={staff?.name} placeholder="e.g. Ramesh Kumar" className={inputClass} />
+              </Field>
+              <Field label="Date of birth" name="dateOfBirth" errors={e} hint={`Must be ${MIN_STAFF_AGE}–${MAX_STAFF_AGE} years old.`}>
+                <input type="date" name="dateOfBirth" min={dob.min} max={dob.max} defaultValue={toDateInput(staff?.dateOfBirth)} className={inputClass} />
               </Field>
               <Field label="Gender" name="gender" errors={e}>
                 <Select name="gender" defaultValue={staff?.gender ?? ""} className={selectClass}>
@@ -101,12 +104,31 @@ export function StaffForm({
                   ))}
                 </Select>
               </Field>
-              <Field label="Date of birth" name="dateOfBirth" errors={e} hint={`Must be ${MIN_STAFF_AGE}–${MAX_STAFF_AGE} years old.`}>
-                <input type="date" name="dateOfBirth" min={dob.min} max={dob.max} defaultValue={toDateInput(staff?.dateOfBirth)} className={inputClass} />
-              </Field>
-            </FormSection>
+            </NumberedSection>
 
-            <FormSection title="Job & qualification" description="Role, education and employment details.">
+            <NumberedSection step={2} title="Contact details" description="Used for school communication, notices and messages.">
+              <Field label="Mobile number" name="phone" errors={e}>
+                <MobileInput name="phone" defaultValue={staff?.phone} />
+              </Field>
+              <div>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
+                <SameAs name="whatsappSameAsPhone" label="Same as mobile" initial={whatsappSameAsPhone} note="Uses the mobile number.">
+                  <MobileInput name="whatsappNumber" label="WhatsApp number" defaultValue={staff?.whatsappNumber} />
+                </SameAs>
+                {e?.whatsappNumber?.[0] && <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>}
+              </div>
+              <Field label="Email" name="email" errors={e} hint={isCashier ? "Used to sign in as cashier." : offerCashier ? "Needed if this person will be a cashier." : undefined}>
+                <input type="email" name="email" placeholder="name@example.com" required={isCashier} defaultValue={staff?.email ?? ""} className={inputClass} />
+              </Field>
+            </NumberedSection>
+
+            <NumberedSection step={3} title="Address" description="Where they live." wide>
+              <Field label="Address" name="address" errors={e} className="sm:col-span-2">
+                <textarea name="address" rows={2} defaultValue={staff?.address ?? ""} className={inputClass} />
+              </Field>
+            </NumberedSection>
+
+            <NumberedSection step={4} title="Job & qualification" description="Role, education and employment at this school.">
               <Field label="Job" name="designation" errors={e} required>
                 <input name="designation" list="staff-jobs" maxLength={60} required defaultValue={staff?.designation} placeholder="e.g. Accountant" className={inputClass} />
               </Field>
@@ -145,26 +167,7 @@ export function StaffForm({
                   <input name="monthlySalary" inputMode="numeric" placeholder="12,000" defaultValue={staff?.monthlySalary ?? ""} className={`${inputClass} pl-8 tabular-nums`} />
                 </div>
               </Field>
-            </FormSection>
-
-            <FormSection title="Contact" description="Used for school communication.">
-              <Field label="Email" name="email" errors={e} hint={isCashier ? "Used to sign in as cashier." : offerCashier ? "Needed if this person will be a cashier." : undefined}>
-                <input type="email" name="email" placeholder="name@example.com" required={isCashier} defaultValue={staff?.email ?? ""} className={inputClass} />
-              </Field>
-              <Field label="Phone" name="phone" errors={e}>
-                <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={staff?.phone ?? ""} className={inputClass} />
-              </Field>
-              <div>
-                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
-                <SameAs name="whatsappSameAsPhone" label="Same as phone" initial={whatsappSameAsPhone} note="Uses the phone number above.">
-                  <input type="tel" name="whatsappNumber" aria-label="WhatsApp number" placeholder="10-digit mobile" defaultValue={staff?.whatsappNumber ?? ""} className={inputClass} />
-                </SameAs>
-                {e?.whatsappNumber?.[0] && <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>}
-              </div>
-              <Field label="Address" name="address" errors={e} className="sm:col-span-2">
-                <textarea name="address" rows={2} defaultValue={staff?.address ?? ""} className={inputClass} />
-              </Field>
-            </FormSection>
+            </NumberedSection>
 
             {offerCashier && (
               <label className="flex items-start gap-3 rounded-xl border border-accent-line bg-accent-soft/60 p-4 text-sm text-accent-text">
@@ -180,7 +183,13 @@ export function StaffForm({
               </label>
             )}
 
-            <FormActions>
+            <FormActions
+              note={
+                <>
+                  Fields marked <span className="text-danger">*</span> are required.
+                </>
+              }
+            >
               {cancelHref && (
                 <Link href={cancelHref} className={buttonVariants.secondary}>
                   Cancel

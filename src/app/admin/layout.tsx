@@ -86,10 +86,15 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             { href: "/admin/subjects", label: "Subjects", icon: <BookOpen /> },
             { href: "/admin/timetable", label: "Timetable", icon: <CalendarClock /> },
             { href: "/admin/calendar", label: "School calendar", icon: <CalendarDays /> },
+            { href: "/admin/houses", label: "Houses", icon: <Shield /> },
+          ],
+        },
+        {
+          label: "Examinations",
+          items: [
             { href: "/admin/exams", label: "Exams & tests", icon: <ClipboardList /> },
             { href: "/admin/results", label: "Marks & results", icon: <FileBarChart /> },
             { href: "/admin/admit-cards", label: "Admit cards", icon: <Ticket /> },
-            { href: "/admin/houses", label: "Houses", icon: <Shield /> },
           ],
         },
         {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Download, Eye, Printer, Search, SearchX, Trophy, X } from "lucide-react";
+import { Download, Eye, PenLine, Printer, Search, SearchX, Trophy, X } from "lucide-react";
 import { Avatar, Badge, EmptyState, PagedList, buttonVariants, inputClass, selectClass } from "@/components/ui";
 import { RESULT_LABELS, type ResultStatus } from "@/lib/exams-shared";
 
@@ -22,13 +22,15 @@ export type StudentResult = {
   rank: number | null;
   result: ResultStatus;
   failed: string[];
+  /** Any marks (or absences) entered for them yet. */
+  hasMarks: boolean;
 };
 
 type Filter = "all" | StudentResult["result"];
 type Sort = "roll" | "rank" | "name";
 
 /** Section results as a list: find a student, then view, print or download their report card. */
-export function ResultsStudentList({ students, cardHref }: { students: StudentResult[]; cardHref: string }) {
+export function ResultsStudentList({ students, cardHref, marksHref }: { students: StudentResult[]; cardHref: string; marksHref?: string }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -111,12 +113,12 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
         // Keyed so a new search, filter or sort starts from the first page.
         <PagedList key={`${q}|${filter}|${sort}`} pageSize={15} noun="students">
           {shown.map((s) => (
-            <li key={s.id} className="flex items-center gap-2 pr-4 transition hover:bg-surface-2 sm:pr-6">
-              <Link replace href={`${cardHref}${s.id}`} className="group flex min-w-0 flex-1 items-center gap-4 py-3 pl-4 focus-visible:bg-accent-soft focus-visible:outline-none sm:pl-6">
+            <li key={s.id} className="flex items-center gap-2 pr-4 sm:pr-6">
+              <div className="flex min-w-0 flex-1 items-center gap-4 py-3 pl-4 sm:pl-6">
                 <span className="w-8 text-right text-sm tabular-nums text-subtle">{s.rollNumber ?? "—"}</span>
                 <Avatar name={s.name} src={s.photoUrl} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-fg group-hover:text-accent-text">{s.name}</p>
+                  <p className="truncate font-medium text-fg">{s.name}</p>
                   <p className="truncate text-xs text-muted">
                     <span className="font-mono">{s.studentCode}</span>
                     {s.failed.length > 0 && s.result === "Fail" && <span className="text-danger"> · Below pass in {s.failed.join(", ")}</span>}
@@ -150,7 +152,17 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
                 <span className="w-24 text-right">
                   <Badge tone={s.result === "Pass" ? "green" : s.result === "Fail" || s.result === "Absent" ? "red" : "slate"}>{RESULT_LABELS[s.result]}</Badge>
                 </span>
-              </Link>
+              </div>
+              {marksHref && (
+                <Link
+                  href={`${marksHref}#student-${s.id}`}
+                  title={`${s.hasMarks ? "Edit" : "Enter"} ${s.name}'s marks`}
+                  className={`${s.hasMarks ? buttonVariants.ghost : buttonVariants.primary} !px-3 !py-1.5 text-xs`}
+                >
+                  <PenLine className="h-3.5 w-3.5" />
+                  <span className="hidden lg:inline">{s.hasMarks ? "Edit marks" : "Enter marks"}</span>
+                </Link>
+              )}
               <Link replace href={`${cardHref}${s.id}`} className={`${buttonVariants.secondary} !px-3 !py-1.5 text-xs`}>
                 <Eye className="h-3.5 w-3.5" />
                 <span className="hidden lg:inline">View result</span>
@@ -166,7 +178,7 @@ export function ResultsStudentList({ students, cardHref }: { students: StudentRe
         </PagedList>
       )}
       <p className="border-t border-line px-6 py-3 text-xs text-muted">
-        Showing {shown.length} of {students.length} · Click a student to open their report card
+        Showing {shown.length} of {students.length} · Use View result to open a report card
         {shown.length > 0 && (
           <>
             {" · "}

@@ -70,7 +70,7 @@ export default async function AdmissionAcknowledgementPage({ params, searchParam
             <PageHeader
               title="Admission complete"
               subtitle={`${name} is admitted. Print the acknowledgement for the parent and the school's file.`}
-              breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "New admission" }]}
+              breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "Admission Form" }]}
             />
             <AdmissionSteps current={4} />
           </>

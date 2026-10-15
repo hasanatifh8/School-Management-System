@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Plus, School, UserCog, Users } from "lucide-react";
+import { ArrowRight, ArrowUpDown, BookOpen, Plus, School, UserCog, Users } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { Avatar, Badge, ButtonLink, EmptyState, IconTile, PageHeader, inputClass } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -7,6 +7,8 @@ import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionTag } from "@/lib/queries";
 import { createClass } from "./actions";
+import { ArrangeClasses } from "./arrange-classes";
+import { DialogButton } from "@/components/dialog-button";
 
 export default async function ClassesPage() {
   const school = await getCurrentSchool();
@@ -32,6 +34,17 @@ export default async function ClassesPage() {
         subtitle="Sections, curriculum, class teachers and subject teachers"
         action={
           <>
+            {classes.length > 1 && (
+              <DialogButton
+                label="Arrange"
+                icon={<ArrowUpDown className="h-4 w-4" />}
+                title="Arrange classes"
+                description="Drag classes or use the arrows. This order is used across the app, and Promote class suggests the next class in it."
+                drawer
+              >
+                <ArrangeClasses key={classes.map((c) => c.id).join()} classes={classes.map((c) => ({ id: c.id, name: c.name }))} />
+              </DialogButton>
+            )}
             <ButtonLink href="/admin/classes/assign" variant="secondary" icon={UserCog}>
               Assign teachers
             </ButtonLink>

@@ -342,7 +342,7 @@ function ClassView({
       <Breadcrumbs items={[{ label: "Fee structure", href: "/admin/fees/structure" }, { label: cls.name }]} />
       <Card
         title={`${cls.name} fees`}
-        description={`Session fees for ${cls.name}. A fee's amounts for other classes are on the same form.`}
+        description={`Session fees for ${cls.name}. Fees added or edited here change ${cls.name}'s amounts only.`}
         padded={false}
         action={
           canManage && (

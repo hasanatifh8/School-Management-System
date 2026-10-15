@@ -7,6 +7,7 @@ import {
   CalendarRange,
   CalendarX2,
   ChevronRight,
+  Hash,
   School,
   IdCard,
   KeyRound,
@@ -29,6 +30,7 @@ const groups: { title: string; items: Item[] }[] = [
     title: "School",
     items: [
       { href: "/admin/settings/school", icon: School, tone: "sky", title: "School details", text: "Name, logo, UDISE, affiliation and contacts" },
+      { href: "/admin/settings/student-id", icon: Hash, tone: "indigo", title: "Student ID", text: "Prefix and number format, e.g. STU-2026-0001" },
     ],
   },
   {

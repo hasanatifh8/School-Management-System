@@ -4,7 +4,7 @@
 export { cx } from "./cx";
 export { Button, ButtonLink, IconButton, TextLink, buttonClass, buttonVariants, type ButtonSize, type ButtonVariant } from "./button";
 export { checkboxClass, inputClass, selectClass } from "./input";
-export { Breadcrumbs, Callout, Card, FormActions, FormSection, InfoItem, PageHeader, type Crumb } from "./layout";
+export { Breadcrumbs, Callout, Card, FormActions, FormSection, InfoItem, NumberedSection, PageHeader, type Crumb } from "./layout";
 export {
   Avatar,
   Badge,
@@ -24,6 +24,7 @@ export {
 export { DashboardSkeleton, DetailSkeleton, EmptyState, ListSkeleton, Skeleton, SpotIllustration, SuccessState } from "./feedback";
 export { StatCard, StatGrid } from "./stat";
 export { StatusTab, tabBarClass } from "./tabs";
+export { OverflowTabs } from "./overflow-tabs";
 export { AnimatedNumber } from "./animated-number";
 export { NavTabs, type NavTab } from "./nav-tabs";
 export { MenuButton, MenuDivider, MenuLink, MoreMenu } from "./menu";

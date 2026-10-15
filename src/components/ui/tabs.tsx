@@ -11,18 +11,22 @@ export function StatusTab({
   label,
   count,
   icon: Icon,
+  replace = false,
 }: {
   href: string;
   active: boolean;
   label: string;
   count?: number;
   icon?: LucideIcon;
+  /** Switch tabs without adding to the browser history, so Back leaves the page (profile tabs). */
+  replace?: boolean;
 }) {
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
       scroll={false}
+      replace={replace}
       className={cx(
         "relative flex shrink-0 items-center gap-2 rounded-t-md pb-3 pt-1 transition-colors",
         "after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:transition-colors",

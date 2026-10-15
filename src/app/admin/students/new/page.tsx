@@ -12,9 +12,9 @@ export default async function NewStudentPage() {
   return (
     <>
       <PageHeader
-        title="New admission"
+        title="Admission Form"
         subtitle="A unique student ID is generated when you save. Transport and optional fees come next."
-        breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "New admission" }]}
+        breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "Admission Form" }]}
       />
       <AdmissionSteps current={1} />
       <Card>

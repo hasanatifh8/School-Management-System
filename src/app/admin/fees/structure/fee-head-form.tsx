@@ -36,9 +36,10 @@ export function FeeHeadForm({
   routes?: RouteFares[];
   /** The session's first month (4 = April), where instalment months start. */
   startMonth?: number;
-  /** The class whose fee view opened this form: saving goes back there. */
+  /** The class whose fee view opened this form: only its amount is shown and saved, and saving goes back there. */
   returnClass?: string;
 }) {
+  const onlyClass = returnClass ? classes.find((c) => c.id === returnClass) : undefined;
   // The transport fee charges each student's stop fare, monthly: only its name, due day and late fee are set here.
   const transport = head?.transport ?? false;
   const [frequency, setFrequency] = useState<Frequency>(head?.frequency ?? "MONTHLY");
@@ -63,6 +64,7 @@ export function FeeHeadForm({
         return (
           <>
             {returnClass && <input type="hidden" name="returnClass" value={returnClass} />}
+            {onlyClass && <input type="hidden" name="onlyClass" value={onlyClass.id} />}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Fee name" name="name" errors={e} required hint="e.g. Tuition fee, Admission fee, Transport, Annual charges">
                 <input name="name" defaultValue={head?.name} maxLength={60} required className={inputClass} />
@@ -153,6 +155,31 @@ export function FeeHeadForm({
                   </span>
                 </label>
 
+                {onlyClass ? (
+                  <div>
+                    <h3 className="text-sm font-semibold text-fg">Amount for {onlyClass.name} (₹)</h3>
+                    <p className="mb-3 text-xs text-muted">
+                      {frequency === "MONTHLY" ? "Per month." : frequency === "QUARTERLY" ? "Per quarter." : frequency === "HALF_YEARLY" ? "Per half-year." : "The full amount."}{" "}
+                      {head ? `Leave blank to stop charging it to ${onlyClass.name}. Other classes' amounts don't change.` : `Charged to ${onlyClass.name} only.`}
+                    </p>
+                    <div className="relative max-w-xs">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle">₹</span>
+                      <input
+                        name={`amount:${onlyClass.id}`}
+                        inputMode="numeric"
+                        required={!head}
+                        autoFocus
+                        aria-label={`Amount for ${onlyClass.name}`}
+                        defaultValue={head?.amounts[onlyClass.id] ?? ""}
+                        className={`${inputClass} pl-7 tabular-nums`}
+                      />
+                    </div>
+                    {e?.[`amount:${onlyClass.id}`]?.[0] && <p className="mt-1 text-xs text-danger">{e[`amount:${onlyClass.id}`]?.[0]}</p>}
+                    {head && Object.keys(head.amounts).some((id) => id !== onlyClass.id) && (
+                      <p className="mt-3 text-xs text-muted">The name, how often it&apos;s charged, due day and late fee are shared by every class with this fee.</p>
+                    )}
+                  </div>
+                ) : (
                 <div>
                   <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                     <div>
@@ -196,6 +223,7 @@ export function FeeHeadForm({
                     </div>
                   )}
                 </div>
+                )}
               </>
             )}
 

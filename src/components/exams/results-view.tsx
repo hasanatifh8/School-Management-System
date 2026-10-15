@@ -220,6 +220,8 @@ export function ResultsView({
         <Card padded={false}>
           <ResultsStudentList
             cardHref={`${baseHref}?student=`}
+            // Before results are published, marks can still be entered or changed, one student at a time.
+            marksHref={!sheet.published && sheet.papers.some((p) => p.editable) ? marksHref : undefined}
             students={rows.map((r) => ({
               id: r.student.id,
               name: r.student.name,
@@ -233,6 +235,7 @@ export function ResultsView({
               rank: r.rank,
               result: r.result,
               failed: r.failed,
+              hasMarks: r.cells.some((c) => c.kind === "marks" || c.kind === "absent"),
             }))}
           />
         </Card>

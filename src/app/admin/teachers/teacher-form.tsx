@@ -1,5 +1,6 @@
 "use client";
 
+import { MobileInput } from "@/components/mobile-input";
 import Link from "next/link";
 import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
@@ -7,7 +8,7 @@ import { Select } from "@/components/select";
 import { PhotoInput } from "@/components/photo-input";
 import { SameAs } from "@/components/same-as";
 import { CredentialsNotice } from "@/components/credentials-notice";
-import { buttonVariants, checkboxClass, FormActions, FormSection, inputClass, selectClass } from "@/components/ui";
+import { buttonVariants, checkboxClass, FormActions, inputClass, NumberedSection, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import { MAX_TEACHER_AGE, MIN_TEACHER_AGE, ageBounds, normalizeIndianMobile, shiftYears } from "@/lib/student-options";
@@ -59,7 +60,7 @@ export function TeacherForm({
     !!teacher?.whatsappNumber && normalizeIndianMobile(teacher.phone ?? "") === teacher.whatsappNumber;
 
   return (
-    <ActionForm action={action} className="space-y-8">
+    <ActionForm action={action} className="space-y-6">
       {(state) => {
         const e = state.fieldErrors;
         if (state.credentials) {
@@ -77,22 +78,34 @@ export function TeacherForm({
         }
         return (
           <>
-            <FormSection title="Photo" description="Shown on the profile and in lists.">
-              <PhotoInput currentUrl={photoUrl} error={e?.photo?.[0]} />
-            </FormSection>
-
-            <FormSection title="Personal information" description="Name and basic details.">
-              <div className="grid gap-4 sm:col-span-2 sm:grid-cols-3">
-                <Field label="First name" name="firstName" errors={e} required>
-                  <input name="firstName" maxLength={100} required defaultValue={teacher?.firstName} className={inputClass} />
-                </Field>
-                <Field label="Middle name" name="middleName" errors={e}>
-                  <input name="middleName" maxLength={100} placeholder="Optional" defaultValue={teacher?.middleName ?? ""} className={inputClass} />
-                </Field>
-                <Field label="Last name" name="lastName" errors={e} required>
-                  <input name="lastName" maxLength={100} required defaultValue={teacher?.lastName} className={inputClass} />
-                </Field>
+            <NumberedSection step={1} title="Teacher details" description="As per their ID proof. The photo is shown on the profile, lists and ID card.">
+              <div className="sm:col-span-2 lg:col-span-3">
+                <PhotoInput currentUrl={photoUrl} error={e?.photo?.[0]} />
               </div>
+              <Field label="First name" name="firstName" errors={e} required>
+                <input name="firstName" maxLength={100} required defaultValue={teacher?.firstName} className={inputClass} />
+              </Field>
+              <Field label="Middle name" name="middleName" errors={e}>
+                <input name="middleName" maxLength={100} placeholder="Optional" defaultValue={teacher?.middleName ?? ""} className={inputClass} />
+              </Field>
+              <Field label="Last name" name="lastName" errors={e} required>
+                <input name="lastName" maxLength={100} required defaultValue={teacher?.lastName} className={inputClass} />
+              </Field>
+              <Field
+                label="Date of birth"
+                name="dateOfBirth"
+                errors={e}
+                hint={`Teacher must be ${MIN_TEACHER_AGE}–${MAX_TEACHER_AGE} years old.`}
+              >
+                <input
+                  type="date"
+                  name="dateOfBirth"
+                  min={dob.min}
+                  max={dob.max}
+                  defaultValue={toDateInput(teacher?.dateOfBirth)}
+                  className={inputClass}
+                />
+              </Field>
               <Field label="Gender" name="gender" errors={e}>
                 <Select name="gender" defaultValue={teacher?.gender ?? ""} className={selectClass}>
                   <option value="">Select gender</option>
@@ -111,24 +124,33 @@ export function TeacherForm({
                   ))}
                 </Select>
               </Field>
-              <Field
-                label="Date of birth"
-                name="dateOfBirth"
-                errors={e}
-                hint={`Teacher must be ${MIN_TEACHER_AGE}–${MAX_TEACHER_AGE} years old.`}
-              >
-                <input
-                  type="date"
-                  name="dateOfBirth"
-                  min={dob.min}
-                  max={dob.max}
-                  defaultValue={toDateInput(teacher?.dateOfBirth)}
-                  className={inputClass}
-                />
-              </Field>
-            </FormSection>
+            </NumberedSection>
 
-            <FormSection title="Professional" description="Qualification and employment details.">
+            <NumberedSection step={2} title="Contact details" description="Used for school communication, notices and messages.">
+              <Field label="Mobile number" name="phone" errors={e}>
+                <MobileInput name="phone" defaultValue={teacher?.phone} />
+              </Field>
+              <div>
+                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
+                <SameAs name="whatsappSameAsPhone" label="Same as mobile" initial={whatsappSameAsPhone} note="Uses the mobile number.">
+                  <MobileInput name="whatsappNumber" label="WhatsApp number" defaultValue={teacher?.whatsappNumber} />
+                </SameAs>
+                {e?.whatsappNumber?.[0] && (
+                  <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>
+                )}
+              </div>
+              <Field label="Email" name="email" errors={e}>
+                <input type="email" name="email" placeholder="teacher@example.com" defaultValue={teacher?.email ?? ""} className={inputClass} />
+              </Field>
+            </NumberedSection>
+
+            <NumberedSection step={3} title="Address" description="Where the teacher lives." wide>
+              <Field label="Address" name="address" errors={e} className="sm:col-span-2">
+                <textarea name="address" rows={2} defaultValue={teacher?.address ?? ""} className={inputClass} />
+              </Field>
+            </NumberedSection>
+
+            <NumberedSection step={4} title="Professional details" description="Qualification, experience and employment at this school.">
               <Field label="Qualification" name="qualification" errors={e}>
                 <input
                   name="qualification"
@@ -186,11 +208,11 @@ export function TeacherForm({
                   />
                 </div>
               </Field>
-            </FormSection>
+            </NumberedSection>
 
-            <FormSection title="Subjects they teach" description="Only these teachers are offered for a subject when assigning subject teachers in a class.">
+            <NumberedSection step={5} title="Subjects they teach" description="Only these teachers are offered for a subject when assigning subject teachers in a class.">
               {subjects.length === 0 ? (
-                <p className="text-sm text-muted sm:col-span-2">
+                <p className="text-sm text-muted sm:col-span-2 lg:col-span-3">
                   No subjects yet.{" "}
                   <Link href="/admin/subjects" className="font-medium text-accent-text hover:underline">
                     Add subjects
@@ -198,7 +220,7 @@ export function TeacherForm({
                   first.
                 </p>
               ) : (
-                <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3">
                   {subjects.map((sub) => (
                     <label
                       key={sub.id}
@@ -211,35 +233,7 @@ export function TeacherForm({
                   ))}
                 </div>
               )}
-            </FormSection>
-
-            <FormSection title="Contact" description="Used for school communication.">
-              <Field label="Email" name="email" errors={e}>
-                <input type="email" name="email" placeholder="teacher@example.com" defaultValue={teacher?.email ?? ""} className={inputClass} />
-              </Field>
-              <Field label="Phone" name="phone" errors={e}>
-                <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={teacher?.phone ?? ""} className={inputClass} />
-              </Field>
-              <div>
-                <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
-                <SameAs name="whatsappSameAsPhone" label="Same as phone" initial={whatsappSameAsPhone} note="Uses the phone number above.">
-                  <input
-                    type="tel"
-                    name="whatsappNumber"
-                    aria-label="WhatsApp number"
-                    placeholder="10-digit mobile"
-                    defaultValue={teacher?.whatsappNumber ?? ""}
-                    className={inputClass}
-                  />
-                </SameAs>
-                {e?.whatsappNumber?.[0] && (
-                  <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>
-                )}
-              </div>
-              <Field label="Address" name="address" errors={e} className="sm:col-span-2">
-                <textarea name="address" rows={2} defaultValue={teacher?.address ?? ""} className={inputClass} />
-              </Field>
-            </FormSection>
+            </NumberedSection>
 
             {offerLogin && (
               <label className="flex items-start gap-3 rounded-xl border border-accent-line bg-accent-soft/60 p-4 text-sm text-accent-text">
@@ -253,7 +247,13 @@ export function TeacherForm({
               </label>
             )}
 
-            <FormActions>
+            <FormActions
+              note={
+                <>
+                  Fields marked <span className="text-danger">*</span> are required.
+                </>
+              }
+            >
               {cancelHref && (
                 <Link href={cancelHref} className={buttonVariants.secondary}>
                   Cancel

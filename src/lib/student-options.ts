@@ -52,12 +52,14 @@ export const MAX_TEACHER_AGE = 75;
 
 /**
  * Normalises an Indian mobile number to 10 digits, accepting spaces, dashes and
- * a +91 / 91 / 0 prefix. Returns null when it is not a valid mobile number.
+ * a +91 / 0091 / 91 / 0 prefix. Returns null when it is not a valid mobile
+ * number: 10 digits starting with 6–9, and not one digit repeated (9999999999).
  */
 export function normalizeIndianMobile(raw: string): string | null {
-  let digits = raw.replace(/[\s\-()]/g, "");
+  let digits = raw.replace(/[\s\-().]/g, "");
   if (digits.startsWith("+91")) digits = digits.slice(3);
+  else if (digits.length === 14 && digits.startsWith("0091")) digits = digits.slice(4);
   else if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
   else if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
-  return /^[6-9]\d{9}$/.test(digits) ? digits : null;
+  return /^[6-9]\d{9}$/.test(digits) && !/^(\d)\1{9}$/.test(digits) ? digits : null;
 }

@@ -361,6 +361,54 @@ async function applyApprovedLeave(r: { schoolId: string; studentId: string | nul
   }
 }
 
+/**
+ * Keeps the leave module in step with student attendance on one day. A student
+ * marked Leave without any leave for that day gets an approved one-day leave
+ * (so they show in Leave and on the dashboard); one no longer marked Leave
+ * loses the leave that attendance made. Leave people applied for is left alone.
+ */
+export async function syncAttendanceLeave(
+  schoolId: string,
+  date: Date,
+  marks: { studentId: string; status: string; remark: string | null }[],
+  by: string,
+) {
+  const onLeave = marks.filter((m) => m.status === "LEAVE");
+  const notOnLeave = marks.filter((m) => m.status !== "LEAVE").map((m) => m.studentId);
+  const covered = new Set(
+    onLeave.length
+      ? (
+          await db.leaveRequest.findMany({
+            where: { schoolId, studentId: { in: onLeave.map((m) => m.studentId) }, status: { not: "REJECTED" }, fromDate: { lte: date }, toDate: { gte: date } },
+            select: { studentId: true },
+          })
+        ).map((r) => r.studentId)
+      : [],
+  );
+  const now = new Date();
+  await db.$transaction([
+    db.leaveRequest.deleteMany({ where: { schoolId, fromAttendance: true, studentId: { in: notOnLeave }, fromDate: date, toDate: date } }),
+    db.leaveRequest.createMany({
+      data: onLeave
+        .filter((m) => !covered.has(m.studentId))
+        .map((m) => ({
+          schoolId,
+          applicant: "STUDENT" as const,
+          studentId: m.studentId,
+          fromDate: date,
+          toDate: date,
+          category: "OTHER" as const,
+          description: m.remark || "Marked on leave in attendance",
+          status: "APPROVED" as const,
+          requestedBy: by,
+          decidedBy: by,
+          decidedAt: now,
+          fromAttendance: true,
+        })),
+    }),
+  ]);
+}
+
 export async function decideLeaveRecord(actor: LeaveActor, id: string, approve: boolean, formData: FormData): Promise<ActionState> {
   const r = await db.leaveRequest.findFirst({ where: { AND: [visibleWhere(actor), { id }] }, include });
   if (!r) return { error: "Leave request not found." };

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpenCheck, Bus, CalendarClock, Receipt, School, TriangleAlert } from "lucide-react";
+import { BookOpenCheck, Bus, CalendarClock, Receipt, School, TriangleAlert, Wallet } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { MonthRange } from "@/components/fees/month-range";
 import { Avatar, Badge, Breadcrumbs, ButtonLink, Callout, Card, EmptyState, PagedList, ProgressBar } from "@/components/ui";
@@ -10,20 +10,18 @@ import { FREQUENCY_META, MODE_LABELS, monthLabel, rupees, sessionMonths } from "
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 import { fullName, sectionLabel } from "@/lib/queries";
-import { collectFee, setFeesFrom, setOptionalFee, setOptionalFeeFrom } from "../../actions";
-import { CollectForm } from "./collect-form";
+import { setFeesFrom, setOptionalFee, setOptionalFeeFrom } from "../../actions";
 import { FeesFromForm } from "@/components/fees/fees-from-form";
 
 const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /** A student's fees for the session: what's due, collecting a payment, and past receipts. */
-export default async function StudentFeesPage({ params, searchParams }: PageProps<"/admin/fees/students/[id]">) {
+export default async function StudentFeesPage({ params }: PageProps<"/admin/fees/students/[id]">) {
   const { id } = await params;
-  const { month: monthParam } = await searchParams;
   const { school, canManage } = await getFeesAccess();
   const account = await loadStudentAccount(school.id, id);
   if (!account) notFound();
-  const { student, totals, dues, optionalHeads, receipts, today, session } = account;
+  const { student, totals, dues, optionalHeads, receipts, session } = account;
   const name = fullName(student);
   const active = student.status === "ACTIVE";
   // Fees that can be charged for months before admission: recurring ones this student pays.
@@ -32,17 +30,7 @@ export default async function StudentFeesPage({ params, searchParams }: PageProp
     .filter((h) => h.frequency !== "ONE_TIME" && (h.optional ? optionalHeads.some((o) => o.id === h.id && o.added) : classId && h.amounts[classId]))
     .map((h) => ({ id: h.id, name: h.name }));
   const admittedMidSession = isoDay(student.admissionDate).slice(0, 7) > isoDay(session.startDate).slice(0, 7);
-  // The billing month: ?month= if it is in the session, else this month (or the session's nearest end).
   const months = sessionMonths(session.startDate.toISOString().slice(0, 10));
-  const thisMonth = today.slice(0, 7);
-  const targetMonth =
-    typeof monthParam === "string" && months.includes(monthParam)
-      ? monthParam
-      : months.includes(thisMonth)
-        ? thisMonth
-        : thisMonth < months[0]
-          ? months[0]
-          : months[11];
 
   return (
     <div className="space-y-6">
@@ -158,17 +146,15 @@ export default async function StudentFeesPage({ params, searchParams }: PageProp
               )}
             </Card>
           ) : active ? (
-            <CollectForm
-              // Start afresh when the month or the dues change (e.g. an opt-in fee was added),
-              // so new instalments are ticked and filled in like the rest.
-              key={`${targetMonth}|${dues.map((d) => `${d.headId}:${d.period}:${d.balance}`).join(",")}`}
-              dues={dues}
-              today={today}
-              minDate={session.startDate.toISOString().slice(0, 10)}
-              targetMonth={targetMonth}
-              months={months}
-              action={collectFee.bind(null, student.id)}
-            />
+            // Fees are collected at the Fee desk; this page keeps the student's optional fees and receipts.
+            <Card>
+              <EmptyState
+                icon={Wallet}
+                title="Collect fees at the Fee desk"
+                description="Months due, bills and receipts for this student are on the Fee desk."
+                action={<ButtonLink href={`/admin/fee-desk?s=${student.id}`} icon={Wallet}>Open Fee desk</ButtonLink>}
+              />
+            </Card>
           ) : (
             <Card>
               <p className="text-sm text-fg-2">This student was removed, so no new payments can be taken. Past receipts are listed alongside.</p>

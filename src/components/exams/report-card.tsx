@@ -1,6 +1,6 @@
 import { GraduationCap } from "lucide-react";
 import type { ResultRow, Sheet } from "@/lib/exam-marks";
-import { GRADES, PASS_PERCENT, RESULT_LABELS, formatExamDate, formatMarks } from "@/lib/exams-shared";
+import { GRADES, PASS_PERCENT, RESULT_LABELS, formatExamDate, formatMarks, gradeFor } from "@/lib/exams-shared";
 
 /** A cell below its paper's pass mark (or absent). */
 const isLow = (c: Cell) => c.kind === "absent" || (c.kind === "marks" && !c.pass);
@@ -49,7 +49,7 @@ function Watermark({ show }: { show: boolean }) {
 function GradeKey() {
   return (
     <p className="mt-[3mm] text-[7.5pt] text-slate-600">
-      Grades: {GRADES.map((g, i) => `${g.grade} ${g.min}${i ? `–${GRADES[i - 1].min - 1}` : "–100"}%`).join(" · ")}. Pass mark {PASS_PERCENT}% in each subject. Optional papers use their own pass marks and are not counted in the total. AB = absent.
+      Grades: {GRADES.map((g, i) => `${g.grade} ${g.min}${i ? `–${GRADES[i - 1].min - 1}` : "–100"}%`).join(" · ")}. Pass mark {PASS_PERCENT}% in each subject unless a pass mark is shown beside it. Optional papers are not counted in the total. AB = absent.
     </p>
   );
 }
@@ -63,6 +63,105 @@ function Signatures({ labels }: { labels: string[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+type Paper = Sheet["papers"][number];
+type Part = { paper: Paper; cell: Cell };
+
+/** Marks in some papers taken together: "AB" if absent from all, blank while any is missing. */
+function partsText(parts: Part[]) {
+  if (!parts.length) return "—";
+  if (parts.some((p) => p.cell.kind === "missing")) return "";
+  if (parts.every((p) => p.cell.kind === "absent")) return "AB";
+  return formatMarks(parts.reduce((n, p) => n + (p.cell.kind === "marks" ? p.cell.marks : 0), 0));
+}
+const partsMax = (parts: Part[]) => parts.reduce((n, p) => n + p.paper.maxMarks, 0);
+
+/**
+ * A student's papers, one line each; a subject with a practical paper is one
+ * line with its theory and practical marks side by side, then their total.
+ */
+function MarksTable({ sheet, row }: { sheet: Sheet; row: ResultRow }) {
+  const parts: Part[] = row.cells.filter((c) => c.kind !== "na").map((c) => ({ cell: c, paper: sheet.papers.find((p) => p.id === c.paperId)! }));
+  const withPractical = new Set(parts.filter((p) => p.paper.practical && p.paper.subjectId).map((p) => p.paper.subjectId));
+  const lines: { key: string; name: string; theory: Part[]; practical: Part[] }[] = [];
+  for (const part of parts) {
+    const subjectId = part.paper.subjectId;
+    if (subjectId && withPractical.has(subjectId)) {
+      let line = lines.find((l) => l.key === subjectId);
+      if (!line) lines.push((line = { key: subjectId, name: part.paper.subjectName ?? part.paper.name, theory: [], practical: [] }));
+      (part.paper.practical ? line.practical : line.theory).push(part);
+    } else {
+      lines.push({ key: part.paper.id, name: part.paper.name, theory: [part], practical: [] });
+    }
+  }
+  const split = withPractical.size > 0;
+  const low = (ps: Part[]) => ps.some((p) => isLow(p.cell));
+  const passNote = (line: (typeof lines)[number]) => {
+    const pass = (ps: Part[]) => ps.map((p) => p.paper.passMarks).filter((m) => m != null);
+    if (!line.practical.length) return line.theory[0].paper.passMarks != null ? `pass ${line.theory[0].paper.passMarks}` : null;
+    const [th, pr] = [pass(line.theory), pass(line.practical)];
+    return th.length || pr.length ? `pass ${[th.length && `Th ${th.join("+")}`, pr.length && `Pr ${pr.join("+")}`].filter(Boolean).join(" · ")}` : null;
+  };
+
+  return (
+    <table className="w-full border-collapse">
+      <thead>
+        <tr className="bg-slate-100 text-left [print-color-adjust:exact]">
+          <th className={cell}>Subject</th>
+          <th className={`${cell} text-center`}>Max. marks</th>
+          {split && <th className={`${cell} text-center`}>Theory</th>}
+          {split && <th className={`${cell} text-center`}>Practical</th>}
+          <th className={`${cell} text-center`}>{split ? "Total" : "Marks obtained"}</th>
+          <th className={`${cell} text-center`}>Grade</th>
+        </tr>
+      </thead>
+      <tbody>
+        {lines.map((line) => {
+          const all = [...line.theory, ...line.practical];
+          const optional = all.every((p) => p.paper.optional);
+          const max = partsMax(all);
+          const total = partsText(all);
+          const absent = total === "AB";
+          const grade = absent ? "E" : total && total !== "—" ? gradeFor((Number(total) / max) * 100) : "—";
+          const note = [optional && "Optional", passNote(line)].filter(Boolean).join(" · ");
+          return (
+            <tr key={line.key} className={optional ? "text-slate-600" : ""}>
+              <td className={`${cell} font-medium`}>
+                {line.name}
+                {note && <span className="ml-[1.5mm] text-[7.5pt] font-normal text-slate-500">{note}</span>}
+              </td>
+              <td className={`${cell} text-center tabular-nums`}>{max}</td>
+              {split && (
+                <td className={`${cell} text-center tabular-nums ${low(line.theory) ? "font-semibold text-rose-700" : ""}`}>
+                  {partsText(line.theory) || "—"}
+                  {line.practical.length > 0 && line.theory.length > 0 && <span className="text-[7pt] font-normal text-slate-500">/{partsMax(line.theory)}</span>}
+                </td>
+              )}
+              {split && (
+                <td className={`${cell} text-center tabular-nums ${low(line.practical) ? "font-semibold text-rose-700" : ""}`}>
+                  {partsText(line.practical) || "—"}
+                  {line.practical.length > 0 && <span className="text-[7pt] font-normal text-slate-500">/{partsMax(line.practical)}</span>}
+                </td>
+              )}
+              <td className={`${cell} text-center tabular-nums ${low(all) ? "font-semibold text-rose-700" : ""}`}>{total || "—"}</td>
+              <td className={`${cell} text-center font-semibold`}>{grade}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+      <tfoot>
+        <tr className="bg-slate-50 font-semibold [print-color-adjust:exact]">
+          <td className={cell}>Total</td>
+          <td className={`${cell} text-center tabular-nums`}>{row.max}</td>
+          {split && <td className={cell} />}
+          {split && <td className={cell} />}
+          <td className={`${cell} text-center tabular-nums`}>{formatMarks(row.obtained)}</td>
+          <td className={`${cell} text-center`}>{row.complete ? row.grade : "—"}</td>
+        </tr>
+      </tfoot>
+    </table>
   );
 }
 
@@ -96,42 +195,7 @@ export function ReportCard({ sheet, school, row, total, className = "" }: { shee
           </>
         )}
       </dl>
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-slate-100 text-left [print-color-adjust:exact]">
-            <th className={cell}>Subject</th>
-            <th className={`${cell} text-center`}>Max. marks</th>
-            <th className={`${cell} text-center`}>Marks obtained</th>
-            <th className={`${cell} text-center`}>Grade</th>
-          </tr>
-        </thead>
-        <tbody>
-          {r.cells
-            .filter((c) => c.kind !== "na")
-            .map((c) => {
-              const p = sheet.papers.find((x) => x.id === c.paperId)!;
-              return (
-                <tr key={c.paperId} className={p.optional ? "text-slate-600" : ""}>
-                  <td className={`${cell} font-medium`}>
-                    {p.name}
-                    {p.optional && <span className="ml-[1.5mm] text-[7.5pt] font-normal text-slate-500">Optional · pass {p.passMarks}</span>}
-                  </td>
-                  <td className={`${cell} text-center tabular-nums`}>{p.maxMarks}</td>
-                  <td className={`${cell} text-center tabular-nums ${isLow(c) ? "font-semibold text-rose-700" : ""}`}>{markText(c) || "—"}</td>
-                  <td className={`${cell} text-center font-semibold`}>{c.kind === "marks" ? c.grade : c.kind === "absent" ? "E" : "—"}</td>
-                </tr>
-              );
-            })}
-        </tbody>
-        <tfoot>
-          <tr className="bg-slate-50 font-semibold [print-color-adjust:exact]">
-            <td className={cell}>Total</td>
-            <td className={`${cell} text-center tabular-nums`}>{r.max}</td>
-            <td className={`${cell} text-center tabular-nums`}>{formatMarks(r.obtained)}</td>
-            <td className={`${cell} text-center`}>{r.complete ? r.grade : "—"}</td>
-          </tr>
-        </tfoot>
-      </table>
+      <MarksTable sheet={sheet} row={r} />
       <div className="mt-[4mm] grid grid-cols-4 gap-[3mm] text-center">
         {[
           ["Percentage", r.complete && r.max && !r.absent ? `${r.percent.toFixed(1)}%` : "—"],

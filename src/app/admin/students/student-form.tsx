@@ -1,5 +1,6 @@
 "use client";
 
+import { MobileInput } from "@/components/mobile-input";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Save } from "lucide-react";
@@ -8,7 +9,7 @@ import { Select } from "@/components/select";
 import { AadhaarInput } from "@/components/aadhaar-input";
 import { PhotoInput } from "@/components/photo-input";
 import { SameAs } from "@/components/same-as";
-import { buttonVariants, FormActions, inputClass, selectClass } from "@/components/ui";
+import { buttonVariants, FormActions, inputClass, NumberedSection, selectClass } from "@/components/ui";
 import { toDateInput, type ActionState } from "@/lib/action-state";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
 import {
@@ -101,7 +102,7 @@ export function StudentForm({
         const e = state.fieldErrors;
         return (
           <>
-            <AdmissionSection step={1} title="Student details" description="As per the birth certificate and Aadhaar card.">
+            <NumberedSection step={1} title="Student details" description="As per the birth certificate and Aadhaar card.">
               <div className="sm:col-span-2 lg:col-span-3">
                 <PhotoInput currentUrl={photoUrl} error={e?.photo?.[0]} />
               </div>
@@ -157,9 +158,9 @@ export function StudentForm({
                   className={inputClass}
                 />
               </Field>
-            </AdmissionSection>
+            </NumberedSection>
 
-            <AdmissionSection step={2} title="Parent & guardian details" description="Parents' names and the family's mobile numbers, used for notices and messages.">
+            <NumberedSection step={2} title="Parent & guardian details" description="Parents' names and the family's mobile numbers, used for notices and messages.">
               <Field label="Father's name" name="fatherName" errors={e}>
                 <input name="fatherName" maxLength={100} defaultValue={student?.fatherName ?? ""} className={inputClass} />
               </Field>
@@ -176,21 +177,12 @@ export function StudentForm({
                 />
               </Field>
               <Field label="Mobile number" name="phone" errors={e}>
-                <input type="tel" name="phone" inputMode="tel" maxLength={16} placeholder="10-digit mobile" defaultValue={student?.phone ?? ""} className={inputClass} />
+                <MobileInput name="phone" defaultValue={student?.phone} />
               </Field>
               <div>
                 <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
                 <SameAs name="whatsappSameAsPhone" label="Same as mobile" initial={whatsappSameAsPhone} note="Uses the mobile number.">
-                  <input
-                    type="tel"
-                    name="whatsappNumber"
-                    inputMode="tel"
-                    maxLength={16}
-                    aria-label="WhatsApp number"
-                    placeholder="10-digit mobile"
-                    defaultValue={student?.whatsappNumber ?? ""}
-                    className={inputClass}
-                  />
+                  <MobileInput name="whatsappNumber" label="WhatsApp number" defaultValue={student?.whatsappNumber} />
                 </SameAs>
                 {e?.whatsappNumber?.[0] && (
                   <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>
@@ -209,9 +201,9 @@ export function StudentForm({
                   />
                 </SameAs>
               </div>
-            </AdmissionSection>
+            </NumberedSection>
 
-            <AdmissionSection step={3} title="Address" description="Permanent address and where letters should be sent." wide>
+            <NumberedSection step={3} title="Address" description="Permanent address and where letters should be sent." wide>
               <Field label="Permanent address" name="primaryAddress" errors={e}>
                 <textarea name="primaryAddress" rows={3} placeholder="House no., street, city, state, PIN" defaultValue={student?.primaryAddress ?? ""} className={inputClass} />
               </Field>
@@ -232,9 +224,9 @@ export function StudentForm({
                   />
                 </SameAs>
               </div>
-            </AdmissionSection>
+            </NumberedSection>
 
-            <AdmissionSection step={4} title="Admission details" description="Class, roll number and house for this session. The class's subjects are allotted automatically.">
+            <NumberedSection step={4} title="Admission details" description="Class, roll number and house for this session. The class's subjects are allotted automatically.">
               <ClassSectionFields classes={classes} defaultSectionId={student?.sectionId ?? ""} errors={e} />
               <Field
                 label="Date of admission"
@@ -281,9 +273,9 @@ export function StudentForm({
                   className={inputClass}
                 />
               </Field>
-            </AdmissionSection>
+            </NumberedSection>
 
-            <AdmissionSection step={5} title="Category & religion" description="As recorded on admission documents.">
+            <NumberedSection step={5} title="Category & religion" description="As recorded on admission documents.">
               <Field label="Category" name="category" errors={e}>
                 <Select name="category" defaultValue={student?.category ?? ""} className={selectClass}>
                   <option value="">Select category</option>
@@ -307,7 +299,7 @@ export function StudentForm({
               <Field label="Caste" name="caste" errors={e}>
                 <input name="caste" defaultValue={student?.caste ?? ""} className={inputClass} />
               </Field>
-            </AdmissionSection>
+            </NumberedSection>
 
             <FormActions
               note={
@@ -330,7 +322,6 @@ export function StudentForm({
   );
 }
 
-/** A numbered part of the admission form, like the sections of a printed form. */
 /**
  * Class, then section. The section picker only appears when the class is divided into sections;
  * a class without sections has one unnamed section, which is sent as the student's section.
@@ -386,35 +377,5 @@ function ClassSectionFields({
         <input type="hidden" name="sectionId" value={value} />
       )}
     </>
-  );
-}
-
-function AdmissionSection({
-  step,
-  title,
-  description,
-  wide,
-  children,
-}: {
-  step: number;
-  title: string;
-  description?: string;
-  /** Two columns instead of three, for long fields like addresses. */
-  wide?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-line">
-      <header className="flex items-start gap-3 border-b border-line bg-surface-2 px-4 py-3 sm:px-5">
-        <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-fg tabular-nums">
-          {step}
-        </span>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-fg">{title}</h3>
-          {description && <p className="mt-0.5 text-xs leading-5 text-muted">{description}</p>}
-        </div>
-      </header>
-      <div className={`grid gap-x-5 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 ${wide ? "" : "lg:grid-cols-3"}`}>{children}</div>
-    </section>
   );
 }

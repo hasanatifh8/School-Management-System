@@ -65,6 +65,35 @@ export async function createClass(_: ActionState, formData: FormData): Promise<A
   redirect(`/admin/classes/${created.id}`);
 }
 
+/** Saves the order of the school's classes (also the order Promote suggests the next class in). */
+export async function reorderClasses(_: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const ids = formData.getAll("ids").map(String);
+  const classes = await db.schoolClass.findMany({ where: { schoolId: school.id }, select: { id: true } });
+  if (ids.length !== classes.length || new Set(ids).size !== ids.length || !classes.every((c) => ids.includes(c.id))) {
+    return { error: "The class list changed. Reload the page and try again." };
+  }
+  await db.$transaction(ids.map((id, i) => db.schoolClass.update({ where: { id }, data: { sortOrder: i + 1 } })));
+  revalidatePath("/admin", "layout");
+  return { ok: true, message: "Class order saved." };
+}
+
+export async function renameClass(id: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const schoolClass = await findClass(school.id, id);
+  const parsed = classSchema.pick({ name: true }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return validationError(parsed.error);
+  const { name } = parsed.data;
+  if (name === schoolClass.name) return { ok: true, message: "Name unchanged." };
+
+  if (await db.schoolClass.findFirst({ where: { schoolId: school.id, name, NOT: { id } } })) {
+    return { error: `${name} already exists.` };
+  }
+  await db.schoolClass.update({ where: { id }, data: { name } });
+  revalidatePath("/admin", "layout");
+  return { ok: true, message: `Renamed to ${name}.` };
+}
+
 export async function deleteClass(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
   await findClass(school.id, id);

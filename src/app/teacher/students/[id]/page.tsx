@@ -82,7 +82,7 @@ export default async function TeacherStudentPage({ params, searchParams }: PageP
       <div className="mb-6 border-b border-line">
         <nav aria-label="Student sections" className={tabBarClass}>
           {TABS.map((t) => (
-            <StatusTab key={t.key} href={tabHref(t.key)} active={tab === t.key} label={t.label} />
+            <StatusTab key={t.key} replace href={tabHref(t.key)} active={tab === t.key} label={t.label} />
           ))}
         </nav>
       </div>

@@ -140,9 +140,9 @@ export default async function StaffMemberPage({ params, searchParams }: PageProp
 
       <div className="mb-6 border-b border-line">
         <nav aria-label="Staff member sections" className={tabBarClass}>
-          <StatusTab href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
-          <StatusTab href={`${base}?tab=edit`} active={tab === "edit"} label="Edit profile" icon={Pencil} />
-          <StatusTab href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={staff.documents.length} />
+          <StatusTab replace href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
+          <StatusTab replace href={`${base}?tab=edit`} active={tab === "edit"} label="Edit profile" icon={Pencil} />
+          <StatusTab replace href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={staff.documents.length} />
         </nav>
       </div>
 

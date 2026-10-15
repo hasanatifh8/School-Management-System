@@ -44,7 +44,7 @@ export async function studentExams(student: ProfileStudent) {
         date: isoDate(p.date),
         startTime: p.startTime,
         endTime: p.endTime,
-        name: paperName(p.subject?.name, p.title) + (p.optional ? " (Optional)" : ""),
+        name: paperName(p.subject?.name, p.title, p.practical) + (p.optional ? " (Optional)" : ""),
         maxMarks: p.maxMarks,
         room: p.room,
       }));

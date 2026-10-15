@@ -42,7 +42,7 @@ export default async function ResultsExamsPage({ searchParams }: PageProps<"/adm
             action={tests ? undefined : <ButtonLink href="/admin/exams/new">New exam</ButtonLink>}
           />
         ) : (
-          <ExamList exams={exams} href={(e) => `/admin/results/${e.id}`} showAuthor={tests} showResults />
+          <ExamList exams={exams} href={(e) => `/admin/results/${e.id}`} showAuthor={tests} showResults openLabel="View results" />
         )}
         <Pagination paging={paging} noun={tests ? "tests" : "exams"} />
       </Card>

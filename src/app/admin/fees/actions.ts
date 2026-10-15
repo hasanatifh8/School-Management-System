@@ -6,9 +6,8 @@ import { z } from "zod";
 import { type ActionState, validationError } from "@/lib/action-state";
 import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { type ReceiptLine, receiptLine, saveReceipt } from "@/lib/fee-receipts";
-import { getFeesAccess, loadStudentAccount, requireFeesManager } from "@/lib/fees";
-import { FREQUENCIES, PAYMENT_MODES, dueKey, instalmentLines, rupees, monthLabel, sessionMonths } from "@/lib/fees-shared";
+import { getFeesAccess, requireFeesManager } from "@/lib/fees";
+import { FREQUENCIES, monthLabel, sessionMonths } from "@/lib/fees-shared";
 
 const MAX_AMOUNT = 10_000_000; // ₹1 crore per instalment is plenty
 
@@ -62,14 +61,21 @@ export async function saveFeeHead(headId: string | null, _: ActionState, formDat
   if (headId && !existing) return { error: "Fee not found." };
   // The transport fee's amounts are the stop fares (set in Transport); it stays a monthly opt-in.
   const transport = existing?.transport ?? false;
-  const { amounts, errors } = transport ? { amounts: [], errors: {} } : readAmounts(formData, new Set(classes.map((c) => c.id)));
+  // Opened from one class's fees: only that class's amount is on the form, and only it changes.
+  const only = classes.find((c) => c.id === formData.get("onlyClass"));
+  const { amounts, errors } = transport ? { amounts: [], errors: {} } : readAmounts(formData, new Set(only ? [only.id] : classes.map((c) => c.id)));
   if (Object.keys(errors).length) return { error: "Amounts must be whole rupees.", fieldErrors: errors };
-  if (!transport && !amounts.length) return { error: "Enter the amount for at least one class." };
+  if (!transport && !amounts.length && !(only && existing)) {
+    return only ? { error: "Enter the amount for this class.", fieldErrors: { [`amount:${only.id}`]: ["Required"] } } : { error: "Enter the amount for at least one class." };
+  }
   const data = transport ? { ...parsed.data, frequency: "MONTHLY" as const, optional: true, dueMonth: null } : parsed.data;
   const clash = await db.feeHead.findFirst({
     where: { sessionId: session.id, name: { equals: parsed.data.name, mode: "insensitive" }, ...(headId && { id: { not: headId } }) },
   });
-  if (clash) return { error: `“${clash.name}” already exists.`, fieldErrors: { name: ["Already used"] } };
+  if (clash) {
+    const hint = only && !existing ? " To charge it to this class, pick it under “Not charged to” on the class's fees." : "";
+    return { error: `“${clash.name}” already exists.${hint}`, fieldErrors: { name: ["Already used"] } };
+  }
   if (existing && existing.frequency !== parsed.data.frequency) {
     const paid = await db.feeReceiptItem.count({ where: { headId: existing.id } });
     if (paid) return { error: "Payments were already taken for this fee, so how often it is charged can't change. Create a new fee instead." };
@@ -87,7 +93,7 @@ export async function saveFeeHead(headId: string | null, _: ActionState, formDat
           },
         });
     if (!transport) {
-      await tx.feeAmount.deleteMany({ where: { headId: head.id } });
+      await tx.feeAmount.deleteMany({ where: { headId: head.id, ...(only && { classId: only.id }) } });
       await tx.feeAmount.createMany({ data: amounts.map((a) => ({ ...a, headId: head.id })) });
     }
   });
@@ -246,66 +252,6 @@ function monthRange(from: string, to: string) {
   if (!from && !to) return "for the whole session";
   return [from && `from ${monthLabel(from)}`, to ? `to ${monthLabel(to)}` : "to the end of the session"].filter(Boolean).join(" ");
 }
-
-const paymentSchema = z.object({
-  date: z.string().refine((v) => parseISODate(v), "Choose the payment date"),
-  mode: z.enum(PAYMENT_MODES, "Choose how it was paid"),
-  reference: z.string().trim().max(60).optional().transform((v) => v || null),
-  remarks: z.string().trim().max(200).optional().transform((v) => v || null),
-});
-
-/** Records a payment against the chosen instalments and creates a numbered receipt. */
-export async function collectFee(studentId: string, _: ActionState, formData: FormData): Promise<ActionState> {
-  const access = await getFeesAccess();
-  const { school, session, today } = access;
-  const account = await loadStudentAccount(school.id, studentId);
-  if (!account || account.student.status !== "ACTIVE") return { error: "Student not found." };
-  const parsed = paymentSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return validationError(parsed.error);
-  const { date, mode, reference, remarks } = parsed.data;
-  const sessionStart = session.startDate.toISOString().slice(0, 10);
-  if (date > today || date < sessionStart) return { error: `The payment date must be in session ${session.name}, not in the future.`, fieldErrors: { date: ["Out of range"] } };
-  if ((mode === "CHEQUE" || mode === "UPI" || mode === "BANK_TRANSFER") && !reference) {
-    return { error: "Enter the cheque / UPI / transaction number.", fieldErrors: { reference: ["Required for this payment mode"] } };
-  }
-
-  // Each chosen instalment sends "pay:<key>" and, with a discount, "disc:<key>" (its share
-  // of the discount). The late fee is worked out here, not taken from the form.
-  const waiveLateFee = formData.get("waiveLateFee") === "on";
-  const byKey = new Map(account.dues.map((d) => [dueKey(d.headId, d.period), d]));
-  const rupeesIn = (name: string) => String(formData.get(name) ?? "").replace(/[,\s₹]/g, "");
-  const lines: ReceiptLine[] = [];
-  let lateWaived = 0;
-  for (const key of new Set([...formData.keys()].filter((k) => k.startsWith("pay:") || k.startsWith("disc:")).map((k) => k.slice(k.indexOf(":") + 1)))) {
-    const item = byKey.get(key);
-    if (!item) return { error: "One of the chosen fees no longer applies. Reload the page." };
-    const [payText, discText] = [rupeesIn(`pay:${key}`), rupeesIn(`disc:${key}`)];
-    const amount = payText ? Number(payText) : 0;
-    const discount = discText ? Number(discText) : 0;
-    if (!Number.isInteger(amount) || amount < 0 || !Number.isInteger(discount) || discount < 0) return { error: `Enter whole rupees for ${item.headName} (${item.label}).` };
-    if (amount + discount > item.balance) return { error: `${item.headName} (${item.label}): only ${rupees(item.balance)} is left, including any discount.` };
-    if (amount + discount > 0) {
-      // Late only if paid after the due date (or admission), going by the payment date entered; a late
-      // fee left from an earlier part payment is taken (or waived) with it. Each late fee stays with its month.
-      const pay = instalmentLines(item, { amount, discount, waive: waiveLateFee, payDate: date });
-      lateWaived += pay.lateWaived;
-      lines.push(...pay.lines.map(receiptLine));
-    }
-  }
-  if (!lines.length) return { error: "Choose at least one fee and enter the amount paid." };
-  const discounted = lines.some((l) => l.discount > 0);
-  const discountNote = String(formData.get("discountNote") ?? "").trim().slice(0, 200) || null;
-  if (discounted && (!discountNote || discountNote.length < 3)) {
-    return { error: "Say why the discount is given, e.g. sibling or staff ward.", fieldErrors: { discountNote: ["Reason needed for a discount"] } };
-  }
-
-  const saved = await saveReceipt({ access, account, lines, date, mode, reference, remarks, discountNote: discounted ? discountNote : null, lateWaived });
-  if ("error" in saved) return { error: saved.error };
-  const receipt = saved;
-  revalidatePath("/admin/fees", "layout");
-  redirect(`/admin/fees/receipts/${receipt.id}?new=1`);
-}
-
 
 const cancelSchema = z.object({ reason: z.string().trim().min(3, "Say why it is cancelled").max(200) });
 

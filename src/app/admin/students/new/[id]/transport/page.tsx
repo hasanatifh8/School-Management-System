@@ -34,9 +34,9 @@ export default async function AdmissionTransportPage({ params }: PageProps<"/adm
   return (
     <>
       <PageHeader
-        title="New admission"
+        title="Admission Form"
         subtitle="Does the student use school transport? Type their stop to see the buses that go there."
-        breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "New admission" }]}
+        breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "Admission Form" }]}
       />
       <AdmissionSteps current={2} />
       <Card>

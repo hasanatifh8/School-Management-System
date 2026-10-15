@@ -35,9 +35,9 @@ export default async function AdmissionFeesPage({ params }: PageProps<"/admin/st
   return (
     <>
       <PageHeader
-        title="New admission"
+        title="Admission Form"
         subtitle="Class fees apply automatically. Tick any optional fees the student should pay."
-        breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "New admission" }]}
+        breadcrumbs={[{ label: "Students", href: "/admin/students" }, { label: "Admission Form" }]}
       />
       <AdmissionSteps current={3} />
       <Card>

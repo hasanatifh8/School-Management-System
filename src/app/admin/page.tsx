@@ -237,12 +237,32 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const firstName = viewer?.kind === "admin" ? viewer.admin.name.split(/\s+/)[0] : "Admin";
+  // The school's registration details, shown under the welcome line when set.
+  const schoolFacts: [string, string | number][] = [
+    ["UDISE code", school.udiseCode],
+    ["Affiliation / registration no.", school.affiliationNo],
+    ["Established", school.establishedYear],
+  ].filter((f): f is [string, string | number] => f[1] != null && f[1] !== "");
 
   return (
     <>
       <PageHeader
         title="Dashboard"
-        subtitle={`Welcome back, ${firstName}! Here's what's happening at ${school.name} today.`}
+        subtitle={
+          <>
+            Welcome back, {firstName}! Here&apos;s what&apos;s happening at {school.name} today.
+            {schoolFacts.length > 0 && (
+              <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                {schoolFacts.map(([label, value]) => (
+                  <div key={label} className="flex gap-1.5">
+                    <dt className="text-subtle">{label}</dt>
+                    <dd className="font-medium tabular-nums text-fg-2">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </>
+        }
         action={
           <>
             <DateChip>

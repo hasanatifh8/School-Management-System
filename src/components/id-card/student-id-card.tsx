@@ -99,7 +99,7 @@ function FrontFooter({ address, validTill }: { address: string; validTill: strin
         <path d="M0 1.2C16 -0.4 34 3.4 54 1.6V12.6H0Z" fill={GOLD} />
         <path d="M0 2.4C16 0.8 34 4.6 54 2.8V12.6H0Z" fill={NAVY} />
       </svg>
-      <div className="absolute inset-x-0 bottom-0 flex h-[9.6mm] items-stretch gap-[2mm] px-[3mm] pb-[1.4mm] text-white">
+      <div className="absolute inset-x-0 bottom-0 flex h-[8.6mm] items-stretch gap-[2mm] px-[3mm] pb-[1.1mm] text-white">
         <div className="flex min-w-0 flex-1 gap-[1mm]">
           <MapPin className="mt-[0.2mm] h-[2.4mm] w-[2.4mm] shrink-0" color={GOLD} />
           <div className="min-w-0">

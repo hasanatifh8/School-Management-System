@@ -276,7 +276,7 @@ export default async function ReceiptPage({ params, searchParams }: PageProps<"/
             </BackLink>
           ) : (
             receipt.studentId && (
-              <BackLink href={`/admin/fees/students/${receipt.studentId}`} className={buttonVariants.ghost}>
+              <BackLink href={`/admin/fee-desk?s=${receipt.studentId}`} className={buttonVariants.ghost}>
                 <ArrowLeft className="h-4 w-4" />
                 Back to {receipt.studentName.split(" ")[0]}&apos;s fees
               </BackLink>

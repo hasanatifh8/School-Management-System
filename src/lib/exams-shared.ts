@@ -16,7 +16,10 @@ export type PaperInput = {
   maxMarks: string;
   /** An optional paper: needs max and pass marks, and stays out of the total. */
   optional: boolean;
+  /** Blank: PASS_PERCENT of the max marks (optional papers must set it). */
   passMarks: string;
+  /** The practical part of its subject (e.g. Chemistry practical); needs a subject. */
+  practical: boolean;
   room: string;
   notes: string;
 };
@@ -40,6 +43,7 @@ export const emptyPaper = (): PaperInput => ({
   maxMarks: "",
   optional: false,
   passMarks: "",
+  practical: false,
   room: "",
   notes: "",
 });
@@ -146,12 +150,14 @@ export type PaperView = {
   maxMarks: number | null;
   optional: boolean;
   passMarks: number | null;
+  practical: boolean;
   room: string | null;
   notes: string | null;
 };
 
-/** "Mathematics", "Mathematics (Practical)" or "Drawing". */
-export function paperName(subjectName: string | null | undefined, title: string | null | undefined) {
+/** "Mathematics", "Chemistry (Practical)" or "Drawing". A practical without a title is "<Subject> (Practical)". */
+export function paperName(subjectName: string | null | undefined, title: string | null | undefined, practical = false) {
+  if (practical && !title) title = "Practical";
   if (subjectName && title) return `${subjectName} (${title})`;
   return subjectName || title || "—";
 }
@@ -161,7 +167,7 @@ export function paperName(subjectName: string | null | undefined, title: string 
 /** Minimum percentage to pass a paper. */
 export const PASS_PERCENT = 33;
 
-/** Whether marks pass a paper: its own pass marks if it has them (optional papers), else PASS_PERCENT. */
+/** Whether marks pass a paper: its own pass marks if set, else PASS_PERCENT of the max. */
 export const passes = (marks: number, paper: { maxMarks: number; passMarks: number | null }) =>
   paper.passMarks != null ? marks >= paper.passMarks : (marks / paper.maxMarks) * 100 >= PASS_PERCENT;
 

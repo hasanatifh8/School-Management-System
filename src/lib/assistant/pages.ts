@@ -65,6 +65,7 @@ export const APP_PAGES: AppPage[] = [
   { title: "Attendance lists", path: "/admin/attendance/list", does: "Everyone present, absent, late or on leave on a day, for students, teachers or staff (opened from the attendance cards).", keywords: "who is absent present on leave list today" },
   { title: "Proxy teachers", path: "/admin/attendance/proxy", does: "Assign substitute (proxy) teachers for teachers absent or on leave.", keywords: "proxy substitute arrangement absent teacher" },
   { title: "Staff attendance", path: "/admin/attendance/staff", does: "Mark attendance for teachers and staff; monthly staff register.", keywords: "staff attendance teacher attendance" },
+  { title: "Student ID format", path: "/admin/settings/student-id", does: "Set how new student IDs look: a prefix (e.g. STU), the admission year from the admission form, then a number padded to 3-6 digits, e.g. STU-2026-0001. Existing IDs don't change.", keywords: "student id admission number prefix format code roll" },
   { title: "Weekly off", path: "/admin/settings/weekly-off", does: "Set the weekly offs: Sunday always, and Saturday if the school is closed. No attendance can be marked on a weekly off, and it isn't a working day.", keywords: "weekly off saturday sunday holiday five day week closed" },
   { title: "Holidays", path: "/admin/attendance/holidays", does: "Holidays that are not counted as working days for attendance.", keywords: "holiday off day attendance holiday" },
   {

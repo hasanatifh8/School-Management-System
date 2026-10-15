@@ -18,7 +18,7 @@ import {
 import { db } from "@/lib/db";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { getCurrentSchool, getViewer } from "@/lib/school";
-import { onLeave } from "@/lib/leave";
+import { onLeave, syncAttendanceLeave } from "@/lib/leave";
 import { saveStaffSheet } from "@/lib/staff-attendance";
 import { STAFF_STATUSES, STAFF_STATUS_META, type StaffGroup } from "@/lib/staff-attendance-shared";
 
@@ -103,6 +103,7 @@ export async function saveAttendance(sectionId: string, date: string, _: ActionS
     await tx.attendanceRecord.deleteMany({ where: { dayId: day.id, studentId: { in: roster.map((s) => s.id) } } });
     await tx.attendanceRecord.createMany({ data: records.map((r) => ({ ...r, dayId: day.id })) });
   });
+  await syncAttendanceLeave(school.id, d, records, markedBy);
 
   revalidatePath("/", "layout");
   const absent = records.filter((r) => r.status === "ABSENT").length;
@@ -132,6 +133,9 @@ export async function setClassHoliday(sectionId: string, date: string, _: Action
     });
     await tx.attendanceRecord.deleteMany({ where: { dayId: day.id } });
   });
+  // Nobody is marked that day now, so leave made from its attendance goes too.
+  const students = await db.student.findMany({ where: { sectionId }, select: { id: true } });
+  await syncAttendanceLeave(school.id, d, students.map((s) => ({ studentId: s.id, status: "OFF", remark: null })), markedBy);
   revalidatePath("/", "layout");
   return { ok: true, message: `${sectionLabel(section)} is marked as off on ${formatISO(date, shortDate)}.` };
 }
@@ -327,6 +331,7 @@ export async function editStudentMark(_: ActionState, formData: FormData): Promi
       },
     }),
   ]);
+  await syncAttendanceLeave(school.id, d, [{ studentId, status, remark: note.data }], by);
   revalidatePath("/", "layout");
   return { ok: true, message: `${fullName(student)}: ${STATUS_META[status].label} on ${formatISO(date, shortDate)}.` };
 }

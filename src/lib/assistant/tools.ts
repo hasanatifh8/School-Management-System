@@ -307,7 +307,7 @@ const TOOLS: Tool[] = [
       for (const m of marks) {
         const key = m.paper.examId;
         if (!exams.has(key)) exams.set(key, { exam: m.paper.exam.name, session: m.paper.exam.session.name, papers: [] });
-        exams.get(key)!.papers.push({ paper: paperName(m.paper.subject?.name, m.paper.title), marks: m.absent ? "absent" : String(m.marks ?? "—"), max: m.paper.maxMarks });
+        exams.get(key)!.papers.push({ paper: paperName(m.paper.subject?.name, m.paper.title, m.paper.practical), marks: m.absent ? "absent" : String(m.marks ?? "—"), max: m.paper.maxMarks });
       }
       return {
         name: fullName(s),
