@@ -84,14 +84,6 @@ export const optionalMobile = z
     return mobile;
   });
 
-/** Optional landline or mobile number (8–13 digits, may have +, spaces, dashes and brackets). */
-export const optionalPhone = z
-  .string()
-  .trim()
-  .optional()
-  .refine((v) => !v || (/^\+?[\d\s\-()]+$/.test(v) && /^\d{8,13}$/.test(v.replace(/\D/g, ""))), "Enter a valid phone number, e.g. 011-2345 6789")
-  .transform((v) => v || null);
-
 /** Optional email, lower-cased: blank becomes null. */
 export const optionalEmail = z
   .union([z.literal(""), z.email("Enter a valid email").trim().toLowerCase()])

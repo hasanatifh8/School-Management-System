@@ -155,7 +155,7 @@ export function ResultsStudentList({ students, cardHref, marksHref }: { students
               </div>
               {marksHref && (
                 <Link
-                  href={`${marksHref}#student-${s.id}`}
+                  href={`${marksHref}?student=${s.id}#student-${s.id}`}
                   title={`${s.hasMarks ? "Edit" : "Enter"} ${s.name}'s marks`}
                   className={`${s.hasMarks ? buttonVariants.ghost : buttonVariants.primary} !px-3 !py-1.5 text-xs`}
                 >

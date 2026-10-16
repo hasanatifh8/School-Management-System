@@ -215,10 +215,27 @@ const detailsSchema = z.object({
     .transform((v) => v || null),
 });
 
-/** Validated name, instructions and sections from the details form. */
-async function readDetails(actor: ExamActor, formData: FormData) {
+/**
+ * Validated name, instructions and sections from the details form. The name is
+ * unique in the session among the school's exams (or among a teacher's own tests).
+ */
+async function readDetails(actor: ExamActor, formData: FormData, sessionId: string, exceptId?: string) {
   const parsed = detailsSchema.safeParse({ name: formData.get("name") ?? "", instructions: formData.get("instructions") ?? "" });
   if (!parsed.success) return { state: validationError(parsed.error) };
+  const taken = await db.exam.findFirst({
+    where: {
+      schoolId: actor.schoolId,
+      sessionId,
+      name: { equals: parsed.data.name, mode: "insensitive" },
+      ...(actor.kind === "admin" ? { kind: "EXAM" as const } : { teacherId: actor.ctx.teacher.id }),
+      ...(exceptId && { id: { not: exceptId } }),
+    },
+    select: { id: true },
+  });
+  if (taken) {
+    const message = `“${parsed.data.name}” already exists this session. Use a different name.`;
+    return { state: { error: message, fieldErrors: { name: [message] } } satisfies ActionState };
+  }
   const requested = [...new Set(formData.getAll("sectionIds").map(String))];
   const allowed = new Set((await pickableSections(actor)).flatMap((c) => c.sections.map((s) => s.id)));
   const sectionIds = requested.filter((id) => allowed.has(id));
@@ -230,7 +247,7 @@ async function readDetails(actor: ExamActor, formData: FormData) {
 }
 
 export async function createExamRecord(actor: ExamActor, sessionId: string, formData: FormData) {
-  const details = await readDetails(actor, formData);
+  const details = await readDetails(actor, formData, sessionId);
   if (!details.data) return { state: details.state };
   const { sectionIds, ...data } = details.data;
   const exam = await db.exam.create({
@@ -250,7 +267,7 @@ export async function createExamRecord(actor: ExamActor, sessionId: string, form
 }
 
 export async function updateExamDetailsRecord(actor: ExamActor, exam: LoadedExam, formData: FormData): Promise<ActionState> {
-  const details = await readDetails(actor, formData);
+  const details = await readDetails(actor, formData, exam.sessionId, exam.id);
   if (!details.data) return details.state;
   const { sectionIds, ...data } = details.data;
 
@@ -338,11 +355,9 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
       }
     }
     if (r.title.length > 60) fail(i, "title", "Keep it under 60 characters");
-    if (r.maxMarks && !(/^\d{1,4}$/.test(r.maxMarks) && Number(r.maxMarks) >= 1 && Number(r.maxMarks) <= 1000)) {
-      fail(i, "maxMarks", "1 to 1000");
-    }
+    if (!r.maxMarks) fail(i, "maxMarks", "Enter the max marks");
+    else if (!(/^\d{1,4}$/.test(r.maxMarks) && Number(r.maxMarks) >= 1 && Number(r.maxMarks) <= 1000)) fail(i, "maxMarks", "1 to 1000");
     // Pass marks: required for an optional paper; for others, blank means PASS_PERCENT of the max.
-    if (r.optional && !r.maxMarks) fail(i, "maxMarks", "An optional paper needs max marks");
     if (r.optional && !r.passMarks) fail(i, "passMarks", "Enter the pass marks");
     else if (r.passMarks) {
       if (!/^\d{1,4}$/.test(r.passMarks) || Number(r.passMarks) < 1) fail(i, "passMarks", "Whole marks from 1");

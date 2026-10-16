@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, GraduationCap, Loader2, Printer, RotateCcw, Save, SlidersHorizontal } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { FormMessage } from "@/components/forms";
 import { buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
@@ -222,10 +222,10 @@ export function TimetablePrint({ data, save, backHref }: { data: Data; save?: (s
 
       <div className="space-y-4 print:hidden">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={backHref} className={buttonVariants.ghost}>
+          <BackLink href={backHref} className={buttonVariants.ghost}>
             <ArrowLeft className="h-4 w-4" />
             Back
-          </Link>
+          </BackLink>
           <button type="button" onClick={() => window.print()} className={buttonVariants.primary}>
             <Printer className="h-4 w-4" />
             {printLabel}

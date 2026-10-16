@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { MarksGrid } from "@/components/exams/marks-grid";
 import { ResultsView, type ResultsMode } from "@/components/exams/results-view";
-import { Card, EmptyState, PageHeader, type Crumb } from "@/components/ui";
-import { FileBarChart, PenLine } from "lucide-react";
+import { ButtonLink, Card, EmptyState, PageHeader, type Crumb } from "@/components/ui";
+import { FileBarChart, PenLine, Users } from "lucide-react";
 import type { ActionState } from "@/lib/action-state";
 import { loadSheet } from "@/lib/exam-marks";
 import { schoolHeader, type ExamActor, type LoadedExam } from "@/lib/exams";
@@ -17,10 +17,16 @@ export async function MarksPageContent({
   publish,
   unpublish,
   resultsHref,
+  studentId,
+  marksHref,
 }: {
   actor: ExamActor;
   exam: LoadedExam;
   sectionId: string;
+  /** Marks for this one student only (?student=), opened from their row in the results list. */
+  studentId?: string;
+  /** The whole section's marks sheet, linked from the one-student view. */
+  marksHref?: string;
   crumbs: Crumb[];
   save: (state: ActionState, formData: FormData) => Promise<ActionState>;
   publish: () => Promise<ActionState>;
@@ -30,10 +36,13 @@ export async function MarksPageContent({
   const sheet = await loadSheet(actor, exam, sectionId);
   if (!sheet) notFound();
   const editable = sheet.papers.filter((p) => p.editable).map((p) => p.name);
+  const one = studentId ? sheet.students.find((s) => s.id === studentId) : undefined;
+  if (studentId && !one) notFound();
+  const students = one ? [one] : sheet.students;
   return (
     <>
       <PageHeader
-        title={`Marks · ${sheet.section.label}`}
+        title={one ? `Marks · ${one.name}` : `Marks · ${sheet.section.label}`}
         subtitle={
           sheet.access.enterAll
             ? `${exam.name}. You can enter marks for every subject.`
@@ -41,18 +50,32 @@ export async function MarksPageContent({
               ? `${exam.name}. You can enter marks for ${editable.join(", ")}; other subjects are shown read-only.`
               : `${exam.name}. You don't teach a graded subject here, so marks are read-only.`
         }
-        breadcrumbs={[...crumbs, { label: `Marks · ${sheet.section.label}` }]}
+        breadcrumbs={[...crumbs, { label: one ? `Marks · ${one.name}` : `Marks · ${sheet.section.label}` }]}
+        action={
+          one &&
+          marksHref && (
+            <ButtonLink href={marksHref} variant="secondary" icon={Users}>
+              All students
+            </ButtonLink>
+          )
+        }
       />
-      <Card padded={false} title={sheet.section.label} icon={PenLine} description={`${sheet.students.length} students · ${sheet.papers.length} graded papers`}>
+      <Card
+        padded={false}
+        title={one ? `${one.name}${one.rollNumber ? ` · Roll ${one.rollNumber}` : ""}` : sheet.section.label}
+        icon={PenLine}
+        description={one ? `${sheet.section.label} · ${one.studentCode} · ${sheet.papers.length} graded papers` : `${sheet.students.length} students · ${sheet.papers.length} graded papers`}
+      >
         <MarksGrid
           data={{
             section: { label: sheet.section.label },
             papers: sheet.papers.map(({ id, name, date, maxMarks, optional, passMarks, editable }) => ({ id, name, date, maxMarks, optional, passMarks, editable })),
             ungraded: sheet.ungraded,
-            students: sheet.students.map(({ id, name, rollNumber, studentCode, eligible }) => ({ id, name, rollNumber, studentCode, eligible })),
+            students: students.map(({ id, name, rollNumber, studentCode, eligible }) => ({ id, name, rollNumber, studentCode, eligible })),
             marks: sheet.marks,
             published: sheet.published,
-            canPublish: sheet.access.canPublish,
+            // Publishing is for the whole section, from its full sheet.
+            canPublish: sheet.access.canPublish && !one,
             enterAll: sheet.access.enterAll,
           }}
           save={save}

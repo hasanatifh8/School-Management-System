@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { optionalEmail, optionalName, optionalPhone, optionalText } from "@/lib/action-state";
+import { optionalEmail, optionalMobile, optionalName, optionalText } from "@/lib/action-state";
 
 /** Optional year, from 1800 to this year. */
 const optionalYear = z
@@ -52,7 +52,7 @@ export const schoolSchema = z.object({
   establishedYear: optionalYear,
   motto: optionalText,
   address: optionalText,
-  phone: optionalPhone,
+  phone: optionalMobile,
   email: optionalEmail,
   website: z
     .union([z.literal(""), z.url({ message: "Enter a full address, e.g. https://school.edu.in" })])

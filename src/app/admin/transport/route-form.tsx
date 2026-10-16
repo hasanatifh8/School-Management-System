@@ -1,5 +1,6 @@
 "use client";
 
+import { MobileInput } from "@/components/mobile-input";
 import Link from "next/link";
 import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
@@ -46,13 +47,13 @@ export function RouteForm({ action, values, submitLabel }: { action: (s: ActionS
                 <input name="driverName" maxLength={60} defaultValue={values?.driverName ?? ""} className={inputClass} />
               </Field>
               <Field label="Driver's phone" name="driverPhone" errors={e}>
-                <input name="driverPhone" inputMode="tel" maxLength={15} defaultValue={values?.driverPhone ?? ""} placeholder="10-digit mobile" className={inputClass} />
+                <MobileInput name="driverPhone" defaultValue={values?.driverPhone} />
               </Field>
               <Field label="Attendant" name="attendantName" errors={e} hint="Optional: conductor or helper.">
                 <input name="attendantName" maxLength={60} defaultValue={values?.attendantName ?? ""} className={inputClass} />
               </Field>
               <Field label="Attendant's phone" name="attendantPhone" errors={e}>
-                <input name="attendantPhone" inputMode="tel" maxLength={15} defaultValue={values?.attendantPhone ?? ""} className={inputClass} />
+                <MobileInput name="attendantPhone" defaultValue={values?.attendantPhone} />
               </Field>
             </div>
             <StopsEditor stops={values?.stops ?? []} times={values?.stopTimes ?? []} fares={values?.stopFares ?? []} error={e?.stops?.[0]} />

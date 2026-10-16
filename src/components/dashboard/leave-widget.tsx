@@ -66,7 +66,8 @@ export function LeaveWidget({
             </span>
           </Link>
         ) : (
-          <TextLink href="/admin/leave">All leave</TextLink>
+          // From the dashboard the full list opens on approved leave; the Leave page itself starts on pending.
+          <TextLink href="/admin/leave?status=approved">All leave</TextLink>
         )
       }
       padded={false}
@@ -126,10 +127,13 @@ export function LeaveWidget({
   );
 }
 
+/** The request on the Leave page: searched by the person's ID and opened. */
+const leaveHref = (r: LeaveView) => (r.person.code ? `/admin/leave?status=all&q=${encodeURIComponent(r.person.code)}&open=${r.id}` : null);
+
 /** A request waiting for a decision, with approve / reject. */
 function LeaveRow({ r, today, decide }: { r: LeaveView; today: string; decide: Decide }) {
   const range = r.from === r.to ? formatISO(r.from, shortDate) : `${formatISO(r.from, shortDate)} – ${formatISO(r.to, shortDate)}`;
-  const href = r.person.href ? `/admin${r.person.href}` : null;
+  const href = leaveHref(r);
 
   return (
     <li className="flex flex-wrap items-start gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
@@ -166,7 +170,7 @@ function LeaveRow({ r, today, decide }: { r: LeaveView; today: string; decide: D
 
 /** Someone on leave (today or coming up), as a small tile in the grid. */
 function LeaveTile({ r, tab, today }: { r: LeaveView; tab: Tab; today: string }) {
-  const href = r.person.href ? `/admin${r.person.href}` : null;
+  const href = leaveHref(r);
   const when =
     tab === "today"
       ? r.to === today

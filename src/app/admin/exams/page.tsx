@@ -1,10 +1,9 @@
 import { ClipboardList, Plus } from "lucide-react";
-import { ExamList } from "@/components/exams/exam-list";
-import { Pagination } from "@/components/pagination";
-import { ButtonLink, Card, EmptyState, PageHeader, StatusTab } from "@/components/ui";
+import { ExamBoard } from "@/components/exams/exam-board";
+import { ButtonLink, Card, EmptyState, PageHeader, StatusTab, tabBarClass } from "@/components/ui";
+import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { listSummaries } from "@/lib/exams";
-import { paginate } from "@/lib/pagination";
 import { getCurrentSchool } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 
@@ -20,8 +19,8 @@ export default async function ExamsPage({ searchParams }: PageProps<"/admin/exam
     db.exam.count({ where: { ...base, kind: "EXAM" } }),
     db.exam.count({ where: { ...base, kind: "TEST" } }),
   ]);
-  const paging = paginate(params, tests ? testCount : examCount);
-  const exams = await listSummaries({ ...base, kind: tests ? "TEST" : "EXAM" }, paging);
+  // The whole session's list: searched and filtered on the page (a session has a few dozen at most).
+  const exams = await listSummaries({ ...base, kind: tests ? "TEST" : "EXAM" });
 
   return (
     <>
@@ -34,12 +33,14 @@ export default async function ExamsPage({ searchParams }: PageProps<"/admin/exam
           </ButtonLink>
         }
       />
-      <Card padded={false}>
-        <div className="flex gap-6 overflow-x-auto border-b border-line px-4 pt-4 text-sm font-medium sm:px-6">
-          <StatusTab href="/admin/exams" active={!tests} label="School exams" count={examCount} />
-          <StatusTab href="/admin/exams?kind=tests" active={tests} label="Teachers' tests" count={testCount} />
-        </div>
-        {exams.length === 0 ? (
+      <div className="mb-6 border-b border-line">
+        <nav aria-label="Exams or tests" className={tabBarClass}>
+          <StatusTab replace href="/admin/exams" active={!tests} label="School exams" count={examCount} />
+          <StatusTab replace href="/admin/exams?kind=tests" active={tests} label="Teachers' tests" count={testCount} />
+        </nav>
+      </div>
+      {exams.length === 0 ? (
+        <Card>
           <EmptyState
             icon={ClipboardList}
             title={tests ? "No class tests yet" : "No exams yet"}
@@ -56,16 +57,10 @@ export default async function ExamsPage({ searchParams }: PageProps<"/admin/exam
               )
             }
           />
-        ) : (
-          <ExamList
-            exams={exams}
-            href={(e) => `/admin/exams/${e.id}`}
-            printHref={(e) => `/admin/exams/${e.id}/print`}
-            showAuthor={tests}
-          />
-        )}
-        <Pagination paging={paging} noun={tests ? "tests" : "exams"} />
-      </Card>
+        </Card>
+      ) : (
+        <ExamBoard key={tests ? "tests" : "exams"} exams={exams} today={todayISO()} mode="exams" openBase="/admin/exams/" printBase="/admin/exams/" showAuthor={tests} />
+      )}
     </>
   );
 }

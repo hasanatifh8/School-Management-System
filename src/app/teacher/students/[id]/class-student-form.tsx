@@ -45,7 +45,7 @@ export function ClassStudentForm({
               </Field>
             </FormSection>
             <FormSection title="Contact">
-              <Field label="Phone" name="phone" errors={e}>
+              <Field label="Mobile number" name="phone" errors={e}>
                 <MobileInput name="phone" defaultValue={student.phone} />
               </Field>
               <Field label="Email" name="email" errors={e}>
@@ -53,7 +53,7 @@ export function ClassStudentForm({
               </Field>
               <div>
                 <span className="mb-1.5 block text-sm font-medium text-fg-2">WhatsApp number</span>
-                <SameAs name="whatsappSameAsPhone" label="Same as phone" initial={whatsappSameAsPhone} note="Uses the phone number above.">
+                <SameAs name="whatsappSameAsPhone" label="Same as mobile" initial={whatsappSameAsPhone} note="Uses the mobile number.">
                   <MobileInput name="whatsappNumber" label="WhatsApp number" defaultValue={student.whatsappNumber} />
                 </SameAs>
                 {e?.whatsappNumber?.[0] && <span className="mt-1.5 block text-xs font-medium text-danger">{e.whatsappNumber[0]}</span>}

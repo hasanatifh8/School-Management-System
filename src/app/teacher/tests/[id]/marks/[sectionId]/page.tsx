@@ -4,8 +4,9 @@ import { loadExam, teacherActor, teacherCanView } from "@/lib/exams";
 import { requireTeacher } from "@/lib/teacher-auth";
 import { publishTeacherResults, saveTeacherMarks, unpublishTeacherResults } from "../../../actions";
 
-export default async function TeacherMarksPage({ params }: PageProps<"/teacher/tests/[id]/marks/[sectionId]">) {
+export default async function TeacherMarksPage({ params, searchParams }: PageProps<"/teacher/tests/[id]/marks/[sectionId]">) {
   const { id, sectionId } = await params;
+  const { student } = await searchParams;
   const ctx = await requireTeacher();
   const exam = await loadExam(ctx.school.id, id);
   if (!exam || !teacherCanView(ctx, exam)) notFound();
@@ -14,6 +15,8 @@ export default async function TeacherMarksPage({ params }: PageProps<"/teacher/t
       actor={teacherActor(ctx)}
       exam={exam}
       sectionId={sectionId}
+      studentId={typeof student === "string" ? student : undefined}
+      marksHref={`/teacher/tests/${exam.id}/marks/${sectionId}`}
       crumbs={[
         { label: "Tests & exams", href: "/teacher/tests" },
         { label: exam.name, href: `/teacher/tests/${exam.id}` },

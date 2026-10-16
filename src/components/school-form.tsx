@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Save } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { LogoInput } from "@/components/logo-input";
+import { MobileInput } from "@/components/mobile-input";
 import { PasswordField } from "@/components/password-field";
 import { Select } from "@/components/select";
 import { buttonVariants, checkboxClass, FormActions, FormSection, inputClass, selectClass } from "@/components/ui";
@@ -145,8 +146,8 @@ export function SchoolForm({
             </FormSection>
 
             <FormSection title="Contact" description="Shown to parents and on printed documents later.">
-              <Field label="Phone" name="phone" errors={e}>
-                <input type="tel" name="phone" defaultValue={school?.phone ?? ""} className={inputClass} />
+              <Field label="Mobile number" name="phone" errors={e}>
+                <MobileInput name="phone" defaultValue={school?.phone} />
               </Field>
               <Field label="Email" name="email" errors={e}>
                 <input type="email" name="email" defaultValue={school?.email ?? ""} placeholder="office@school.edu.in" className={inputClass} />

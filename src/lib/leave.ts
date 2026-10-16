@@ -67,7 +67,7 @@ function canDecide(actor: LeaveActor, r: { applicant: LeaveApplicantKey; teacher
 }
 
 const include = {
-  student: { select: { id: true, firstName: true, middleName: true, lastName: true, sectionId: true, section: { include: { class: true } } } },
+  student: { select: { id: true, firstName: true, middleName: true, lastName: true, studentCode: true, sectionId: true, section: { include: { class: true } } } },
   teacher: { select: { id: true, firstName: true, middleName: true, lastName: true, employeeCode: true, specialization: true } },
   staff: { select: { id: true, name: true, designation: true, employeeCode: true, department: true } },
   attachment: { select: { fileName: true, mimeType: true, size: true } },
@@ -78,12 +78,12 @@ type Row = Prisma.LeaveRequestGetPayload<{ include: typeof include }>;
 function view(actor: LeaveActor, r: Row) {
   const person =
     r.applicant === "STUDENT" && r.student
-      ? { name: fullName(r.student), sub: r.student.section ? sectionLabel(r.student.section) : "No class", href: `/students/${r.student.id}` }
+      ? { name: fullName(r.student), sub: r.student.section ? sectionLabel(r.student.section) : "No class", href: `/students/${r.student.id}`, code: r.student.studentCode }
       : r.applicant === "TEACHER" && r.teacher
-        ? { name: fullName(r.teacher), sub: `Teacher · ${r.teacher.employeeCode}`, href: `/teachers/${r.teacher.id}` }
+        ? { name: fullName(r.teacher), sub: `Teacher · ${r.teacher.employeeCode}`, href: `/teachers/${r.teacher.id}`, code: r.teacher.employeeCode }
         : r.staff
-          ? { name: r.staff.name, sub: `${r.staff.designation} · ${r.staff.employeeCode}`, href: `/staff/${r.staff.id}` }
-          : { name: "Removed", sub: "", href: null };
+          ? { name: r.staff.name, sub: `${r.staff.designation} · ${r.staff.employeeCode}`, href: `/staff/${r.staff.id}`, code: r.staff.employeeCode }
+          : { name: "Removed", sub: "", href: null, code: null };
   const from = isoDate(r.fromDate);
   const to = isoDate(r.toDate);
   return {

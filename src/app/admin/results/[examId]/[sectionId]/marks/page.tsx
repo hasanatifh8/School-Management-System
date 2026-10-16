@@ -6,8 +6,9 @@ import { getCurrentSchool, getViewer } from "@/lib/school";
 import { publishExamResults, saveExamMarks, unpublishExamResults } from "../../../../exams/actions";
 
 /** Marks entry for one section, inside Marks & results. */
-export default async function SectionMarksPage({ params }: PageProps<"/admin/results/[examId]/[sectionId]/marks">) {
+export default async function SectionMarksPage({ params, searchParams }: PageProps<"/admin/results/[examId]/[sectionId]/marks">) {
   const { examId, sectionId } = await params;
+  const { student } = await searchParams;
   const school = await getCurrentSchool();
   const exam = await loadExam(school.id, examId);
   if (!exam) notFound();
@@ -20,6 +21,8 @@ export default async function SectionMarksPage({ params }: PageProps<"/admin/res
       actor={{ kind: "admin", schoolId: school.id, who: viewer?.kind === "admin" ? viewer.admin.name : "Power Admin" }}
       exam={exam}
       sectionId={sectionId}
+      studentId={typeof student === "string" ? student : undefined}
+      marksHref={`${base}/${sectionId}/marks`}
       crumbs={[
         { label: "Marks & results", href: exam.kind === "TEST" ? "/admin/results?kind=tests" : "/admin/results" },
         { label: exam.name, href: base },

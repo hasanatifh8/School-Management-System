@@ -4,8 +4,9 @@ import { canEdit, loadExam, printData, teacherActor, teacherCanView } from "@/li
 import { requireTeacher } from "@/lib/teacher-auth";
 import { saveTestPrintSettings } from "../../actions";
 
-export default async function TestPrintPage({ params }: PageProps<"/teacher/tests/[id]/print">) {
+export default async function TestPrintPage({ params, searchParams }: PageProps<"/teacher/tests/[id]/print">) {
   const { id } = await params;
+  const { from } = await searchParams;
   const ctx = await requireTeacher();
   const exam = await loadExam(ctx.school.id, id);
   if (!exam || !teacherCanView(ctx, exam)) notFound();
@@ -14,7 +15,8 @@ export default async function TestPrintPage({ params }: PageProps<"/teacher/test
     <TimetablePrint
       data={await printData(exam)}
       save={own ? saveTestPrintSettings.bind(null, exam.id) : undefined}
-      backHref={`/teacher/tests/${exam.id}`}
+      // Opened from the list's print icon: Back returns to the list, else to the test.
+      backHref={from === "list" ? "/teacher/tests" : `/teacher/tests/${exam.id}`}
     />
   );
 }

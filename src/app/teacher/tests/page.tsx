@@ -69,7 +69,7 @@ export default async function TeacherTestsPage({ searchParams }: PageProps<"/tea
           <ExamList
             exams={exams}
             href={(e) => `/teacher/tests/${e.id}`}
-            printHref={(e) => `/teacher/tests/${e.id}/print`}
+            printHref={(e) => `/teacher/tests/${e.id}/print?from=list`}
             showAuthor={schoolView}
           />
         )}

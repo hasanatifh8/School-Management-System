@@ -1,6 +1,7 @@
 import { KeyRound, MessageCircle, MessageSquareText, Send, TriangleAlert, Users } from "lucide-react";
+import { MobileInput } from "@/components/mobile-input";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
-import { Badge, Card, inputClass } from "@/components/ui";
+import { Badge, Card } from "@/components/ui";
 import { db } from "@/lib/db";
 import { providerById, type Channel } from "@/lib/messaging/providers";
 import { loadMessaging } from "@/lib/messaging/server";
@@ -44,8 +45,10 @@ export default async function MessagingSettingsPage() {
           <div className="mt-6 space-y-3 border-t border-line pt-5">
             <ActionForm action={sendTestMessage.bind(null, channel)} className="space-y-2">
               <Field label="Send a test message to" name="phone">
-                <div className="flex gap-2">
-                  <input name="phone" type="tel" placeholder="10-digit mobile" className={`${inputClass} max-w-52`} />
+                <div className="flex items-start gap-2">
+                  <div className="w-60">
+                    <MobileInput name="phone" required />
+                  </div>
                   <SubmitButton variant="secondary" size="sm" icon={<Send className="h-4 w-4" />}>
                     Send test
                   </SubmitButton>

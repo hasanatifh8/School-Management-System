@@ -81,11 +81,13 @@ export function TimetableEditor(props: Props) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  const [localError, setLocalError] = useState<string | null>(null);
   const cellError = (i: number, field: keyof PaperInput) => errors?.[`papers.${i}.${field}`]?.[0];
 
   /** Row edits keep other rows' errors; adding, removing or moving rows clears them (row numbers change). */
   const update = (i: number, patch: Partial<PaperInput>) => {
     setRows((r) => r.map((row, k) => (k === i ? { ...row, ...patch } : row)));
+    setLocalError(null);
     setErrors((e) => {
       const next = { ...e };
       for (const key of Object.keys(patch)) delete next[`papers.${i}.${key}`];
@@ -95,6 +97,7 @@ export function TimetableEditor(props: Props) {
   const restructure = (next: PaperInput[]) => {
     setRows(next);
     setErrors({});
+    setLocalError(null);
   };
 
   const addRow = () => {
@@ -114,7 +117,26 @@ export function TimetableEditor(props: Props) {
     return { first: usable.filter((s) => own.has(s.id)), rest: usable.filter((s) => !own.has(s.id)) };
   };
 
+  // Required cells, checked here first so a blank one is marked without a round trip (the server checks everything again).
   const save = () => {
+    const missing: Record<string, string[]> = {};
+    const need = (i: number, field: keyof PaperInput, message: string) => (missing[`papers.${i}.${field}`] = [message]);
+    rows.forEach((r, i) => {
+      if (!r.date) need(i, "date", "Choose a date");
+      if (!r.startTime) need(i, "startTime", "Choose a start time");
+      if (!r.endTime) need(i, "endTime", "Choose an end time");
+      if (!r.subjectId && !r.title.trim()) need(i, "subjectId", "Choose a subject or type a paper name");
+      if (r.practical && !r.subjectId) need(i, "subjectId", "Pick the subject this practical is for");
+      if (!r.maxMarks) need(i, "maxMarks", "Enter the max marks");
+      if (r.optional && !r.passMarks) need(i, "passMarks", "Enter the pass marks");
+    });
+    const bad = new Set(Object.keys(missing).map((k) => k.split(".")[1])).size;
+    if (bad) {
+      setErrors(missing);
+      setLocalError(`Fill in the marked fields in ${bad} row${bad === 1 ? "" : "s"}.`);
+      return;
+    }
+    setLocalError(null);
     const fd = new FormData();
     fd.set("papers", JSON.stringify(rows));
     startTransition(() => formAction(fd));
@@ -398,7 +420,7 @@ export function TimetableEditor(props: Props) {
 
       <div className="flex flex-col gap-3 border-t border-line px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
-          <FormMessage state={dirty && state.ok ? {} : state} />
+          <FormMessage state={localError ? { error: localError } : dirty && state.ok ? {} : state} />
         </div>
         <button type="button" onClick={save} disabled={pending || !dirty} className={buttonVariants.primary}>
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
