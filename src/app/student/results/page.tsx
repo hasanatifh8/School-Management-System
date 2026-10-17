@@ -1,5 +1,7 @@
 import { ExamsPanel, ReportCardPanel } from "@/components/student-profile/panels";
-import { PageHeader, StatusTab, tabBarClass } from "@/components/ui";
+import { Trophy } from "lucide-react";
+import { StudentBanner } from "@/components/student-portal/ui";
+import { StatusTab, tabBarClass } from "@/components/ui";
 import { loadPortalStudent, portalExams } from "../student-data";
 
 /** The student's exams (date sheets) and published report cards (?tab=exams, ?exam=). */
@@ -11,7 +13,7 @@ export default async function StudentResultsPage({ searchParams }: PageProps<"/s
   const selected = typeof sp.exam === "string" ? sp.exam : undefined;
   return (
     <>
-      <PageHeader title="Results" subtitle="Your report cards once results are published, and the date sheets of your exams and tests." />
+      <StudentBanner icon={Trophy} tone="amber" title="My results" subtitle="Report cards once results are published, and the date sheets of your exams and tests." />
       <div className="mb-6 border-b border-line">
         <nav aria-label="Results" className={tabBarClass}>
           <StatusTab replace href="/student/results" active={tab === "results"} label="Report cards" count={exams.filter((e) => e.resultPublishedAt).length} />

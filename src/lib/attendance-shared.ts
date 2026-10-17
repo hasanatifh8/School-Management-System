@@ -135,3 +135,14 @@ export function groupHolidays<T extends { id: string; date: Date; name: string }
   }
   return groups;
 }
+
+/** "Good morning" / "Good afternoon" / "Good evening", by the time in India. */
+export function greeting(now = new Date()) {
+  const hour = Number(new Intl.DateTimeFormat("en-IN", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Kolkata" }).format(now));
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+}
+
+/** The current time in India as "HH:MM" (24-hour). */
+export function nowHHMM(now = new Date()) {
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Asia/Kolkata" }).format(now);
+}

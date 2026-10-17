@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BookOpenText, CalendarCheck, FileBarChart, GraduationCap, KeyRound, LayoutDashboard, Plane } from "lucide-react";
+import { BookOpenText, CalendarCheck, CalendarClock, FileBarChart, GraduationCap, KeyRound, LayoutDashboard, Plane } from "lucide-react";
 import { NavTracker } from "@/components/nav-tracker";
 import { SchoolLogo } from "@/components/school-logo";
 import { AccountCard, AppShell, type NavGroup } from "@/components/ui";
@@ -28,6 +28,7 @@ export default async function StudentLayout({ children }: LayoutProps<"/student"
     {
       items: [
         { href: "/student", label: "Dashboard", icon: <LayoutDashboard />, exact: true },
+        { href: "/student/timetable", label: "Timetable", icon: <CalendarClock /> },
         { href: "/student/attendance", label: "Attendance", icon: <CalendarCheck /> },
         { href: "/student/results", label: "Results", icon: <FileBarChart /> },
         { href: "/student/leave", label: "Leave", icon: <Plane /> },

@@ -1,5 +1,6 @@
-import { AtSign, CalendarDays, Hash, School, Users } from "lucide-react";
-import { Card, InfoItem, PageHeader } from "@/components/ui";
+import { AtSign, CalendarDays, Hash, School, UserRound, Users } from "lucide-react";
+import { Card, InfoItem } from "@/components/ui";
+import { StudentBanner } from "@/components/student-portal/ui";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { requireStudent } from "@/lib/student-auth";
 import { StudentPasswordForm } from "./password-form";
@@ -10,7 +11,7 @@ export default async function StudentAccountPage() {
   const { student, school, section } = await requireStudent();
   return (
     <>
-      <PageHeader title="Account" subtitle="Your details and password." />
+      <StudentBanner icon={UserRound} tone="rose" title="My account" subtitle="Your details and password." />
       <div className="grid gap-6 xl:grid-cols-3">
         <Card title={fullName(student)} description={student.studentCode} className="self-start">
           <dl className="space-y-4">

@@ -2,7 +2,8 @@ import { CalendarRange, Hourglass, Plane, Undo2 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { LeaveForm } from "@/components/leave/leave-form";
 import { LeaveHistory } from "@/components/leave/leave-history";
-import { Card, PageHeader } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { StudentBanner } from "@/components/student-portal/ui";
 import { formatISO, shortDate, todayISO } from "@/lib/attendance-shared";
 import { personLeave } from "@/lib/leave";
 import { CATEGORY_LABELS } from "@/lib/leave-shared";
@@ -16,7 +17,7 @@ export default async function StudentLeavePage() {
   const waiting = leave.filter((r) => r.status === "PENDING");
   return (
     <>
-      <PageHeader title="Leave" subtitle="Apply for leave; your class teacher approves it. Approved leave shows as Leave in your attendance." />
+      <StudentBanner icon={Plane} tone="sky" title="My leave" subtitle="Apply for leave and your class teacher will approve it. Approved leave shows as Leave in your attendance." />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-6">
           {waiting.length > 0 && (
