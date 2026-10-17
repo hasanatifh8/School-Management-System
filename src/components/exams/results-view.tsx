@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PublishResultsButton } from "@/components/exams/publish-results-button";
+import type { ActionState } from "@/lib/action-state";
 import { BackLink } from "@/components/back-link";
 import { ArrowLeft, ChevronLeft, ChevronRight, FileBarChart, Lock, PenLine, Printer, TableProperties, Users } from "lucide-react";
 import { CardKeys } from "@/components/exams/card-keys";
@@ -28,10 +30,15 @@ export function ResultsView({
   back,
   marksHref,
   baseHref,
+  publish,
+  unpublish,
 }: {
   sheet: Sheet;
   school: SchoolHeader;
   mode: ResultsMode;
+  /** Publish / unpublish this section's results from here (for those allowed). */
+  publish?: () => Promise<ActionState>;
+  unpublish?: () => Promise<ActionState>;
   /** Where "Back" goes from the student list: one level up. */
   back: { href: string; label: string };
   marksHref: string;
@@ -169,6 +176,15 @@ export function ResultsView({
               <PenLine className="h-4 w-4" />
               {sheet.published ? "View marks" : "Enter marks"}
             </Link>
+            {sheet.access.canPublish && publish && unpublish && (
+              <PublishResultsButton
+                published={!!sheet.published}
+                missing={rows.filter((r) => r.result === "Incomplete").length}
+                section={sheet.section.label}
+                publish={publish}
+                unpublish={unpublish}
+              />
+            )}
             {isSheet ? (
               <>
                 <PdfDownloadButton root="result-sheet" fileName={fileBase("Result sheet")} />

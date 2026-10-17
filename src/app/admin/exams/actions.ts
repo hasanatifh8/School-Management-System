@@ -28,6 +28,8 @@ async function adminActor(): Promise<ExamActor> {
 const revalidate = () => {
   revalidatePath("/admin/exams", "layout");
   revalidatePath("/teacher", "layout");
+  revalidatePath("/admin/results", "layout");
+  revalidatePath("/student", "layout");
 };
 
 export async function createExam(_: ActionState, formData: FormData): Promise<ActionState> {

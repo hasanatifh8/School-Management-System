@@ -22,6 +22,8 @@ import { logActivity } from "@/lib/activity";
 
 const revalidate = () => {
   revalidatePath("/teacher", "layout");
+  revalidatePath("/admin/results", "layout");
+  revalidatePath("/student", "layout");
   revalidatePath("/admin/exams", "layout");
 };
 

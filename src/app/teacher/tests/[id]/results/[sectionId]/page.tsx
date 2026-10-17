@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ResultsPageContent } from "@/components/exams/marks-page";
 import { loadExam, teacherActor, teacherCanView } from "@/lib/exams";
 import { requireTeacher } from "@/lib/teacher-auth";
+import { publishTeacherResults, unpublishTeacherResults } from "../../../actions";
 
 export default async function TeacherResultsPage({ params, searchParams }: PageProps<"/teacher/tests/[id]/results/[sectionId]">) {
   const { id, sectionId } = await params;
@@ -16,6 +17,8 @@ export default async function TeacherResultsPage({ params, searchParams }: PageP
       params={await searchParams}
       marksHref={`/teacher/tests/${exam.id}/marks/${sectionId}`}
       baseHref={`/teacher/tests/${exam.id}/results/${sectionId}`}
+      publish={publishTeacherResults.bind(null, exam.id, sectionId)}
+      unpublish={unpublishTeacherResults.bind(null, exam.id, sectionId)}
     />
   );
 }

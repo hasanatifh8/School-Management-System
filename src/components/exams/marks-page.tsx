@@ -97,10 +97,14 @@ export async function ResultsPageContent({
   marksHref,
   baseHref,
   back,
+  publish,
+  unpublish,
 }: {
   actor: ExamActor;
   exam: LoadedExam;
   sectionId: string;
+  publish?: () => Promise<ActionState>;
+  unpublish?: () => Promise<ActionState>;
   /** The page's search params: ?view=sheet|all-cards or ?student=<id>[&do=print|pdf]. */
   params: Record<string, string | string[] | undefined>;
   marksHref: string;
@@ -137,6 +141,8 @@ export async function ResultsPageContent({
       back={back ?? { href: marksHref, label: "Back to marks" }}
       marksHref={marksHref}
       baseHref={baseHref}
+      publish={publish}
+      unpublish={unpublish}
     />
   );
 }

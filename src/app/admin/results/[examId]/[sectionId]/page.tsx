@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ResultsPageContent } from "@/components/exams/marks-page";
 import { loadExam } from "@/lib/exams";
 import { getCurrentSchool } from "@/lib/school";
+import { publishExamResults, unpublishExamResults } from "../../../exams/actions";
 
 /** Marks & results, step 3: a section's students and results (?student= opens one report card). */
 export default async function SectionResultsPage({ params, searchParams }: PageProps<"/admin/results/[examId]/[sectionId]">) {
@@ -19,6 +20,8 @@ export default async function SectionResultsPage({ params, searchParams }: PageP
       marksHref={`${base}/${sectionId}/marks`}
       baseHref={`${base}/${sectionId}`}
       back={{ href: base, label: `${exam.name}: all classes` }}
+      publish={publishExamResults.bind(null, exam.id, sectionId)}
+      unpublish={unpublishExamResults.bind(null, exam.id, sectionId)}
     />
   );
 }
