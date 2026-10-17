@@ -11,6 +11,7 @@ import { getCurrentSession } from "@/lib/sessions";
 import { findRollNumberClash, syncCurrentEnrollment } from "@/lib/enrollments";
 import { type ActionState, validationError } from "@/lib/action-state";
 import { studentSchema } from "./schema";
+import { logActivity, logged } from "@/lib/activity";
 
 /** Null when not chosen; undefined when the house doesn't belong to this school. */
 async function resolveHouse(schoolId: string, houseId: string | null) {
@@ -73,6 +74,7 @@ export async function createStudent(_: ActionState, formData: FormData): Promise
     }),
   );
 
+  await logActivity("Students", `Admitted ${fullName(student)} (${student.studentCode})`);
   revalidatePath("/admin", "layout");
   // Next: transport, then optional fees (each can be skipped).
   redirect(`/admin/students/new/${student.id}/transport`);
@@ -142,12 +144,12 @@ export async function updateStudent(
   });
 
   revalidatePath("/admin", "layout");
-  return {
+  return logged("Students", {
     ok: true,
     message: classChanged
       ? "Saved. Subjects were reset to the new class's curriculum."
       : "Saved.",
-  };
+  });
 }
 
 export async function setStudentSubjects(
@@ -172,22 +174,22 @@ export async function setStudentSubjects(
   ]);
 
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `${subjects.length} subject(s) allotted.` };
+  return logged("Students", { ok: true, message: `${subjects.length} subject(s) allotted.` });
 }
 
 /** "Remove" keeps the record (for history) but marks the student inactive. */
 export async function removeStudent(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
-  await findStudent(school.id, id);
+  const student = await findStudent(school.id, id);
   await db.student.update({ where: { id }, data: { status: "INACTIVE" } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Student removed." };
+  return logged("Students", { ok: true, message: "Student removed." }, `Removed student ${fullName(student)} (${student.studentCode})`);
 }
 
 export async function restoreStudent(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
-  await findStudent(school.id, id);
+  const student = await findStudent(school.id, id);
   await db.student.update({ where: { id }, data: { status: "ACTIVE" } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Student restored." };
+  return logged("Students", { ok: true, message: "Student restored." }, `Restored student ${fullName(student)} (${student.studentCode})`);
 }

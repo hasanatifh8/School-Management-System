@@ -8,6 +8,10 @@ import { Badge, Card, buttonVariants, inputClass, useConfirm } from "@/component
 import type { ActionState } from "@/lib/action-state";
 
 type Props = {
+  /** Who signs in with it: "teacher" or "student". */
+  noun?: "teacher" | "student";
+  title?: string;
+  description?: string;
   username: string | null;
   hasLogin: boolean;
   enabled: boolean;
@@ -18,8 +22,20 @@ type Props = {
   remove: () => Promise<ActionState>;
 };
 
-/** School admin's controls for a teacher's portal login. */
-export function TeacherLoginCard({ username, hasLogin, enabled, lastLoginAt, issue, changeUsername, setEnabled, remove }: Props) {
+/** School admin's controls for a teacher's or student's portal login. */
+export function PortalLoginCard({
+  noun = "teacher",
+  title = "Teacher login",
+  description = "Lets this teacher sign in to the teacher portal and see their own class.",
+  username,
+  hasLogin,
+  enabled,
+  lastLoginAt,
+  issue,
+  changeUsername,
+  setEnabled,
+  remove,
+}: Props) {
   // One action slot for the buttons, so the latest result (and new credentials) shows here.
   const [state, run, pending] = useActionState(
     async (_: ActionState, op: "issue" | "enable" | "disable" | "remove") =>
@@ -34,9 +50,9 @@ export function TeacherLoginCard({ username, hasLogin, enabled, lastLoginAt, iss
 
   return (
     <Card
-      title="Teacher login"
+      title={title}
       icon={LogIn}
-      description="Lets this teacher sign in to the teacher portal and see their own class."
+      description={description}
       action={hasLogin ? enabled ? <Badge tone="green" dot>On</Badge> : <Badge tone="red" dot>Off</Badge> : <Badge>Not set up</Badge>}
     >
       <div className="space-y-4 text-sm">
@@ -79,7 +95,7 @@ export function TeacherLoginCard({ username, hasLogin, enabled, lastLoginAt, iss
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => act("issue", "Create a new password? The teacher will be signed out and must use the new one.")}
+                onClick={() => act("issue", `Create a new password? The ${noun} will be signed out and must use the new one.`)}
                 className={`${buttonVariants.secondary} !py-2`}
               >
                 <KeyRound className="h-4 w-4" />
@@ -88,7 +104,7 @@ export function TeacherLoginCard({ username, hasLogin, enabled, lastLoginAt, iss
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => act(enabled ? "disable" : "enable", enabled ? "Turn off this teacher's login?" : undefined)}
+                onClick={() => act(enabled ? "disable" : "enable", enabled ? `Turn off this ${noun}'s login?` : undefined)}
                 className={`${buttonVariants.ghost} !py-2`}
               >
                 <Power className="h-4 w-4" />
@@ -97,7 +113,7 @@ export function TeacherLoginCard({ username, hasLogin, enabled, lastLoginAt, iss
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => act("remove", "Remove this login? The teacher can't sign in until you create a new one.")}
+                onClick={() => act("remove", `Remove this login? The ${noun} can't sign in until you create a new one.`)}
                 className={`${buttonVariants.dangerGhost} !py-2`}
               >
                 <Trash2 className="h-4 w-4" />

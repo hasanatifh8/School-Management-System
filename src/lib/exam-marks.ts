@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 import { formatMarks, gradeFor, paperName, parseMark, passes, type ResultStatus, paperIsFor } from "@/lib/exams-shared";
 import type { ExamActor, LoadedExam } from "@/lib/exams";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { logged } from "@/lib/activity";
 
 type ExamSectionRow = LoadedExam["sections"][number]["section"];
 
@@ -257,7 +258,7 @@ export async function saveMarksRecord(actor: ExamActor, exam: LoadedExam, sectio
     ),
   ]);
   const n = upserts.length + clears.length;
-  return { ok: true, message: `Saved ${n} mark${n === 1 ? "" : "s"}.` };
+  return logged("Exams", { ok: true, message: `Saved ${n} mark${n === 1 ? "" : "s"}.` });
 }
 
 /** Publishes a section's results once every mark is in. */
@@ -276,14 +277,14 @@ export async function publishResultsRecord(actor: ExamActor, exam: LoadedExam, s
     return { error: `${required - filled} mark(s) are still missing: ${list}. Enter them (AB for absent) before publishing.` };
   }
   await db.examResult.create({ data: { examId: exam.id, sectionId, publishedBy: actor.who } });
-  return { ok: true, message: `Results for ${sheet.section.label} are published. Marks are now locked.` };
+  return logged("Exams", { ok: true, message: `Results for ${sheet.section.label} are published. Marks are now locked.` }, `Published ${exam.name} results for ${sheet.section.label}`);
 }
 
 export async function unpublishResultsRecord(actor: ExamActor, exam: LoadedExam, sectionId: string): Promise<ActionState> {
   const sheet = await loadSheet(actor, exam, sectionId);
   if (!sheet?.access.canPublish) return { error: "Only the class teacher or a school admin can unpublish these results." };
   await db.examResult.deleteMany({ where: { examId: exam.id, sectionId } });
-  return { ok: true, message: "Results unpublished. Marks can be changed again." };
+  return logged("Exams", { ok: true, message: "Results unpublished. Marks can be changed again." }, `Unpublished ${exam.name} results for ${sheet.section.label}`);
 }
 
 /* ───────────────────────── Overview ───────────────────────── */

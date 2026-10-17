@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { Banknote, CircleCheck, Presentation, Undo2, Users } from "lucide-react";
+import { Banknote, CircleCheck, FileText, Presentation, SlidersHorizontal, Undo2, Users } from "lucide-react";
+import { PaySalaryForm } from "@/components/expenses/pay-salary-form";
+import { dayCount } from "@/lib/payroll-shared";
 import { MonthPicker } from "@/components/expenses/month-picker";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, EmptyState, inputClass, PagedList, selectClass } from "@/components/ui";
+import { Badge, ButtonLink, Card, checkboxClass, EmptyState, inputClass, PagedList, selectClass } from "@/components/ui";
 import { addMonths, todayISO } from "@/lib/attendance-shared";
 import { isMonth, loadPayroll, requireExpensesAccess } from "@/lib/expenses";
 import { MODE_LABELS, MONTH_NAMES, PAYMENT_MODES, rupees } from "@/lib/fees-shared";
@@ -47,17 +49,34 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
                     <p className="font-medium text-fg">{r.name}</p>
                     <p className="text-xs text-muted">{r.role}</p>
                   </div>
-                  <p className="text-sm tabular-nums text-muted">
-                    {r.salary ? (
-                      `${rupees(r.salary)}/mo`
+                  <div className="text-right text-sm tabular-nums text-muted">
+                    {r.pay ? (
+                      <>
+                        <p>
+                          <span className="font-medium text-fg">{rupees(r.pay.net)}</span>/mo net
+                        </p>
+                        {r.pay.deductions > 0 && (
+                          <p className="text-xs">
+                            {rupees(r.pay.gross)} − {rupees(r.pay.deductions)}
+                          </p>
+                        )}
+                      </>
                     ) : !r.payment ? (
-                      <Link href={r.type === "TEACHER" ? `/admin/teachers/${r.id}` : "/admin/staff"} className="text-warning underline">
+                      <Link href={r.type === "TEACHER" ? `/admin/teachers/${r.id}?tab=salary` : `/admin/staff/${r.id}?tab=salary`} className="text-warning underline">
                         Set salary
                       </Link>
                     ) : null}
-                  </p>
+                  </div>
+                  {!r.payment && r.pay && r.pay.lopDays > 0 && (
+                    <Badge tone="red" dot>
+                      {dayCount(r.pay.lopDays)} unpaid
+                    </Badge>
+                  )}
                   {r.payment ? (
                     <div className="flex items-center gap-2">
+                      <Link href={`/admin/payslips/${r.payment.id}`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-accent-text hover:bg-accent-soft">
+                        <FileText className="h-3.5 w-3.5" /> Slip
+                      </Link>
                       <Badge tone="green">
                         <CircleCheck className="h-3 w-3" />
                         {rupees(r.payment.amount)} · {dateFmt.format(r.payment.paidOn)} · {MODE_LABELS[r.payment.mode as keyof typeof MODE_LABELS]}
@@ -77,31 +96,7 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
                     <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-accent-text underline-offset-4 hover:underline">
                       <Banknote className="h-3.5 w-3.5" /> Pay {r.name.split(" ")[0]}
                     </summary>
-                    <ActionForm action={paySalary.bind(null, r.key, month)} className="mt-2 flex flex-wrap items-end gap-2">
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-fg-2">Amount (₹)</span>
-                        <input name="amount" inputMode="numeric" defaultValue={r.salary ?? ""} required className={`${inputClass} !w-32 !py-2`} />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-fg-2">Paid on</span>
-                        <input type="date" name="paidOn" defaultValue={today} max={today} required className={`${inputClass} !py-2`} />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-fg-2">Mode</span>
-                        <select name="mode" defaultValue="BANK_TRANSFER" className={`${selectClass} !w-40 !py-2`}>
-                          {PAYMENT_MODES.map((m) => (
-                            <option key={m} value={m}>
-                              {MODE_LABELS[m]}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block min-w-40 flex-1">
-                        <span className="mb-1 block text-xs font-medium text-fg-2">Note</span>
-                        <input name="note" maxLength={200} placeholder="e.g. 2 days leave deducted" className={`${inputClass} !py-2`} />
-                      </label>
-                      <SubmitButton size="sm">Mark paid</SubmitButton>
-                    </ActionForm>
+                    <PaySalaryForm action={paySalary.bind(null, r.key, month)} net={r.salary} lopDays={r.pay?.lopDays ?? 0} lopAmount={r.pay?.lopAmount ?? 0} today={today} />
                   </details>
                 )}
               </li>
@@ -122,7 +117,12 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
 
   return (
     <div className="space-y-6">
-      <MonthPicker basePath={`/admin/expenses/salaries?group=${active.key}`} month={month} max={addMonths(current, 1)} current={current} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <MonthPicker basePath={`/admin/expenses/salaries?group=${active.key}`} month={month} max={addMonths(current, 1)} current={current} />
+        <ButtonLink href="/admin/settings/payroll" variant="secondary" icon={SlidersHorizontal}>
+          Salary components
+        </ButtonLink>
+      </div>
 
       {/* One card per category; the chosen one is managed below. */}
       <div className="grid gap-4 md:grid-cols-2" role="tablist" aria-label="Staff category">
@@ -202,9 +202,15 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
                 ))}
               </select>
             </label>
+            {dueIn.some((r) => (r.pay?.lopDays ?? 0) > 0) && (
+              <label className="flex items-center gap-2 pb-2 text-xs text-fg-2" title="Absent days plus half of each half day, not on approved leave">
+                <input type="checkbox" name="deductLop" className={checkboxClass} />
+                Deduct unpaid days
+              </label>
+            )}
             <SubmitButton
               icon={<Banknote className="h-4 w-4" />}
-              confirm={`Pay ${dueIn.length} ${active.title.toLowerCase()} their full monthly salary (${rupees(sum(dueIn))}) for ${monthName}?`}
+              confirm={`Pay ${dueIn.length} ${active.title.toLowerCase()} their net salary (${rupees(sum(dueIn))} before any unpaid days) for ${monthName}?`}
             >
               Pay all {dueIn.length}
             </SubmitButton>

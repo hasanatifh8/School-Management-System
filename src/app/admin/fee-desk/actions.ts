@@ -12,6 +12,7 @@ import { getFeesAccess, loadStudentAccount, outstandingByStudent } from "@/lib/f
 import { PAYMENT_MODES, allocateBill, billOf, deskMonths, payBill, rupees } from "@/lib/fees-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { logged } from "@/lib/activity";
 
 export type DeskStudent = {
   id: string;
@@ -214,5 +215,5 @@ export async function waiveDues(studentId: string, _: ActionState, formData: For
   const total = months.reduce((n, m) => n + m.waived, 0);
   revalidatePath("/admin/fees", "layout");
   revalidatePath("/admin/fee-desk", "layout");
-  return { ok: true, message: `${rupees(total)} of previous dues waived (${saved.map((r) => r.number).join(", ")}).` };
+  return logged("Fees", { ok: true, message: `${rupees(total)} of previous dues waived (${saved.map((r) => r.number).join(", ")}).` });
 }

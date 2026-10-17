@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { ActionState } from "@/lib/action-state";
 import { db } from "@/lib/db";
-import { audit, deleteRemovedPeople, type PersonKind } from "@/lib/power-tools";
-import { getCurrentSchool, getViewer } from "@/lib/school";
+import { deleteRemovedPeople, type PersonKind } from "@/lib/power-tools";
+import { logActivity } from "@/lib/activity";
+import { getCurrentSchool } from "@/lib/school";
 
 const NOUNS: Record<PersonKind, [string, string]> = {
   student: ["student", "students"],
@@ -31,9 +32,7 @@ export async function deletePermanently(kind: PersonKind, id: string | null, _: 
   const [one, many] = NOUNS[kind];
   if (!deleted) return { error: id ? `Only a removed ${one} can be deleted permanently.` : `There are no removed ${many} to delete.` };
 
-  const viewer = await getViewer();
-  const who = viewer?.kind === "admin" ? `${viewer.admin.name} (school admin)` : "Power Admin";
-  await audit(`Removed ${many} deleted permanently`, school, `${deleted} ${deleted === 1 ? one : many} by ${who}`);
+  await logActivity(kind === "student" ? "Students" : kind === "teacher" ? "Teachers" : "Staff", `Permanently deleted ${deleted} removed ${deleted === 1 ? one : many}`);
   revalidatePath("/admin", "layout");
   if (id) redirect(`${LISTS[kind]}?status=removed`);
   return { ok: true, message: `Permanently deleted ${deleted} ${deleted === 1 ? one : many}.` };

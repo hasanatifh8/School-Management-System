@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { type ActionState, requiredText, validationError } from "@/lib/action-state";
+import { logged } from "@/lib/activity";
 
 const subjectSchema = z.object({
   name: requiredText("Subject name"),
@@ -26,7 +27,7 @@ export async function createSubject(_: ActionState, formData: FormData): Promise
   }
   await db.subject.create({ data: { schoolId: school.id, name, code } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `Added ${name}. Add it to classes from each class's page.` };
+  return logged("Classes", { ok: true, message: `Added ${name}. Add it to classes from each class's page.` });
 }
 
 export async function deleteSubject(id: string): Promise<ActionState> {
@@ -47,5 +48,5 @@ export async function deleteSubject(id: string): Promise<ActionState> {
   // Also removes it from class curricula and subject-teacher assignments.
   await db.subject.delete({ where: { id } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `Deleted ${subject.name}.` };
+  return logged("Classes", { ok: true, message: `Deleted ${subject.name}.` });
 }

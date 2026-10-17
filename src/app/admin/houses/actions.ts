@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { HOUSE_COLOR_KEYS, type HouseColor } from "@/lib/houses";
 import { type ActionState, optionalText, validationError } from "@/lib/action-state";
+import { logActivity, logged } from "@/lib/activity";
 
 const houseSchema = z.object({
   name: z.string().trim().min(1, "House name is required").max(60),
@@ -37,7 +38,7 @@ export async function createHouse(_: ActionState, formData: FormData): Promise<A
   }
   await db.house.create({ data: { ...parsed.data, schoolId: school.id } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `Added ${parsed.data.name}.` };
+  return logged("Settings", { ok: true, message: `Added ${parsed.data.name}.` });
 }
 
 export async function updateHouse(id: string, _: ActionState, formData: FormData): Promise<ActionState> {
@@ -50,14 +51,15 @@ export async function updateHouse(id: string, _: ActionState, formData: FormData
   }
   await db.house.update({ where: { id }, data: parsed.data });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Saved." };
+  return logged("Settings", { ok: true, message: "Saved." });
 }
 
 /** Deleting a house leaves its students without a house (they are not deleted). */
 export async function deleteHouse(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
-  await findHouse(school.id, id);
+  const house = await findHouse(school.id, id);
   await db.house.delete({ where: { id } });
+  await logActivity("Settings", `Deleted house ${house.name}`);
   revalidatePath("/admin", "layout");
   redirect("/admin/houses");
 }
@@ -78,7 +80,7 @@ export async function assignStudentsToHouse(
     data: { houseId },
   });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `${count} student(s) added to ${house.name}.` };
+  return logged("Settings", { ok: true, message: `${count} student(s) added to ${house.name}.` });
 }
 
 export async function removeStudentFromHouse(houseId: string, studentId: string): Promise<ActionState> {
@@ -89,5 +91,5 @@ export async function removeStudentFromHouse(houseId: string, studentId: string)
     data: { houseId: null },
   });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Removed from house." };
+  return logged("Settings", { ok: true, message: "Removed from house." });
 }

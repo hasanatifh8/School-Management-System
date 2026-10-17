@@ -12,6 +12,7 @@ import {
   type DocumentOwnerKind,
 } from "@/lib/document-types";
 import type { ActionState } from "@/lib/action-state";
+import { logged } from "@/lib/activity";
 
 const uploadSchema = z.object({
   type: z.string(),
@@ -79,7 +80,7 @@ export async function uploadDocument(
   });
 
   revalidatePath("/", "layout");
-  return { ok: true, message: `Uploaded “${title}”.` };
+  return logged("Documents", { ok: true, message: `Uploaded “${title}”.` });
 }
 
 export async function deleteDocument(documentId: string): Promise<ActionState> {
@@ -101,5 +102,5 @@ export async function deleteDocument(documentId: string): Promise<ActionState> {
   // Deleting the file cascades to the document row.
   await db.documentFile.delete({ where: { id: document.fileId } });
   revalidatePath("/", "layout");
-  return { ok: true, message: `Deleted “${document.title}”.` };
+  return logged("Documents", { ok: true, message: `Deleted “${document.title}”.` });
 }

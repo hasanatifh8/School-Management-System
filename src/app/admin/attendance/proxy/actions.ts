@@ -9,6 +9,7 @@ import { onLeave } from "@/lib/leave";
 import { timetableDay } from "@/lib/proxy";
 import { fullName } from "@/lib/queries";
 import { getCurrentSchool, getViewer } from "@/lib/school";
+import { logged } from "@/lib/activity";
 
 /**
  * Puts a free teacher in one period of an absent teacher's timetable on a date.
@@ -52,7 +53,7 @@ export async function assignProxy(_: ActionState, formData: FormData): Promise<A
     update: { proxyTeacherId: proxy.id, absentTeacherId: slot.teacherId, assignedBy },
   });
   revalidatePath("/", "layout");
-  return { ok: true, message: `${fullName(proxy)} takes ${slot.period.name} on ${formatISO(date, shortDate)}.` };
+  return logged("Attendance", { ok: true, message: `${fullName(proxy)} takes ${slot.period.name} on ${formatISO(date, shortDate)}.` });
 }
 
 export async function removeProxy(id: string): Promise<ActionState> {
@@ -60,5 +61,5 @@ export async function removeProxy(id: string): Promise<ActionState> {
   const { count } = await db.proxyAssignment.deleteMany({ where: { id, schoolId: school.id } });
   if (!count) return { error: "Proxy not found." };
   revalidatePath("/", "layout");
-  return { ok: true, message: "Proxy removed." };
+  return logged("Attendance", { ok: true, message: "Proxy removed." });
 }

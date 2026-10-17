@@ -44,7 +44,7 @@ export default async function PowerDashboard({ searchParams }: PageProps<"/power
     }),
     storageBySchool(),
     systemInfo(),
-    db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8 }),
+    db.auditLog.findMany({ where: { OR: [{ category: null }, { category: "Sign-in", action: { contains: "failed" } }] }, orderBy: { createdAt: "desc" }, take: 8 }),
   ]);
   const activeIds = schools.filter((s) => s.status === "ACTIVE").map((s) => s.id);
   const currentId = current && activeIds.includes(current) ? current : activeIds[0];

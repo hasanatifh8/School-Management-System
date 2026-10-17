@@ -18,6 +18,7 @@ import type { PrintSettings } from "@/lib/exams-shared";
 import { publishResultsRecord, saveMarksRecord, unpublishResultsRecord } from "@/lib/exam-marks";
 import { getCurrentSession } from "@/lib/sessions";
 import { requireTeacher } from "@/lib/teacher-auth";
+import { logActivity } from "@/lib/activity";
 
 const revalidate = () => {
   revalidatePath("/teacher", "layout");
@@ -37,6 +38,7 @@ export async function createTest(_: ActionState, formData: FormData): Promise<Ac
   const session = await getCurrentSession(ctx.school.id);
   const result = await createExamRecord(teacherActor(ctx), session.id, formData);
   if (!result.id) return result.state!;
+  await logActivity("Exams", `Created test ${String(formData.get("name") ?? "").trim()}`);
   revalidate();
   redirect(`/teacher/tests/${result.id}`);
 }
@@ -69,6 +71,7 @@ export async function deleteTest(id: string): Promise<ActionState> {
   const own = await ownTest(id);
   if (!own) return { error: "You can only delete your own tests." };
   await db.exam.delete({ where: { id: own.exam.id } });
+  await logActivity("Exams", `Deleted test ${own.exam.name}`);
   revalidate();
   redirect("/teacher/tests");
 }

@@ -196,7 +196,7 @@ export function TeacherForm({
                   className={inputClass}
                 />
               </Field>
-              <Field label="Monthly salary (₹)" name="monthlySalary" errors={e} hint="Whole rupees, e.g. 45000.">
+              <Field label="Basic pay (₹ a month)" name="monthlySalary" errors={e} hint="Whole rupees, e.g. 45000. Earnings like HRA and deductions like PF are on the profile's Salary tab.">
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-subtle">₹</span>
                   <input

@@ -9,6 +9,7 @@ import { getCurrentSchool } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 import { assignStudentTransport, ensureTransportFee, readFeeRange } from "@/lib/transport-fees";
 import { sessionMonths } from "@/lib/fees-shared";
+import { logActivity, logged } from "@/lib/activity";
 
 const MAX_STOPS = 40;
 
@@ -99,13 +100,15 @@ export async function saveRoute(id: string | null, _: ActionState, formData: For
   await ensureTransportFee(school.id, (await getCurrentSession(school.id)).id);
   revalidatePath("/", "layout");
   if (!id) redirect("/admin/transport");
-  return { ok: true, message: "Route saved." };
+  return logged("Transport", { ok: true, message: "Route saved." });
 }
 
 export async function deleteRoute(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
+  const route = await db.transportRoute.findFirst({ where: { id, schoolId: school.id }, select: { routeNumber: true } });
   const { count } = await db.transportRoute.deleteMany({ where: { id, schoolId: school.id } });
   if (!count) return { error: "Route not found." };
+  await logActivity("Transport", `Deleted bus route ${route?.routeNumber ?? ""}`);
   revalidatePath("/", "layout");
   redirect("/admin/transport");
 }

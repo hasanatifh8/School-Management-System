@@ -78,8 +78,9 @@ export function PersonAttendanceView({
   /** Columns are the cells' labels, then %. */
   monthRows: AttendanceMonthRow[];
   monthHref: (month: string) => string;
-  registerHref: string;
-  registerLabel: string;
+  /** Link to the whole group's register; left out where the viewer can't open it (teacher portal). */
+  registerHref?: string;
+  registerLabel?: string;
 }) {
   const prev = month > minMonth ? addMonths(month, -1) : null;
   const next = month < maxMonth ? addMonths(month, 1) : null;
@@ -181,9 +182,11 @@ export function PersonAttendanceView({
               <span className="inline-block h-3 w-3 rounded border border-dashed border-line-strong" /> Not marked
             </span>
           )}
-          <Link href={registerHref} className="ml-auto font-medium text-accent-text hover:underline">
-            {registerLabel}
-          </Link>
+          {registerHref && (
+            <Link href={registerHref} className="ml-auto font-medium text-accent-text hover:underline">
+              {registerLabel}
+            </Link>
+          )}
         </div>
       </Card>
 

@@ -12,6 +12,7 @@ import { readDocumentUpload } from "@/lib/documents";
 import { ATTACHMENT_TYPES } from "@/lib/notices-shared";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
+import { logActivity, logged } from "@/lib/activity";
 
 const DAY = 86_400_000;
 
@@ -99,14 +100,16 @@ export async function saveCalendarEvent(id: string | null, _: ActionState, formD
   }
   revalidatePath("/", "layout");
   if (!id) redirect(`/admin/calendar?month=${startDate.slice(0, 7)}`);
-  return { ok: true, message: "Entry saved." };
+  return logged("Calendar", { ok: true, message: "Entry saved." });
 }
 
 export async function deleteCalendarEvent(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
+  const event = await db.calendarEvent.findFirst({ where: { id, schoolId: school.id }, select: { title: true } });
   // Holiday days it added go with it (cascade).
   const { count } = await db.calendarEvent.deleteMany({ where: { id, schoolId: school.id } });
   if (!count) return { error: "Entry not found." };
+  await logActivity("Calendar", `Deleted calendar entry “${event?.title ?? ""}”`);
   revalidatePath("/", "layout");
   redirect("/admin/calendar");
 }
@@ -122,8 +125,8 @@ export async function publishCalendar(): Promise<ActionState> {
   });
   revalidatePath("/", "layout");
   const holidays = drafts.filter((e) => e.type === "HOLIDAY").length;
-  return {
+  return logged("Calendar", {
     ok: true,
     message: `Published ${drafts.length} entr${drafts.length === 1 ? "y" : "ies"}. Teachers can see the calendar now.${holidays ? ` ${holidays} holiday(s) added to attendance.` : ""}`,
-  };
+  });
 }

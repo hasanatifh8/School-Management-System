@@ -36,6 +36,7 @@ import { paginate } from "@/lib/pagination";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { getCurrentSession } from "@/lib/sessions";
 import type { TeacherContext } from "@/lib/teacher-auth";
+import { logged } from "@/lib/activity";
 
 export type LeaveActor =
   | { kind: "admin"; schoolId: string; who: string }
@@ -334,10 +335,58 @@ export async function createLeaveRecord(actor: LeaveActor, formData: FormData): 
   });
   if (approveNow) await applyApprovedLeave(created);
   const days = leaveDays(v.fromDate, v.toDate);
-  return {
+  return logged("Leave", {
     ok: true,
     message: `${APPLICANT_LABELS[v.applicant]} leave for ${days} day${days === 1 ? "" : "s"} ${approveNow ? "added and approved" : "submitted for approval"}.`,
-  };
+  });
+}
+
+/**
+ * A student applies for their own leave from the student portal. It waits for
+ * their class teacher (or a school admin) to decide, like any other request.
+ */
+export async function createStudentLeaveRecord(student: { id: string; schoolId: string; firstName: string; lastName: string }, formData: FormData): Promise<ActionState> {
+  const raw = { ...Object.fromEntries(formData), applicant: "STUDENT", personId: student.id };
+  const parsed = requestSchema.safeParse(raw);
+  if (!parsed.success) return validationError(parsed.error);
+  const v = parsed.data;
+  let upload: Awaited<ReturnType<typeof readDocumentUpload>> | null = null;
+  const file = formData.get("attachment");
+  if (file instanceof File && file.size > 0) {
+    upload = await readDocumentUpload(formData, "attachment");
+    const bad = "error" in upload ? (upload.error.startsWith("Only ") ? "Attach a PDF, JPG, PNG or WebP file." : upload.error) : !INLINE_TYPES.has(upload.file.mimeType) ? "Attach a PDF, JPG, PNG or WebP file." : null;
+    if (bad) return { error: bad, fieldErrors: { attachment: [bad] } };
+  }
+  const from = parseISODate(v.fromDate)!;
+  const to = parseISODate(v.toDate)!;
+  const overlap = await db.leaveRequest.findFirst({ where: { schoolId: student.schoolId, studentId: student.id, status: { not: "REJECTED" }, fromDate: { lte: to }, toDate: { gte: from } } });
+  if (overlap) {
+    const message = `You already have a ${overlap.status === "PENDING" ? "pending" : "approved"} request from ${isoDate(overlap.fromDate)} to ${isoDate(overlap.toDate)}.`;
+    return { error: message, fieldErrors: { fromDate: [message] } };
+  }
+  await db.leaveRequest.create({
+    data: {
+      schoolId: student.schoolId,
+      applicant: "STUDENT",
+      studentId: student.id,
+      fromDate: from,
+      toDate: to,
+      category: v.category,
+      description: v.description,
+      requestedBy: `${student.firstName} ${student.lastName} (student)`,
+      ...(upload && "file" in upload && { attachment: { create: upload.file } }),
+    },
+  });
+  const days = leaveDays(v.fromDate, v.toDate);
+  return logged("Leave", { ok: true, message: `Leave for ${days} day${days === 1 ? "" : "s"} sent to your class teacher.` }, `Applied for ${days} day${days === 1 ? "" : "s"} of leave (${v.fromDate} to ${v.toDate})`);
+}
+
+/** A student withdraws their own request while it's still waiting. */
+export async function withdrawStudentLeaveRecord(studentId: string, id: string): Promise<ActionState> {
+  const r = await db.leaveRequest.findFirst({ where: { id, studentId, status: "PENDING" } });
+  if (!r) return { error: "Only a request that is still waiting can be withdrawn." };
+  await db.leaveRequest.delete({ where: { id } });
+  return logged("Leave", { ok: true, message: "Leave request withdrawn." }, `Withdrew leave request (${isoDate(r.fromDate)} to ${isoDate(r.toDate)})`);
 }
 
 /* ───────────────────────── Deciding ───────────────────────── */
@@ -423,14 +472,14 @@ export async function decideLeaveRecord(actor: LeaveActor, id: string, approve: 
     data: { status: approve ? "APPROVED" : "REJECTED", decidedBy, decidedAt: new Date(), decisionNote: note },
   });
   if (approve) await applyApprovedLeave(r);
-  return { ok: true, message: `${view(actor, r).person.name}'s leave ${approve ? "approved" : "rejected"}.` };
+  return logged("Leave", { ok: true, message: `${view(actor, r).person.name}'s leave ${approve ? "approved" : "rejected"}.` });
 }
 
 export async function withdrawLeaveRecord(actor: LeaveActor, id: string): Promise<ActionState> {
   const r = await db.leaveRequest.findFirst({ where: { AND: [visibleWhere(actor), { id }] }, include });
   if (!r || !view(actor, r).canWithdraw) return { error: "You can't remove this request." };
   await db.leaveRequest.delete({ where: { id } });
-  return { ok: true, message: r.status === "PENDING" ? "Leave request withdrawn." : "Leave request deleted." };
+  return logged("Leave", { ok: true, message: r.status === "PENDING" ? "Leave request withdrawn." : "Leave request deleted." }, `${r.status === "PENDING" ? "Withdrew" : "Deleted"} ${view(actor, r).person.name}'s leave (${isoDate(r.fromDate)} to ${isoDate(r.toDate)})`);
 }
 
 /* ───────────────────────── Dashboard ───────────────────────── */
@@ -521,7 +570,7 @@ export async function saveAllowanceRecords(schoolId: string, formData: FormData)
     }
   }
   await db.$transaction(writes);
-  return { ok: true, message: "Leave allowances saved." };
+  return logged("Leave", { ok: true, message: "Leave allowances saved." });
 }
 
 export type BalanceRow = { category: LeaveCategoryKey; allowed: number | null; used: number; pending: number };
@@ -635,7 +684,7 @@ export async function bulkApproveRecords(actor: LeaveActor, ids: string[]): Prom
     else if (r.error) failed.push(r.error);
   }
   if (!ok) return { error: failed[0] ?? "Nothing was approved." };
-  return { ok: true, message: `Approved ${ok} request${ok === 1 ? "" : "s"}${failed.length ? `; ${failed.length} couldn't be approved` : ""}.` };
+  return logged("Leave", { ok: true, message: `Approved ${ok} request${ok === 1 ? "" : "s"}${failed.length ? `; ${failed.length} couldn't be approved` : ""}.` });
 }
 
 /** Whether the actor may see this request (and its attachment). */

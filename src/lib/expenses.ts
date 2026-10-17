@@ -2,6 +2,8 @@ import "server-only";
 import { addMonths, monthDates, parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { fullName } from "@/lib/queries";
+import { loadComponents, loadOwnValues, monthLop, monthSalary } from "@/lib/payroll";
+import type { SlipLine } from "@/lib/payroll-shared";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 
 /** Expenses are for school admins and Power Admin only. */
@@ -53,30 +55,43 @@ export type PayrollRow = {
   id: string;
   name: string;
   role: string;
+  /** Net pay for the month from their salary structure (before unpaid days); null without basic pay. */
   salary: number | null;
+  /** The month's slip: lines, gross, deductions, net, and unpaid days with what they'd take off. */
+  pay: { lines: SlipLine[]; gross: number; deductions: number; net: number; lopDays: number; lopAmount: number } | null;
   payment: { id: string; amount: number; paidOn: Date; mode: string; note: string | null } | null;
 };
 
 /** Everyone to pay this month: active teachers and staff, plus anyone already paid for it. */
 export async function loadPayroll(schoolId: string, month: string): Promise<PayrollRow[]> {
-  const [teachers, staff, payments] = await Promise.all([
+  const [teachers, staff, payments, components, own, lop] = await Promise.all([
     db.teacher.findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: [{ firstName: "asc" }], select: { id: true, firstName: true, middleName: true, lastName: true, specialization: true, monthlySalary: true } }),
     db.staffMember.findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: [{ name: "asc" }] }),
     db.salaryPayment.findMany({ where: { schoolId, month } }),
+    loadComponents(schoolId),
+    loadOwnValues(schoolId),
+    monthLop(schoolId, month, todayISO()),
   ]);
+  const payFor = (key: string, basic: number | null) => monthSalary(basic, components, own.get(key), lop.get(key) ?? 0, month);
   const byTeacher = new Map(payments.filter((p) => p.teacherId).map((p) => [p.teacherId!, p]));
   const byStaff = new Map(payments.filter((p) => p.staffId).map((p) => [p.staffId!, p]));
   const pick = (p: (typeof payments)[number] | undefined) => (p ? { id: p.id, amount: p.amount, paidOn: p.paidOn, mode: p.mode, note: p.note } : null);
 
   const rows: PayrollRow[] = [
-    ...teachers.map((t) => ({ key: `T:${t.id}`, type: "TEACHER" as const, id: t.id, name: fullName(t), role: t.specialization ? `Teacher · ${t.specialization}` : "Teacher", salary: t.monthlySalary, payment: pick(byTeacher.get(t.id)) })),
-    ...staff.map((s) => ({ key: `S:${s.id}`, type: "STAFF" as const, id: s.id, name: s.name, role: s.designation, salary: s.monthlySalary, payment: pick(byStaff.get(s.id)) })),
+    ...teachers.map((t) => {
+      const pay = payFor(`T:${t.id}`, t.monthlySalary);
+      return { key: `T:${t.id}`, type: "TEACHER" as const, id: t.id, name: fullName(t), role: t.specialization ? `Teacher · ${t.specialization}` : "Teacher", salary: pay?.net ?? null, pay, payment: pick(byTeacher.get(t.id)) };
+    }),
+    ...staff.map((s) => {
+      const pay = payFor(`S:${s.id}`, s.monthlySalary);
+      return { key: `S:${s.id}`, type: "STAFF" as const, id: s.id, name: s.name, role: s.designation, salary: pay?.net ?? null, pay, payment: pick(byStaff.get(s.id)) };
+    }),
   ];
   // People paid this month who have since left (or whose record was deleted).
   const listed = new Set(rows.map((r) => r.key));
   for (const p of payments) {
     const key = p.teacherId ? `T:${p.teacherId}` : p.staffId ? `S:${p.staffId}` : `P:${p.id}`;
-    if (!listed.has(key)) rows.push({ key, type: p.payeeType, id: p.teacherId ?? p.staffId ?? p.id, name: p.name, role: p.role, salary: null, payment: pick(p) });
+    if (!listed.has(key)) rows.push({ key, type: p.payeeType, id: p.teacherId ?? p.staffId ?? p.id, name: p.name, role: p.role, salary: null, pay: null, payment: pick(p) });
   }
   return rows;
 }

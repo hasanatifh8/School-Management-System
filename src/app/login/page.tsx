@@ -5,6 +5,7 @@ import { AuthLayout } from "@/components/auth-layout";
 import { getLoginSchool } from "@/lib/login-school";
 import { getViewer } from "@/lib/school";
 import { getSignedInTeacher } from "@/lib/teacher-auth";
+import { getSignedInStudent } from "@/lib/student-auth";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Sign in · Scholdesk" };
@@ -13,8 +14,9 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   if (await getViewer()) redirect("/admin");
   if (await getSignedInTeacher()) redirect("/teacher");
+  if (await getSignedInStudent()) redirect("/student");
   const params = await searchParams;
-  const role = params.role === "teacher" ? "teacher" : "admin";
+  const role = params.role === "teacher" ? "teacher" : params.role === "student" ? "student" : "admin";
   const school = await getLoginSchool(params.school);
   return (
     <AuthLayout
@@ -23,7 +25,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       subtitle={school ? `Sign in to ${school.name}.` : "Sign in to your school's Scholdesk portal."}
       footer={
         <>
-          Forgot your password? Teachers and cashiers: ask your school admin. School admins: ask your Power Admin.{" "}
+          Forgot your password? Students, teachers and cashiers: ask your school admin. School admins: ask your Power Admin.{" "}
           <Link href="/power/login" className="font-medium text-fg-2 underline-offset-4 hover:text-accent-text hover:underline">
             Power Admin sign-in
           </Link>

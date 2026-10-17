@@ -5,7 +5,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { MODE_LABELS, MONTH_NAMES, bookPayments, deskMonths, monthLabel, dueKey, dueTotals, headAmount, rupees, stopFare, studentDues, type DueItem, type FeeHeadInfo } from "@/lib/fees-shared";
-import { getPortalSchool, getViewer } from "@/lib/school";
+import { getFeeCollector, getPortalSchool, getViewer } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 import { ensureTransportFee } from "@/lib/transport-fees";
 
@@ -18,16 +18,22 @@ const isoDate = (d: Date) => d.toISOString().slice(0, 10);
  */
 export const getFeesAccess = cache(async () => {
   const school = await getPortalSchool();
-  const viewer = (await getViewer())!;
+  const viewer = await getViewer();
   const session = await getCurrentSession(school.id);
   // Bus riders pay their stop's fare through a fee the school never sets up by hand.
   await ensureTransportFee(school.id, session.id);
-  const staff = viewer.kind === "admin" ? viewer.admin : null;
+  // No admin sign-in: a teacher allowed to collect fees (getPortalSchool let nobody else through).
+  const collector = viewer ? null : await getFeeCollector();
+  const staff = viewer?.kind === "admin" ? viewer.admin : null;
   return {
     school,
     session,
-    canManage: !staff || staff.role === "ADMIN",
-    who: staff ? `${staff.name}${staff.role === "ADMIN" ? "" : " (cashier)"}` : "Power Admin",
+    canManage: !collector && (!staff || staff.role === "ADMIN"),
+    who: collector
+      ? `${[collector.firstName, collector.lastName].filter(Boolean).join(" ")} (teacher)`
+      : staff
+        ? `${staff.name}${staff.role === "ADMIN" ? "" : " (cashier)"}`
+        : "Power Admin",
     today: todayISO(),
   };
 });

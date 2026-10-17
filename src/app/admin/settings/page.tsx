@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  Banknote,
   Bell,
   BookOpen,
   CalendarDays,
@@ -51,6 +52,7 @@ const groups: { title: string; items: Item[] }[] = [
     items: [
       { href: "/admin/fees/structure", icon: ListTree, tone: "emerald", title: "Fee structure", text: "Fee heads and amounts per class" },
       { href: "/admin/expenses/budget", icon: Target, tone: "amber", title: "Monthly budgets", text: "Spending limits by category" },
+      { href: "/admin/settings/payroll", icon: Banknote, tone: "emerald", title: "Payroll", text: "Salary components: HRA, DA, PF and more" },
     ],
   },
   {

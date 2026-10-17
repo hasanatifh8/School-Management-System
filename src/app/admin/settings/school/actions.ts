@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { type ActionState, validationError } from "@/lib/action-state";
 import { db } from "@/lib/db";
 import { readPhotoUpload } from "@/lib/photos";
-import { audit } from "@/lib/power-tools";
-import { getCurrentSchool, getViewer } from "@/lib/school";
+import { getCurrentSchool } from "@/lib/school";
 import { schoolSchema } from "@/lib/school-schema";
+import { logged } from "@/lib/activity";
 
 // The code identifies the school across the system; only Power Admin changes it.
 const detailsSchema = schoolSchema.omit({ code: true });
@@ -27,8 +27,6 @@ export async function saveSchoolDetails(_: ActionState, formData: FormData): Pro
       await tx.schoolLogo.deleteMany({ where: { schoolId: school.id } });
     }
   });
-  const viewer = await getViewer();
-  await audit("School details updated", { id: school.id, name: parsed.data.name }, viewer?.kind === "admin" ? `By ${viewer.admin.email}` : undefined);
   revalidatePath("/", "layout");
-  return { ok: true, message: "School details saved." };
+  return logged("Settings", { ok: true, message: "School details saved." }, "School details updated");
 }

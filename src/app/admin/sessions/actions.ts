@@ -9,6 +9,7 @@ import { getCurrentSchool } from "@/lib/school";
 import { ensureNextSession, getCurrentSession, pendingPromotions } from "@/lib/sessions";
 import type { ActionState } from "@/lib/action-state";
 import { isoDate, parseISODate, todayISO } from "@/lib/attendance-shared";
+import { logActivity, logged } from "@/lib/activity";
 
 // Promotion writes many rows; allow more than Prisma's 5 s default.
 const LONG_TX = { timeout: 60_000, maxWait: 10_000 };
@@ -19,7 +20,7 @@ export async function beginPromotion(): Promise<ActionState> {
   const current = await getCurrentSession(school.id);
   const next = await db.$transaction((tx) => ensureNextSession(tx, school.id, current));
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `Session ${next.name} is ready. Promote each class below.` };
+  return logged("Settings", { ok: true, message: `Session ${next.name} is ready. Promote each class below.` });
 }
 
 type Decision =
@@ -100,7 +101,7 @@ export async function promoteClass(classId: string, _: ActionState, formData: Fo
   ].filter(Boolean);
 
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `${schoolClass.name} saved for ${next.name}: ${parts.join(", ")}.` };
+  return logged("Settings", { ok: true, message: `${schoolClass.name} saved for ${next.name}: ${parts.join(", ")}.` });
 }
 
 /**
@@ -167,6 +168,7 @@ export async function startNextSession(sessionId: string): Promise<ActionState> 
     await tx.academicSession.update({ where: { id: next.id }, data: { status: "CURRENT" } });
   }, { timeout: 120_000, maxWait: 10_000 });
 
+  await logActivity("Settings", `Started session ${next.name}`, `Session ${current.name} closed`);
   revalidatePath("/admin", "layout");
   redirect("/admin/sessions?started=1");
 }
@@ -245,5 +247,5 @@ export async function updateSessionDates(sessionId: string, _: ActionState, form
 
   await db.academicSession.update({ where: { id: session.id }, data: { startDate: parseISODate(start)!, endDate: parseISODate(end)! } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `${session.name} now runs ${show(start)} – ${show(end)}.` };
+  return logged("Settings", { ok: true, message: `${session.name} now runs ${show(start)} – ${show(end)}.` });
 }

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSignedInAdmin } from "@/lib/admin-auth";
 import { hasPowerSession } from "@/lib/power-auth";
+import { getSignedInTeacher } from "@/lib/teacher-auth";
 
 /** Cookie holding the school the Admin Portal is working on (set by Power Admin). */
 export const CURRENT_SCHOOL_COOKIE = "current_school";
@@ -16,11 +17,16 @@ export const CURRENT_SCHOOL_COOKIE = "current_school";
  *
  * - Power Admin signed in → the school chosen in Power Admin (or the oldest active one).
  * - School admin / staff signed in → their own school, nothing else.
+ * - A teacher allowed to collect fees (no admin sign-in) → their school; only Fees pages let them in.
  * - Otherwise → redirected to /login.
  */
 export const getPortalSchool = cache(async () => {
   const viewer = await getViewer();
-  if (!viewer) redirect("/login");
+  if (!viewer) {
+    const collector = await getFeeCollector();
+    if (collector) return collector.school;
+    redirect("/login");
+  }
   if (viewer.kind === "admin") return viewer.admin.school;
 
   const chosen = (await cookies()).get(CURRENT_SCHOOL_COOKIE)?.value;
@@ -40,8 +46,20 @@ export const getPortalSchool = cache(async () => {
 export const getCurrentSchool = cache(async () => {
   const school = await getPortalSchool();
   const viewer = await getViewer();
-  if (viewer?.kind === "admin" && viewer.admin.role !== "ADMIN") redirect("/admin/fees");
+  // Fees staff, and teachers who collect fees, may only use the Fees pages.
+  if (!viewer) redirect("/admin/fee-desk");
+  if (viewer.kind === "admin" && viewer.admin.role !== "ADMIN") redirect("/admin/fees");
   return school;
+});
+
+/**
+ * A signed-in teacher allowed to collect fees, when no admin or Power Admin is
+ * signed in. They use the Fee desk and Fees pages as a cashier; everywhere else
+ * they are still just a teacher (getViewer() stays null for them).
+ */
+export const getFeeCollector = cache(async () => {
+  const teacher = await getSignedInTeacher();
+  return teacher?.canCollectFees ? teacher : null;
 });
 
 /** Who is using the Admin Portal: Power Admin (takes precedence) or a school admin. */

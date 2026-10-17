@@ -4,9 +4,10 @@ import "server-only";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import type { PaymentModeKey } from "@/lib/fees-shared";
-import { deskMonth, dueKey, lateLeftIn, monthLabel, type BillLine } from "@/lib/fees-shared";
+import { MODE_LABELS, deskMonth, dueKey, lateLeftIn, monthLabel, type BillLine } from "@/lib/fees-shared";
 import { type getFeesAccess, type loadStudentAccount, nextReceiptNumber } from "@/lib/fees";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { logActivity } from "@/lib/activity";
 
 type Account = NonNullable<Awaited<ReturnType<typeof loadStudentAccount>>>;
 type Access = Awaited<ReturnType<typeof getFeesAccess>>;
@@ -104,7 +105,7 @@ export async function saveReceipts(
   const byKey = new Map(account.dues.map((d) => [dueKey(d.headId, d.period), d]));
   const lines = drafts.flatMap((d) => d.lines);
   try {
-    return await db.$transaction(
+    const saved = await db.$transaction(
       async (tx) => {
         const fresh = await tx.feeReceiptItem.groupBy({
           by: ["headId", "period"],
@@ -163,6 +164,14 @@ export async function saveReceipts(
       },
       { isolationLevel: "Serializable" },
     );
+    const total = lines.reduce((n, l) => n + l.amount + l.lateFee, 0);
+    const waived = drafts.every((d) => d.waiver);
+    await logActivity(
+      "Fees",
+      waived ? `Waived dues for ${fullName(student)} (${student.studentCode})` : `Collected ₹${total.toLocaleString("en-IN")} from ${fullName(student)} (${student.studentCode})`,
+      `Receipt ${saved.map((r) => r.number).join(", ")} · ${MODE_LABELS[mode]}`,
+    );
+    return saved;
   } catch (e) {
     // Serializable conflicts (P2034) mean another payment was saved at the same moment.
     if (e instanceof PaymentChanged || (e as { code?: string }).code === "P2034") {

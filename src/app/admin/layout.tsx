@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowLeftRight,
   BookOpen,
+  BookOpenText,
   Bus,
   CalendarCheck,
   CalendarClock,
@@ -11,6 +12,7 @@ import {
   FileBarChart,
   Ticket,
   GraduationCap,
+  History,
   IdCard,
   KeyRound,
   LayoutDashboard,
@@ -30,10 +32,10 @@ import { SchoolLogo } from "@/components/school-logo";
 import { NavTracker } from "@/components/nav-tracker";
 import { AccountCard, AppShell, type NavGroup, type NavItem } from "@/components/ui";
 import { db } from "@/lib/db";
-import { getPortalSchool, getViewer, schoolLogoUrl } from "@/lib/school";
+import { getFeeCollector, getPortalSchool, getViewer, schoolLogoUrl } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
 import { getTheme } from "@/lib/theme-server";
-import { adminLogout } from "../login/actions";
+import { adminLogout, teacherLogout } from "../login/actions";
 
 // Admin pages always show live data from the database.
 export const dynamic = "force-dynamic";
@@ -41,8 +43,10 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   // Each page checks access itself (fees staff may only open Fees pages).
   const school = await getPortalSchool();
-  const viewer = (await getViewer())!; // getPortalSchool already redirected anonymous visitors
-  const feesOnly = viewer.kind === "admin" && viewer.admin.role !== "ADMIN";
+  const viewer = await getViewer();
+  // No admin sign-in: a teacher who collects fees (getPortalSchool already redirected anyone else).
+  const collector = viewer ? null : (await getFeeCollector())!;
+  const feesOnly = !viewer || (viewer.kind === "admin" && viewer.admin.role !== "ADMIN");
   const [session, logo, activeSchools, theme] = await Promise.all([
     getCurrentSession(school.id),
     db.schoolLogo.findUnique({ where: { schoolId: school.id }, select: { updatedAt: true } }),
@@ -86,6 +90,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             { href: "/admin/subjects", label: "Subjects", icon: <BookOpen /> },
             { href: "/admin/timetable", label: "Timetable", icon: <CalendarClock /> },
             { href: "/admin/calendar", label: "School calendar", icon: <CalendarDays /> },
+            { href: "/admin/materials", label: "Study material", icon: <BookOpenText /> },
             { href: "/admin/houses", label: "Houses", icon: <Shield /> },
           ],
         },
@@ -104,20 +109,26 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             { href: "/admin/id-cards", label: "ID cards", icon: <IdCard /> },
             { href: "/admin/transport", label: "Transport", icon: <Bus /> },
             { href: "/admin/sessions", label: "Sessions", icon: <CalendarRange /> },
+            { href: "/admin/activity", label: "Activity log", icon: <History /> },
           ],
         },
       ];
   const footerItems: NavItem[] = [
-    ...(viewer.kind === "power"
+    ...(collector ? [{ href: "/teacher", label: "Teacher portal", icon: <Presentation />, exact: true }] : []),
+    ...(viewer?.kind === "power"
       ? [
           activeSchools > 1
             ? { href: "/power", label: "Switch school", icon: <ArrowLeftRight />, exact: true }
             : { href: "/power", label: "Power Admin", icon: <ShieldCheck />, exact: true },
         ]
       : []),
-    feesOnly
-      ? { href: "/admin/account", label: "Account", icon: <KeyRound /> }
-      : { href: "/admin/settings", label: "Settings", icon: <Settings />, alsoActive: ["/admin/account"] },
+    ...(collector
+      ? []
+      : [
+          feesOnly
+            ? { href: "/admin/account", label: "Account", icon: <KeyRound /> }
+            : { href: "/admin/settings", label: "Settings", icon: <Settings />, alsoActive: ["/admin/account"] },
+        ]),
   ];
 
   return (
@@ -149,14 +160,14 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
       mobileTabs={feesOnly ? ["/admin/fees", "/admin/account"] : ["/admin", "/admin/students", "/admin/attendance", "/admin/fees"]}
       account={
         <AccountCard
-          name={viewer.kind === "admin" ? viewer.admin.name : "Power Admin"}
-          detail={viewer.kind === "admin" ? viewer.admin.email : "Viewing this school"}
-          signOut={viewer.kind === "admin" ? adminLogout : undefined}
+          name={collector ? [collector.firstName, collector.lastName].filter(Boolean).join(" ") : viewer?.kind === "admin" ? viewer.admin.name : "Power Admin"}
+          detail={collector ? "Teacher · collects fees" : viewer?.kind === "admin" ? viewer.admin.email : "Viewing this school"}
+          signOut={collector ? teacherLogout : viewer?.kind === "admin" ? adminLogout : undefined}
           theme={theme}
         />
       }
       banner={
-        viewer.kind === "power" && (
+        viewer?.kind === "power" && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-warning-line bg-warning-soft px-4 py-2 text-sm text-fg sm:px-6 lg:px-10 print:hidden">
             <span className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-warning" aria-hidden />

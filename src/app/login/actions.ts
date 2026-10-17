@@ -5,8 +5,9 @@ import type { ActionState } from "@/lib/action-state";
 import { db } from "@/lib/db";
 import { endAdminSession, getSignedInAdmin, revokeAdminSessions, startAdminSession } from "@/lib/admin-auth";
 import { endTeacherSession, getSignedInTeacher, revokeTeacherSessions, startTeacherSession } from "@/lib/teacher-auth";
+import { endStudentSession, getSignedInStudent, revokeStudentSessions, startStudentSession } from "@/lib/student-auth";
 import { hashPassword, passwordProblem, verifyPassword } from "@/lib/passwords";
-import { audit } from "@/lib/power-tools";
+import { recordActivity } from "@/lib/activity";
 import { rememberLoginSchool } from "@/lib/login-school";
 
 // Verifying against this keeps the timing the same when the email doesn't exist.
@@ -14,9 +15,26 @@ const DUMMY_HASH = "scrypt$32768$8$1$c2FsdHNhbHRzYWx0c2FsdA$" + "A".repeat(86);
 
 /** Sign-in for school admins (email) and teachers (username), chosen by the `role` field. */
 export async function signIn(_: ActionState, formData: FormData): Promise<ActionState> {
-  const role = formData.get("role") === "teacher" ? "teacher" : "admin";
+  const role = formData.get("role") === "teacher" ? "teacher" : formData.get("role") === "student" ? "student" : "admin";
   const identifier = String(formData.get("identifier") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+
+  if (role === "student") {
+    const student = identifier ? await db.student.findUnique({ where: { username: identifier }, include: { school: true } }) : null;
+    const ok = await verifyPassword(password, student?.passwordHash ?? DUMMY_HASH);
+    if (!student || !ok) {
+      await recordActivity(student?.school ?? null, identifier || "Unknown", "Sign-in", "Student sign-in failed", identifier ? `Username: ${identifier}` : null);
+      await new Promise((r) => setTimeout(r, 600)); // slow down guessing
+      return { error: "Incorrect username or password." };
+    }
+    if (student.status !== "ACTIVE" || !student.loginEnabled) return { error: "Your login is turned off. Ask your class teacher or the school office." };
+    if (student.school.status !== "ACTIVE") return { error: `${student.school.name} is suspended. Contact your school.` };
+    await startStudentSession(student.id);
+    await rememberLoginSchool(student.schoolId);
+    await db.student.update({ where: { id: student.id }, data: { lastLoginAt: new Date() } });
+    await recordActivity(student.school, `${[student.firstName, student.lastName].join(" ")} (student)`, "Sign-in", "Signed in to the student portal");
+    redirect("/student");
+  }
 
   if (role === "teacher") {
     const teacher = identifier
@@ -24,7 +42,7 @@ export async function signIn(_: ActionState, formData: FormData): Promise<Action
       : null;
     const ok = await verifyPassword(password, teacher?.passwordHash ?? DUMMY_HASH);
     if (!teacher || !ok) {
-      await audit("Teacher sign-in failed", teacher?.school ?? null, identifier ? `Username: ${identifier}` : undefined);
+      await recordActivity(teacher?.school ?? null, identifier || "Unknown", "Sign-in", "Teacher sign-in failed", identifier ? `Username: ${identifier}` : null);
       await new Promise((r) => setTimeout(r, 600)); // slow down guessing
       return { error: "Incorrect username or password." };
     }
@@ -35,6 +53,7 @@ export async function signIn(_: ActionState, formData: FormData): Promise<Action
     await startTeacherSession(teacher.id);
     await rememberLoginSchool(teacher.schoolId);
     await db.teacher.update({ where: { id: teacher.id }, data: { lastLoginAt: new Date() } });
+    await recordActivity(teacher.school, `${teacher.firstName} ${teacher.lastName} (teacher)`, "Sign-in", "Signed in to the teacher portal");
     redirect("/teacher");
   }
 
@@ -43,7 +62,7 @@ export async function signIn(_: ActionState, formData: FormData): Promise<Action
     : null;
   const ok = await verifyPassword(password, admin?.passwordHash ?? DUMMY_HASH);
   if (!admin || !ok) {
-    await audit("School admin sign-in failed", admin?.school ?? null, identifier ? `Email: ${identifier}` : undefined);
+    await recordActivity(admin?.school ?? null, identifier || "Unknown", "Sign-in", "Admin sign-in failed", identifier ? `Email: ${identifier}` : null);
     await new Promise((r) => setTimeout(r, 600)); // slow down guessing
     return { error: "Incorrect email or password." };
   }
@@ -53,6 +72,7 @@ export async function signIn(_: ActionState, formData: FormData): Promise<Action
   await startAdminSession(admin.id);
   await rememberLoginSchool(admin.schoolId);
   await db.schoolAdmin.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
+  await recordActivity(admin.school, `${admin.name} (${admin.role === "ADMIN" ? "admin" : "cashier"})`, "Sign-in", "Signed in");
   redirect(admin.role === "ADMIN" ? "/admin" : "/admin/fees");
 }
 
@@ -105,5 +125,31 @@ export async function changeTeacherPassword(_: ActionState, formData: FormData):
   await db.teacher.update({ where: { id: teacher.id }, data: { passwordHash: await hashPassword(next) } });
   await revokeTeacherSessions(teacher.id);
   await startTeacherSession(teacher.id);
+  return { ok: true, message: "Password changed. Other devices were signed out." };
+}
+
+export async function studentLogout() {
+  await endStudentSession();
+  redirect("/login?role=student");
+}
+
+/** A signed-in student changes their own password; other sessions are signed out. */
+export async function changeStudentPassword(_: ActionState, formData: FormData): Promise<ActionState> {
+  const student = await getSignedInStudent();
+  if (!student?.passwordHash) redirect("/login?role=student");
+
+  const current = String(formData.get("currentPassword") ?? "");
+  const next = String(formData.get("newPassword") ?? "");
+  const confirm = String(formData.get("confirmPassword") ?? "");
+  if (!(await verifyPassword(current, student.passwordHash))) {
+    return { error: "Current password is incorrect.", fieldErrors: { currentPassword: ["Incorrect password"] } };
+  }
+  const problem = passwordProblem(next);
+  if (problem) return { error: problem, fieldErrors: { newPassword: [problem] } };
+  if (next !== confirm) return { error: "Passwords don't match.", fieldErrors: { confirmPassword: ["Doesn't match"] } };
+
+  await db.student.update({ where: { id: student.id }, data: { passwordHash: await hashPassword(next) } });
+  await revokeStudentSessions(student.id);
+  await startStudentSession(student.id);
   return { ok: true, message: "Password changed. Other devices were signed out." };
 }

@@ -26,6 +26,8 @@ export async function wipeSchoolData(tx: Tx, schoolId: string) {
     documents: await tx.document.count({ where: { schoolId } }),
   };
   await tx.documentFile.deleteMany({ where: { document: { schoolId } } }); // cascades to documents
+  await tx.materialFile.deleteMany({ where: { material: { schoolId } } });
+  await tx.studyMaterial.deleteMany({ where: { schoolId } });
   await tx.enrollment.deleteMany({ where: { session: { schoolId } } });
   await tx.attendanceDay.deleteMany({ where: { schoolId } }); // cascades to attendance records
   await tx.holiday.deleteMany({ where: { schoolId } });
@@ -97,8 +99,9 @@ export async function purgeRemoved(tx: Tx, schoolId: string, days: number) {
 /** Deletes stored files that nothing points to any more (across all schools). */
 export async function removeOrphanFiles(tx: Tx) {
   const files = await tx.documentFile.deleteMany({ where: { document: null } });
+  const materials = await tx.materialFile.deleteMany({ where: { material: null } });
   const photos = await tx.photo.deleteMany({ where: { student: null, teacher: null } });
-  return { files: files.count, photos: photos.count };
+  return { files: files.count + materials.count, photos: photos.count };
 }
 
 /** Bytes used by each school's photos, documents and logo. */
@@ -107,6 +110,7 @@ export async function storageBySchool() {
     SELECT "schoolId", SUM(bytes)::bigint AS bytes FROM (
       SELECT "schoolId", octet_length("data") AS bytes FROM "Photo"
       UNION ALL SELECT "schoolId", "size" FROM "Document"
+      UNION ALL SELECT "schoolId", COALESCE("size", 0) FROM "StudyMaterial"
       UNION ALL SELECT "schoolId", octet_length("data") FROM "SchoolLogo"
     ) t GROUP BY "schoolId"`;
   return new Map(rows.map((r) => [r.schoolId, Number(r.bytes)]));
@@ -119,7 +123,7 @@ export async function systemInfo() {
     db.$queryRaw<{ name: string; count: bigint }[]>`
       SELECT max(migration_name) AS name, count(*)::bigint AS count
       FROM "_prisma_migrations" WHERE finished_at IS NOT NULL`,
-    db.documentFile.count({ where: { document: null } }),
+    db.documentFile.count({ where: { document: null } }).then(async (n) => n + (await db.materialFile.count({ where: { material: null } }))),
     db.photo.count({ where: { student: null, teacher: null } }),
   ]);
   return {

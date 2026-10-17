@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { NavTracker } from "@/components/nav-tracker";
-import { ArrowLeftRight, BookOpen, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Plane, Users } from "lucide-react";
+import { ArrowLeftRight, Banknote, BookOpen, BookOpenText, CalendarCheck2, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Plane, Receipt, Users } from "lucide-react";
 import { SchoolLogo } from "@/components/school-logo";
 import { AccountCard, AppShell, type NavGroup } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -39,7 +39,11 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
         { href: "/teacher/timetable", label: "Timetable", icon: <CalendarClock /> },
         { href: "/teacher/calendar", label: "School calendar", icon: <CalendarDays /> },
         { href: "/teacher/students", label: "Students", icon: <GraduationCap /> },
+        { href: "/teacher/my-attendance", label: "My attendance", icon: <CalendarCheck2 /> },
+        { href: "/teacher/salary", label: "Salary slips", icon: <Banknote /> },
         { href: "/teacher/leave", label: "Leave", icon: <Plane /> },
+        // Given fee collection by the school admin: the Fee desk, with cashier access.
+        ...(ctx.teacher.canCollectFees ? [{ href: "/admin/fee-desk", label: "Collect fees", icon: <Receipt /> }] : []),
       ],
     },
     ...(myClass
@@ -63,6 +67,7 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
       label: "Teaching",
       items: [
         { href: "/teacher/tests", label: "Tests & exams", icon: <ClipboardList /> },
+        { href: "/teacher/materials", label: "Study material", icon: <BookOpenText /> },
         ...otherSections.map((s) => ({
           href: `/teacher/sections/${s.section.id}`,
           label: sectionLabel(s.section),

@@ -506,7 +506,12 @@ function SelfAttendanceCard({
   canCheckIn: boolean;
 }) {
   return (
-    <Card title="My attendance" icon={UserRoundCheck} description="Marked by the office, or check in yourself">
+    <Card
+      title="My attendance"
+      icon={UserRoundCheck}
+      description="Marked by the office, or check in yourself"
+      action={<TextLink href="/teacher/my-attendance">Full session</TextLink>}
+    >
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-muted">Today</span>
         {today ? (

@@ -7,6 +7,9 @@ import { addMonths, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { ensureCategories, isMonth, loadPayroll, requireExpensesAccess } from "@/lib/expenses";
 import { PAYMENT_MODES } from "@/lib/fees-shared";
+import { dayCount, type SlipLine } from "@/lib/payroll-shared";
+import type { PayrollRow } from "@/lib/expenses";
+import { logged } from "@/lib/activity";
 
 const rupeesField = (label: string) =>
   z
@@ -35,6 +38,26 @@ const revalidate = () => revalidatePath("/admin", "layout");
 
 /* ───────────────────────── Payroll ───────────────────────── */
 
+/**
+ * The slip a payment saves: the person's salary lines, unpaid days if the admin
+ * chose to deduct them, and an adjustment when the amount paid differs.
+ */
+function slipFor(row: PayrollRow, deductLop: boolean, amount: number) {
+  if (!row.pay) return { lines: [{ name: "Salary", kind: "EARNING", amount }] as SlipLine[], gross: amount, lopDays: null, lopAmount: null };
+  const lop = deductLop && row.pay.lopAmount > 0;
+  const lines: SlipLine[] = [...row.pay.lines];
+  if (lop) lines.push({ name: `Loss of pay (${dayCount(row.pay.lopDays)})`, kind: "DEDUCTION", amount: row.pay.lopAmount });
+  const expected = Math.max(0, row.pay.net - (lop ? row.pay.lopAmount : 0));
+  if (amount > expected) lines.push({ name: "Adjustment", kind: "EARNING", amount: amount - expected });
+  else if (amount < expected) lines.push({ name: "Adjustment", kind: "DEDUCTION", amount: expected - amount });
+  return {
+    lines,
+    gross: row.pay.gross + (amount > expected ? amount - expected : 0),
+    lopDays: lop ? row.pay.lopDays : null,
+    lopAmount: lop ? row.pay.lopAmount : null,
+  };
+}
+
 function checkMonth(month: string, current: string) {
   return isMonth(month) && month <= addMonths(current, 1);
 }
@@ -54,6 +77,7 @@ export async function paySalary(key: string, month: string, _: ActionState, form
   const row = (await loadPayroll(school.id, month)).find((r) => r.key === key);
   if (!row || (row.type === "TEACHER" ? !key.startsWith("T:") : !key.startsWith("S:"))) return { error: "Person not found." };
   if (row.payment) return { error: `${row.name} is already paid for this month.` };
+  const slip = slipFor(row, formData.get("deductLop") === "on", parsed.data.amount);
   await db.salaryPayment.create({
     data: {
       schoolId: school.id,
@@ -67,10 +91,11 @@ export async function paySalary(key: string, month: string, _: ActionState, form
       mode: parsed.data.mode,
       note: parsed.data.note,
       createdBy: who,
+      ...slip,
     },
   });
   revalidate();
-  return { ok: true, message: `Paid ${row.name}.` };
+  return logged("Payroll", { ok: true, message: `Paid ${row.name}.` });
 }
 
 /** Pays everyone not yet paid this month their monthly salary, on one date. */
@@ -82,6 +107,9 @@ export async function payAllSalaries(month: string, type: "TEACHER" | "STAFF", _
   if (!parsed.success) return validationError(parsed.error);
   const due = (await loadPayroll(school.id, month)).filter((r) => r.type === type && !r.payment && r.salary);
   if (!due.length) return { error: "Everyone in this group with a salary is already paid for this month." };
+  // Unpaid days come off only when the admin ticks it.
+  const deductLop = formData.get("deductLop") === "on";
+  const amountOf = (r: PayrollRow) => Math.max(0, r.salary! - (deductLop ? (r.pay?.lopAmount ?? 0) : 0));
   await db.salaryPayment.createMany({
     data: due.map((r) => ({
       schoolId: school.id,
@@ -91,23 +119,25 @@ export async function payAllSalaries(month: string, type: "TEACHER" | "STAFF", _
       staffId: r.type === "STAFF" ? r.id : null,
       name: r.name,
       role: r.role,
-      amount: r.salary!,
+      amount: amountOf(r),
       paidOn: parseISODate(parsed.data.paidOn)!,
       mode: parsed.data.mode,
       createdBy: who,
+      ...slipFor(r, deductLop, amountOf(r)),
     })),
     skipDuplicates: true,
   });
   revalidate();
-  return { ok: true, message: `Paid ${due.length} ${type === "TEACHER" ? "teaching" : "non-teaching"} salar${due.length === 1 ? "y" : "ies"}.` };
+  return logged("Payroll", { ok: true, message: `Paid ${due.length} ${type === "TEACHER" ? "teaching" : "non-teaching"} salar${due.length === 1 ? "y" : "ies"}.` });
 }
 
 export async function undoSalary(paymentId: string): Promise<ActionState> {
   const { school } = await requireExpensesAccess();
+  const payment = await db.salaryPayment.findFirst({ where: { id: paymentId, schoolId: school.id }, select: { name: true, month: true, amount: true } });
   const { count } = await db.salaryPayment.deleteMany({ where: { id: paymentId, schoolId: school.id } });
-  if (!count) return { error: "Payment not found." };
+  if (!count || !payment) return { error: "Payment not found." };
   revalidate();
-  return { ok: true, message: "Payment removed." };
+  return logged("Payroll", { ok: true, message: "Payment removed." }, `Removed ${payment.name}'s salary payment for ${payment.month} (₹${payment.amount.toLocaleString("en-IN")})`);
 }
 
 /* ───────────────────────── Expenses ───────────────────────── */
@@ -131,15 +161,16 @@ export async function addExpense(_: ActionState, formData: FormData): Promise<Ac
   if (category.isSalaries) return { error: "Record salaries on the Salaries page.", fieldErrors: { categoryId: ["Use the Salaries page"] } };
   await db.expense.create({ data: { ...parsed.data, date: parseISODate(parsed.data.date)!, schoolId: school.id, createdBy: who } });
   revalidate();
-  return { ok: true, message: `Added ${category.name} expense.` };
+  return logged("Expenses", { ok: true, message: `Added ${category.name} expense.` });
 }
 
 export async function deleteExpense(id: string): Promise<ActionState> {
   const { school } = await requireExpensesAccess();
+  const expense = await db.expense.findFirst({ where: { id, schoolId: school.id }, select: { amount: true, category: { select: { name: true } } } });
   const { count } = await db.expense.deleteMany({ where: { id, schoolId: school.id } });
-  if (!count) return { error: "Expense not found." };
+  if (!count || !expense) return { error: "Expense not found." };
   revalidate();
-  return { ok: true, message: "Expense deleted." };
+  return logged("Expenses", { ok: true, message: "Expense deleted." }, `Deleted ${expense.category.name} expense of ₹${expense.amount.toLocaleString("en-IN")}`);
 }
 
 /* ───────────────────────── Categories & budgets ───────────────────────── */
@@ -156,7 +187,7 @@ export async function saveBudgets(_: ActionState, formData: FormData): Promise<A
   }
   await db.$transaction(updates.map((u) => db.expenseCategory.update({ where: { id: u.id }, data: { monthlyBudget: u.monthlyBudget } })));
   revalidate();
-  return { ok: true, message: "Budgets saved. They apply to every month." };
+  return logged("Expenses", { ok: true, message: "Budgets saved. They apply to every month." });
 }
 
 export async function addCategory(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -169,7 +200,7 @@ export async function addCategory(_: ActionState, formData: FormData): Promise<A
   const last = await db.expenseCategory.aggregate({ where: { schoolId: school.id }, _max: { sortOrder: true } });
   await db.expenseCategory.create({ data: { schoolId: school.id, ...parsed.data, sortOrder: (last._max.sortOrder ?? 0) + 1 } });
   revalidate();
-  return { ok: true, message: `Added “${parsed.data.name}”.` };
+  return logged("Expenses", { ok: true, message: `Added “${parsed.data.name}”.` });
 }
 
 export async function deleteCategory(id: string): Promise<ActionState> {
@@ -180,5 +211,5 @@ export async function deleteCategory(id: string): Promise<ActionState> {
   if (category._count.expenses) return { error: `“${category.name}” has ${category._count.expenses} expense(s), so it can't be removed.` };
   await db.expenseCategory.delete({ where: { id } });
   revalidate();
-  return { ok: true, message: `Removed “${category.name}”.` };
+  return logged("Expenses", { ok: true, message: `Removed “${category.name}”.` });
 }

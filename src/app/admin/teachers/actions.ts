@@ -12,6 +12,7 @@ import { revokeTeacherSessions } from "@/lib/teacher-auth";
 import { setClassTeacher, setSubjectTeacher } from "@/lib/teaching";
 import type { Prisma } from "@/generated/prisma/client";
 import { teacherSchema } from "./schema";
+import { logActivity, logged } from "@/lib/activity";
 
 const USERNAME = /^[a-z0-9][a-z0-9._-]{2,39}$/;
 
@@ -82,6 +83,7 @@ export async function createTeacher(_: ActionState, formData: FormData): Promise
     });
   });
 
+  await logActivity("Teachers", `Added teacher ${teacher.firstName} ${teacher.lastName} (${teacher.employeeCode})`, password ? "With a teacher login" : null);
   revalidatePath("/admin", "layout");
   if (!password || !teacher.username) redirect(`/admin/teachers/${teacher.id}`);
   // Show the new login once before moving on (the password is not stored in plain text).
@@ -130,10 +132,10 @@ export async function updateTeacher(
     if (staleId) await tx.photo.delete({ where: { id: staleId } });
   });
   revalidatePath("/admin", "layout");
-  return {
+  return logged("Teachers", {
     ok: true,
     message: unassigned ? `Saved. Removed from ${unassigned} class subject assignment(s) for subjects they no longer teach.` : "Saved.",
-  };
+  });
 }
 
 /**
@@ -142,7 +144,7 @@ export async function updateTeacher(
  */
 export async function removeTeacher(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
-  await findTeacher(school.id, id);
+  const removed = await findTeacher(school.id, id);
   await db.$transaction([
     db.section.updateMany({ where: { classTeacherId: id }, data: { classTeacherId: null } }),
     db.subjectTeacherAssignment.deleteMany({ where: { teacherId: id } }),
@@ -150,15 +152,15 @@ export async function removeTeacher(id: string): Promise<ActionState> {
     db.teacherSession.deleteMany({ where: { teacherId: id } }),
   ]);
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Teacher removed." };
+  return logged("Teachers", { ok: true, message: "Teacher removed." }, `Removed teacher ${removed.firstName} ${removed.lastName} (${removed.employeeCode})`);
 }
 
 export async function restoreTeacher(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
-  await findTeacher(school.id, id);
+  const restored = await findTeacher(school.id, id);
   await db.teacher.update({ where: { id }, data: { status: "ACTIVE" } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Teacher restored." };
+  return logged("Teachers", { ok: true, message: "Teacher restored." }, `Restored teacher ${restored.firstName} ${restored.lastName} (${restored.employeeCode})`);
 }
 
 /* ───────────────────────── Teacher login ───────────────────────── */
@@ -182,13 +184,13 @@ export async function issueTeacherLogin(id: string): Promise<ActionState> {
   );
   await revokeTeacherSessions(id);
   revalidatePath(`/admin/teachers/${id}`);
-  return {
+  return logged("Teachers", {
     ok: true,
     message: teacher.passwordHash
       ? "New password created. The teacher was signed out everywhere."
       : "Login created. Share it with the teacher now; the password won't be shown again.",
     credentials: { username: updated.username!, password },
-  };
+  });
 }
 
 export async function changeTeacherUsername(id: string, _: ActionState, formData: FormData): Promise<ActionState> {
@@ -206,25 +208,38 @@ export async function changeTeacherUsername(id: string, _: ActionState, formData
   await db.teacher.update({ where: { id }, data: { username } });
   await revokeTeacherSessions(id);
   revalidatePath(`/admin/teachers/${id}`);
-  return { ok: true, message: `Username changed to ${username}. The teacher was signed out.` };
+  return logged("Teachers", { ok: true, message: `Username changed to ${username}. The teacher was signed out.` }, `Changed ${teacher.firstName} ${teacher.lastName}'s username to ${username}`);
 }
 
 export async function setTeacherLoginEnabled(id: string, enabled: boolean): Promise<ActionState> {
   const school = await getCurrentSchool();
-  await findTeacher(school.id, id);
+  const teacher = await findTeacher(school.id, id);
   await db.teacher.update({ where: { id }, data: { loginEnabled: enabled } });
   if (!enabled) await revokeTeacherSessions(id);
   revalidatePath(`/admin/teachers/${id}`);
-  return { ok: true, message: enabled ? "Login turned on." : "Login turned off and the teacher was signed out." };
+  return logged("Teachers", { ok: true, message: enabled ? "Login turned on." : "Login turned off and the teacher was signed out." }, `Turned ${enabled ? "on" : "off"} ${teacher.firstName} ${teacher.lastName}'s login`);
+}
+
+/** Lets the teacher collect fees at the Fee desk with their teacher login (cashier access), or stops it. */
+export async function setTeacherFeeCollection(id: string, on: boolean): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const teacher = await findTeacher(school.id, id);
+  await db.teacher.update({ where: { id }, data: { canCollectFees: on } });
+  revalidatePath(`/admin/teachers/${id}`);
+  return logged(
+    "Teachers",
+    { ok: true, message: on ? `${teacher.firstName} can now collect fees.` : `${teacher.firstName} can no longer collect fees.` },
+    `${on ? "Gave fee collection to" : "Took fee collection from"} ${teacher.firstName} ${teacher.lastName} (${teacher.employeeCode})`,
+  );
 }
 
 export async function removeTeacherLogin(id: string): Promise<ActionState> {
   const school = await getCurrentSchool();
-  await findTeacher(school.id, id);
+  const teacher = await findTeacher(school.id, id);
   await db.teacher.update({ where: { id }, data: { username: null, passwordHash: null, lastLoginAt: null } });
   await revokeTeacherSessions(id);
   revalidatePath(`/admin/teachers/${id}`);
-  return { ok: true, message: "Login removed." };
+  return logged("Teachers", { ok: true, message: "Login removed." }, `Removed ${teacher.firstName} ${teacher.lastName}'s login`);
 }
 
 /* ───────────────────────── Classes and subjects (from the teacher's profile) ───────────────────────── */

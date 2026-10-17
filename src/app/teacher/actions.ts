@@ -12,6 +12,7 @@ import { readPhotoUpload, resolvePhotoChange } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
 import { getCurrentSession } from "@/lib/sessions";
 import { findClassStudent, requireTeacher } from "@/lib/teacher-auth";
+import { logged } from "@/lib/activity";
 
 /** What a class teacher may change on a student: contact details, photo and roll number. */
 const classStudentSchema = z
@@ -80,7 +81,7 @@ export async function updateClassStudent(studentId: string, _: ActionState, form
   });
 
   revalidatePath("/", "layout");
-  return { ok: true, message: "Saved." };
+  return logged("Students", { ok: true, message: "Saved." }, `Updated student ${fullName(student)}'s contact details`);
 }
 
 /** Numbers the teacher's class A–Z from 1, or only students without a number. */
@@ -93,7 +94,7 @@ export async function assignMyClassRollNumbers(mode: "all" | "missing"): Promise
   });
   revalidatePath("/", "layout");
   if (!count) return { ok: true, message: "Everyone already has a roll number." };
-  return { ok: true, message: mode === "all" ? `Numbered ${count} students from 1 (A–Z).` : `Numbered ${count} student(s).` };
+  return logged("Attendance", { ok: true, message: mode === "all" ? `Numbered ${count} students from 1 (A–Z).` : `Numbered ${count} student(s).` });
 }
 
 /** A teacher marks themselves present for today, unless the office has already marked them or they are on approved leave. */
@@ -110,5 +111,5 @@ export async function selfCheckIn(): Promise<ActionState> {
     data: { schoolId: ctx.school.id, date, teacherId: ctx.teacher.id, status: "PRESENT", markedBy: `${fullName(ctx.teacher)} (self check-in)` },
   });
   revalidatePath("/", "layout");
-  return { ok: true, message: "Checked in. Have a good day!" };
+  return logged("Attendance", { ok: true, message: "Checked in. Have a good day!" }, "Checked in (self check-in)");
 }

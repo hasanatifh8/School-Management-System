@@ -7,8 +7,10 @@ import { paginate } from "@/lib/pagination";
 const when = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "medium", timeZone: "Asia/Kolkata" });
 
 export default async function ActivityPage({ searchParams }: PageProps<"/power/activity">) {
-  const paging = paginate(await searchParams, await db.auditLog.count(), 50);
-  const entries = await db.auditLog.findMany({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: paging.skip, take: paging.take });
+  // Power Admin's own actions, and failed sign-ins; schools' day-to-day activity is in each school's Activity log.
+  const where = { OR: [{ category: null }, { category: "Sign-in", action: { contains: "failed" } }] };
+  const paging = paginate(await searchParams, await db.auditLog.count({ where }), 50);
+  const entries = await db.auditLog.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: paging.skip, take: paging.take });
   return (
     <>
       <PageHeader title="Activity log" subtitle="Every Power Admin action, newest first." />

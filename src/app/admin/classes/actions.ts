@@ -10,6 +10,7 @@ import { sectionLabel } from "@/lib/queries";
 import { type ActionState, requiredText, validationError } from "@/lib/action-state";
 import { autoAssignRollNumbers } from "@/lib/enrollments";
 import { getCurrentSession } from "@/lib/sessions";
+import { logActivity, logged } from "@/lib/activity";
 
 async function findClass(schoolId: string, id: string) {
   const schoolClass = await db.schoolClass.findFirst({ where: { id, schoolId } });
@@ -61,6 +62,7 @@ export async function createClass(_: ActionState, formData: FormData): Promise<A
     },
   });
 
+  await logActivity("Classes", `Added class ${name}`, sections.length ? `Sections ${sections.join(", ")}` : null);
   revalidatePath("/admin", "layout");
   redirect(`/admin/classes/${created.id}`);
 }
@@ -75,7 +77,7 @@ export async function reorderClasses(_: ActionState, formData: FormData): Promis
   }
   await db.$transaction(ids.map((id, i) => db.schoolClass.update({ where: { id }, data: { sortOrder: i + 1 } })));
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Class order saved." };
+  return logged("Classes", { ok: true, message: "Class order saved." });
 }
 
 export async function renameClass(id: string, _: ActionState, formData: FormData): Promise<ActionState> {
@@ -91,7 +93,7 @@ export async function renameClass(id: string, _: ActionState, formData: FormData
   }
   await db.schoolClass.update({ where: { id }, data: { name } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: `Renamed to ${name}.` };
+  return logged("Classes", { ok: true, message: `Renamed to ${name}.` });
 }
 
 export async function deleteClass(id: string): Promise<ActionState> {
@@ -104,7 +106,8 @@ export async function deleteClass(id: string): Promise<ActionState> {
   if (await db.enrollment.count({ where: { section: { classId: id } } })) {
     return { error: "This class has records from past or upcoming sessions, so it can't be deleted." };
   }
-  await db.schoolClass.delete({ where: { id } });
+  const removed = await db.schoolClass.delete({ where: { id } });
+  await logActivity("Classes", `Deleted class ${removed.name}`);
   revalidatePath("/admin", "layout");
   redirect("/admin/classes");
 }
@@ -128,12 +131,12 @@ export async function addSection(classId: string, _: ActionState, formData: Form
     db.section.createMany({ data: names.slice(unnamed ? 1 : 0).map((name) => ({ classId, name })) }),
   ]);
   revalidatePath("/admin", "layout");
-  return {
+  return logged("Classes", {
     ok: true,
     message: unnamed
       ? `Added section ${names.join(", ")}. Students already in the class are now in section ${names[0]}.`
       : `Added section ${names.join(", ")}.`,
-  };
+  });
 }
 
 export async function deleteSection(sectionId: string): Promise<ActionState> {
@@ -148,7 +151,7 @@ export async function deleteSection(sectionId: string): Promise<ActionState> {
   }
   await db.section.delete({ where: { id: sectionId } });
   revalidatePath("/admin", "layout");
-  return { ok: true, message: "Section deleted." };
+  return logged("Classes", { ok: true, message: "Section deleted." }, `Deleted ${sectionLabel(section)}`);
 }
 
 /**
@@ -201,12 +204,12 @@ export async function setClassSubjects(
   });
 
   revalidatePath("/admin", "layout");
-  return {
+  return logged("Classes", {
     ok: true,
     message: `Curriculum saved (${added.length} added, ${removed.length} removed)${
       applyToStudents ? " and applied to students in this class" : ""
     }.`,
-  };
+  });
 }
 
 export async function assignClassTeacher(sectionId: string, _: ActionState, formData: FormData): Promise<ActionState> {
@@ -233,13 +236,13 @@ export async function assignRollNumbers(sectionId: string, mode: "all" | "missin
   });
   revalidatePath("/admin", "layout");
   if (!count) return { ok: true, message: "Everyone already has a roll number." };
-  return {
+  return logged("Classes", {
     ok: true,
     message:
       mode === "all"
         ? `Numbered ${count} student(s) in ${sectionLabel(section)} from 1 (A–Z).`
         : `Gave roll numbers to ${count} student(s) without one.`,
-  };
+  });
 }
 
 /** One cell of the Assign teachers grid: a section's class teacher (no subject) or a subject's teacher; blank = none. */

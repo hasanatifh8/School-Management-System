@@ -18,6 +18,7 @@ import { fullName } from "@/lib/queries";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 import { canEncrypt, decrypt, encrypt } from "@/lib/secrets";
 import { normalizeIndianMobile } from "@/lib/student-options";
+import { logActivity, logged } from "@/lib/activity";
 
 const CHANNELS = ["WHATSAPP", "SMS"] as const;
 
@@ -61,7 +62,7 @@ export async function saveChannelSettings(channel: Channel, _: ActionState, form
   const data = channel === "WHATSAPP" ? { whatsappProvider: provider, whatsappConfig: stored } : { smsProvider: provider, smsConfig: stored };
   await db.messagingSettings.upsert({ where: { schoolId: school.id }, create: { schoolId: school.id, ...data }, update: data });
   revalidatePath("/admin/notices", "layout");
-  return { ok: true, message: `${CHANNEL_LABELS[channel]} is set up with ${def.label}.` };
+  return logged("Notices", { ok: true, message: `${CHANNEL_LABELS[channel]} is set up with ${def.label}.` });
 }
 
 export async function turnOffChannel(channel: Channel): Promise<ActionState> {
@@ -69,14 +70,14 @@ export async function turnOffChannel(channel: Channel): Promise<ActionState> {
   const data = channel === "WHATSAPP" ? { whatsappProvider: null, whatsappConfig: null } : { smsProvider: null, smsConfig: null };
   await db.messagingSettings.upsert({ where: { schoolId: school.id }, create: { schoolId: school.id }, update: data });
   revalidatePath("/admin/notices", "layout");
-  return { ok: true, message: `${CHANNEL_LABELS[channel]} turned off and its settings removed.` };
+  return logged("Notices", { ok: true, message: `${CHANNEL_LABELS[channel]} turned off and its settings removed.` });
 }
 
 export async function setTeachersCanSend(allowed: boolean): Promise<ActionState> {
   const school = await getCurrentSchool();
   await db.messagingSettings.upsert({ where: { schoolId: school.id }, create: { schoolId: school.id, teachersCanSend: allowed }, update: { teachersCanSend: allowed } });
   revalidatePath("/", "layout");
-  return { ok: true, message: allowed ? "Class teachers can send notices to their class." : "Only admins can send notices now." };
+  return logged("Notices", { ok: true, message: allowed ? "Class teachers can send notices to their class." : "Only admins can send notices now." });
 }
 
 export async function sendTestMessage(channel: Channel, _: ActionState, formData: FormData): Promise<ActionState> {
@@ -190,7 +191,7 @@ export async function previewNotice(_: NoticePreview, formData: FormData): Promi
   const preview = await previewAudience(s.school.id, s.school.name, input.spec, input.roles, input.channels, input.body, s.onlySectionId, sampleLink);
   if (!preview.people) return { error: "No one matches. Nothing would be sent." };
   const scheduled = input.publishDate > todayISO();
-  return {
+  return logged("Notices", {
     ok: true,
     preview: {
       ...preview,
@@ -199,7 +200,7 @@ export async function previewNotice(_: NoticePreview, formData: FormData): Promi
       expiryLabel: formatISO(input.expiryDate),
       attachment: attachment.file?.fileName ?? null,
     },
-  };
+  });
 }
 
 export async function sendNotice(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -231,6 +232,7 @@ export async function sendNotice(_: ActionState, formData: FormData): Promise<Ac
   // Published now: keep sending after the response, even if the page is closed.
   // Scheduled: the daily job (or the next visit to Notices) sends it on the day.
   if (publishAt <= new Date()) after(() => sendForAWhile(s.school.id, notice.id));
+  await logActivity("Notices", `${publishAt <= new Date() ? "Sent" : "Scheduled"} notice “${input.title}”`, input.channels.join(", "));
   revalidatePath(s.base);
   redirect(`${s.base}/${notice.id}`);
 }

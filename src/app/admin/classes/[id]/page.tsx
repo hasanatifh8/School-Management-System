@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, CalendarCheck, CalendarClock, Crown, Hash, Layers, LayoutGrid, Pencil, Plus, Rocket, Trash2, UserCog, Users } from "lucide-react";
+import { BookOpen, CalendarCheck, CalendarClock, Crown, Hash, KeyRound, Layers, LayoutGrid, Pencil, Plus, Rocket, Trash2, UserCog, Users } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DialogButton } from "@/components/dialog-button";
 import { SectionAttendance, SectionTimetable } from "./section-views";
+import { SectionLogins } from "./section-logins";
+import { createSectionLogins } from "../../students/login-actions";
 import { Select } from "@/components/select";
 import { TeacherOptions, type TeacherChoice } from "@/components/teaching/teacher-options";
 import {
@@ -47,7 +49,7 @@ export default async function ClassPage({ params, searchParams }: PageProps<"/ad
           orderBy: { name: "asc" },
           include: {
             subjectAssignments: true,
-            students: { where: { status: "ACTIVE" }, select: { rollNumber: true } },
+            students: { where: { status: "ACTIVE" }, select: { rollNumber: true, passwordHash: true } },
             _count: { select: { students: { where: { status: "ACTIVE" } } } },
           },
         },
@@ -265,7 +267,7 @@ function SectionPanel({
     name: string;
     classTeacherId: string | null;
     subjectAssignments: { subjectId: string; teacherId: string }[];
-    students: { rollNumber: number | null }[];
+    students: { rollNumber: number | null; passwordHash: string | null }[];
     _count: { students: number };
   };
   label: string;
@@ -290,6 +292,12 @@ function SectionPanel({
             </Link>
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        {section._count.students > 0 && (
+          <DialogButton label="Student logins" icon={<KeyRound className="h-4 w-4" />} variant="ghost" title={`Student logins · ${label}`}>
+            <SectionLogins create={createSectionLogins.bind(null, section.id)} withLogin={section.students.filter((s) => s.passwordHash).length} total={section._count.students} />
+          </DialogButton>
+        )}
         {section.name && (
           <ActionForm action={deleteSection.bind(null, section.id)} compact className="flex flex-row-reverse items-center gap-3">
             <SubmitButton variant="ghost" size="sm" confirm={`Delete ${label}?`} icon={<Trash2 className="h-4 w-4" />}>
@@ -297,6 +305,7 @@ function SectionPanel({
             </SubmitButton>
           </ActionForm>
         )}
+        </div>
       </header>
 
       {section._count.students > 0 && (

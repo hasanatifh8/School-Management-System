@@ -17,6 +17,7 @@ import {
 } from "@/lib/exams-shared";
 import { sectionLabel } from "@/lib/queries";
 import type { TeacherContext } from "@/lib/teacher-auth";
+import { logged } from "@/lib/activity";
 
 /**
  * Who is working on exams. Admins may use every section and subject; a teacher
@@ -286,7 +287,7 @@ export async function updateExamDetailsRecord(actor: ExamActor, exam: LoadedExam
     db.examSection.deleteMany({ where: { examId: exam.id, sectionId: { notIn: sectionIds } } }),
     db.examSection.createMany({ data: sectionIds.map((sectionId) => ({ examId: exam.id, sectionId })), skipDuplicates: true }),
   ]);
-  return { ok: true, message: "Details saved." };
+  return logged("Exams", { ok: true, message: "Details saved." }, `Updated details of ${data.name}`);
 }
 
 /* ───────────────────────── Timetable ───────────────────────── */
@@ -449,7 +450,7 @@ export async function saveTimetableRecord(actor: ExamActor, exam: LoadedExam, fo
     db.examPaper.createMany({ data: rows.filter((r) => !r.id).map((r) => ({ examId: exam.id, ...data(r) })) }),
     db.exam.update({ where: { id: exam.id }, data: { updatedAt: new Date() } }),
   ]);
-  return { ok: true, message: rows.length ? `Timetable saved: ${rows.length} paper${rows.length === 1 ? "" : "s"}.` : "Timetable cleared." };
+  return logged("Exams", { ok: true, message: rows.length ? `Timetable saved: ${rows.length} paper${rows.length === 1 ? "" : "s"}.` : "Timetable cleared." });
 }
 
 /** Saves print options (already clamped by readPrintSettings). */

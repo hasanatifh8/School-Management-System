@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { LogIn, Presentation, ShieldUser } from "lucide-react";
+import { GraduationCap, LogIn, Presentation, ShieldUser } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { PasswordField } from "@/components/password-field";
 import { SegmentedControl, inputClass } from "@/components/ui";
 import { signIn } from "./actions";
 
-type Role = "admin" | "teacher";
+type Role = "admin" | "teacher" | "student";
 
 export function LoginForm({ initialRole }: { initialRole: Role }) {
   const [role, setRole] = useState<Role>(initialRole);
@@ -22,6 +22,7 @@ export function LoginForm({ initialRole }: { initialRole: Role }) {
         options={[
           { value: "admin", label: "Admin & cashier", icon: ShieldUser },
           { value: "teacher", label: "Teacher", icon: Presentation },
+          { value: "student", label: "Student", icon: GraduationCap },
         ]}
       />
       <Field label={role === "admin" ? "Email" : "Username"} name="identifier">
@@ -33,7 +34,7 @@ export function LoginForm({ initialRole }: { initialRole: Role }) {
           autoFocus
           autoCapitalize="none"
           autoComplete="username"
-          placeholder={role === "admin" ? "admin@school.edu.in" : "e.g. dps.tch0001"}
+          placeholder={role === "admin" ? "admin@school.edu.in" : role === "teacher" ? "e.g. dps.tch0001" : "e.g. dps.stu-2026-0001"}
           className={inputClass}
         />
       </Field>

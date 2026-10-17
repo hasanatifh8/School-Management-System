@@ -8,6 +8,7 @@ import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { getFeesAccess, requireFeesManager } from "@/lib/fees";
 import { FREQUENCIES, monthLabel, sessionMonths } from "@/lib/fees-shared";
+import { logActivity, logged } from "@/lib/activity";
 
 const MAX_AMOUNT = 10_000_000; // ₹1 crore per instalment is plenty
 
@@ -97,6 +98,7 @@ export async function saveFeeHead(headId: string | null, _: ActionState, formDat
       await tx.feeAmount.createMany({ data: amounts.map((a) => ({ ...a, headId: head.id })) });
     }
   });
+  await logActivity("Fees", `${headId ? "Updated" : "Added"} fee “${parsed.data.name}”`, only ? `For ${(await db.schoolClass.findUnique({ where: { id: only.id }, select: { name: true } }))?.name ?? "one class"} only` : null);
   revalidatePath("/admin/fees", "layout");
   // Back to the class the fee was opened from, if any.
   const back = String(formData.get("returnClass") ?? "");
@@ -112,7 +114,7 @@ export async function deleteFeeHead(headId: string): Promise<ActionState> {
   }
   await db.feeHead.delete({ where: { id: headId } });
   revalidatePath("/admin/fees", "layout");
-  return { ok: true, message: `Deleted “${head.name}”.` };
+  return logged("Fees", { ok: true, message: `Deleted “${head.name}”.` });
 }
 
 /** Copies the fee heads and amounts of the most recent earlier session into the current one. */
@@ -146,7 +148,7 @@ export async function copyPreviousStructure(): Promise<ActionState> {
     }
   });
   revalidatePath("/admin/fees", "layout");
-  return { ok: true, message: `Copied ${previous.feeHeads.length} fees from ${previous.name}. Check the amounts before collecting.` };
+  return logged("Fees", { ok: true, message: `Copied ${previous.feeHeads.length} fees from ${previous.name}. Check the amounts before collecting.` });
 }
 
 /* ───────────────────────── Collecting (admins and fees staff) ───────────────────────── */
@@ -167,7 +169,7 @@ export async function setOptionalFee(studentId: string, headId: string, add: boo
     await db.studentFeeHead.deleteMany({ where: { studentId, headId } });
   }
   revalidatePath("/admin/fees", "layout");
-  return { ok: true, message: add ? `${head.name} added.` : `${head.name} removed.` };
+  return logged("Fees", { ok: true, message: add ? `${head.name} added.` : `${head.name} removed.` });
 }
 
 /** Charges an opt-in fee (e.g. sports) to the ticked students. */
@@ -197,10 +199,10 @@ export async function addOptionalFeeStudents(headId: string, _: ActionState, for
   });
   revalidatePath("/admin/fees", "layout");
   const skipped = ids.length - students.length;
-  return {
+  return logged("Fees", {
     ok: true,
     message: `${head.name} added for ${count} student(s).${skipped ? ` ${skipped} skipped: no amount is set for their class.` : ""}`,
-  };
+  });
 }
 
 /** Stops charging an opt-in fee to the ticked students, keeping anyone who has already paid towards it. */
@@ -220,10 +222,10 @@ export async function removeOptionalFeeStudents(headId: string, _: ActionState, 
     where: { headId, studentId: { in: ids.filter((id) => !keep.has(id)) }, student: { schoolId: school.id } },
   });
   revalidatePath("/admin/fees", "layout");
-  return {
+  return logged("Fees", {
     ok: true,
     message: `${head.name} removed for ${count} student(s).${keep.size ? ` ${keep.size} kept: payments were already taken (cancel those receipts first).` : ""}`,
-  };
+  });
 }
 
 /** First day of this month (India), where a newly added opt-in fee starts. */
@@ -244,7 +246,7 @@ export async function setOptionalFeeFrom(studentId: string, headId: string, _: A
     data: { fromDate: from ? parseISODate(`${from}-01`) : null, toDate: to ? parseISODate(`${to}-01`) : null },
   });
   revalidatePath("/admin/fees", "layout");
-  return { ok: true, message: `${row.head.name} charged ${monthRange(from, to)}.` };
+  return logged("Fees", { ok: true, message: `${row.head.name} charged ${monthRange(from, to)}.` });
 }
 
 /** "from Aug 2026 to Mar 2027", "for the whole session", … */
@@ -278,7 +280,7 @@ export async function cancelReceipt(receiptId: string, _: ActionState, formData:
   });
   if (!count) return { error: "Receipt not found or already cancelled." };
   revalidatePath("/admin/fees", "layout");
-  return { ok: true, message: "Receipt cancelled. Its amounts are due again." };
+  return logged("Fees", { ok: true, message: "Receipt cancelled. Its amounts are due again." }, `Cancelled receipt ${receipt.number} (${receipt.studentName})`, `Reason: ${parsed.data.reason}`);
 }
 
 /**
@@ -301,5 +303,5 @@ export async function setFeesFrom(studentId: string, _: ActionState, formData: F
   await db.student.update({ where: { id: studentId }, data: { feesFrom: month ? parseISODate(`${month}-01`) : null, feesFromHeadIds: month ? backHeads : [] } });
   revalidatePath("/admin/fees", "layout");
   revalidatePath("/admin/fee-desk", "layout");
-  return { ok: true, message: month ? `Fees are now charged from ${monthLabel(month)}.` : "Fees are charged from the admission month again." };
+  return logged("Fees", { ok: true, message: month ? `Fees are now charged from ${monthLabel(month)}.` : "Fees are charged from the admission month again." });
 }

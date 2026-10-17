@@ -21,6 +21,7 @@ import { getCurrentSchool, getViewer } from "@/lib/school";
 import { onLeave, syncAttendanceLeave } from "@/lib/leave";
 import { saveStaffSheet } from "@/lib/staff-attendance";
 import { STAFF_STATUSES, STAFF_STATUS_META, type StaffGroup } from "@/lib/staff-attendance-shared";
+import { logged } from "@/lib/activity";
 
 /**
  * Checks the signed-in user may take attendance for this section on this date:
@@ -107,10 +108,10 @@ export async function saveAttendance(sectionId: string, date: string, _: ActionS
 
   revalidatePath("/", "layout");
   const absent = records.filter((r) => r.status === "ABSENT").length;
-  return {
+  return logged("Attendance", {
     ok: true,
     message: `Saved attendance for ${sectionLabel(section)} on ${formatISO(date, shortDate)}: ${records.length - absent} of ${records.length} attending${absent ? `, ${absent} absent` : ""}.`,
-  };
+  });
 }
 
 const reasonSchema = z.object({
@@ -137,7 +138,7 @@ export async function setClassHoliday(sectionId: string, date: string, _: Action
   const students = await db.student.findMany({ where: { sectionId }, select: { id: true } });
   await syncAttendanceLeave(school.id, d, students.map((s) => ({ studentId: s.id, status: "OFF", remark: null })), markedBy);
   revalidatePath("/", "layout");
-  return { ok: true, message: `${sectionLabel(section)} is marked as off on ${formatISO(date, shortDate)}.` };
+  return logged("Attendance", { ok: true, message: `${sectionLabel(section)} is marked as off on ${formatISO(date, shortDate)}.` });
 }
 
 export async function clearClassHoliday(sectionId: string, date: string): Promise<ActionState> {
@@ -145,7 +146,7 @@ export async function clearClassHoliday(sectionId: string, date: string): Promis
   if ("error" in access) return { error: access.error };
   await db.attendanceDay.deleteMany({ where: { sectionId, date: access.d, holiday: { not: null } } });
   revalidatePath("/", "layout");
-  return { ok: true, message: "Holiday removed. You can take attendance for this day now." };
+  return logged("Attendance", { ok: true, message: "Holiday removed. You can take attendance for this day now." });
 }
 
 /* ───────────────────────── School holidays (admins only) ───────────────────────── */
@@ -200,10 +201,10 @@ export async function addSchoolHoliday(_: ActionState, formData: FormData): Prom
   await db.holiday.createMany({ data: fresh.map((x) => ({ schoolId: school.id, date: parseISODate(x)!, name })) });
   revalidatePath("/", "layout");
   const skipped = dates.length - fresh.length;
-  return {
+  return logged("Attendance", {
     ok: true,
     message: `Added “${name}” for ${fresh.length} day${fresh.length === 1 ? "" : "s"}${skipped ? ` (${skipped} already a holiday)` : ""}.`,
-  };
+  });
 }
 
 /** Removes a holiday (all the days of a multi-day break at once). */
@@ -212,7 +213,7 @@ export async function deleteSchoolHolidays(ids: string[]): Promise<ActionState> 
   const { count } = await db.holiday.deleteMany({ where: { id: { in: ids }, schoolId: school.id } });
   if (!count) return { error: "Holiday not found." };
   revalidatePath("/", "layout");
-  return { ok: true, message: "Holiday removed." };
+  return logged("Attendance", { ok: true, message: "Holiday removed." });
 }
 
 /* ───────────────────────── Staff attendance (admins only) ───────────────────────── */
@@ -284,7 +285,7 @@ export async function editStaffMark(_: ActionState, formData: FormData): Promise
     }),
   ]);
   revalidatePath("/", "layout");
-  return { ok: true, message: `${person.name}: ${STAFF_STATUS_META[status].label} on ${formatISO(date, shortDate)}.` };
+  return logged("Attendance", { ok: true, message: `${person.name}: ${STAFF_STATUS_META[status].label} on ${formatISO(date, shortDate)}.` });
 }
 
 /** Changes one student's mark on a day already marked, from the register. Fields: sectionId, studentId, date, status, note. */
@@ -333,5 +334,5 @@ export async function editStudentMark(_: ActionState, formData: FormData): Promi
   ]);
   await syncAttendanceLeave(school.id, d, [{ studentId, status, remark: note.data }], by);
   revalidatePath("/", "layout");
-  return { ok: true, message: `${fullName(student)}: ${STATUS_META[status].label} on ${formatISO(date, shortDate)}.` };
+  return logged("Attendance", { ok: true, message: `${fullName(student)}: ${STATUS_META[status].label} on ${formatISO(date, shortDate)}.` });
 }

@@ -197,25 +197,28 @@ model School {
   houses    House[]
   sessions  AcademicSession[]
 
-  attendanceDays  AttendanceDay[]
-  holidays        Holiday[]
-  staffAttendance StaffAttendance[]
-  transportRoutes TransportRoute[]
-  leaveRequests   LeaveRequest[]
-  feeHeads        FeeHead[]
-  feeReceipts     FeeReceipt[]
-  staffMembers    StaffMember[]
-  salaryPayments  SalaryPayment[]
-  expenseCats     ExpenseCategory[]
-  expenses        Expense[]
-  messaging       MessagingSettings?
-  notices         Notice[]
-  exams           Exam[]
-  periods         Period[]
-  calendarEvents  CalendarEvent[]
-  leaveAllowances LeaveAllowance[]
-  attendanceEdits AttendanceChange[]
-  proxies         ProxyAssignment[]
+  attendanceDays   AttendanceDay[]
+  holidays         Holiday[]
+  staffAttendance  StaffAttendance[]
+  transportRoutes  TransportRoute[]
+  leaveRequests    LeaveRequest[]
+  feeHeads         FeeHead[]
+  feeReceipts      FeeReceipt[]
+  staffMembers     StaffMember[]
+  salaryPayments   SalaryPayment[]
+  salaryComponents SalaryComponent[]
+  salaryValues     SalaryValue[]
+  studyMaterials   StudyMaterial[]
+  expenseCats      ExpenseCategory[]
+  expenses         Expense[]
+  messaging        MessagingSettings?
+  notices          Notice[]
+  exams            Exam[]
+  periods          Period[]
+  calendarEvents   CalendarEvent[]
+  leaveAllowances  LeaveAllowance[]
+  attendanceEdits  AttendanceChange[]
+  proxies          ProxyAssignment[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -299,6 +302,10 @@ model Student {
   id                    String           @id @default(cuid())
   schoolId              String
   studentCode           String // unique, human-readable student ID, e.g. STU-2026-0001
+  username              String?          @unique // student sign-in, e.g. dps.stu-2026-0001
+  passwordHash          String?
+  loginEnabled          Boolean          @default(true)
+  lastLoginAt           DateTime?
   firstName             String
   middleName            String?
   lastName              String
@@ -344,6 +351,7 @@ model Student {
   documents        Document[]
   attendance       AttendanceRecord[]
   leaveRequests    LeaveRequest[]
+  studentSessions  StudentSession[]
   feeHeads         StudentFeeHead[]
   feeReceipts      FeeReceipt[]
   noticeRecipients NoticeRecipient[]
@@ -378,6 +386,7 @@ model Teacher {
   username        String?     @unique // teacher sign-in, e.g. dps.tch0001
   passwordHash    String?
   loginEnabled    Boolean     @default(true)
+  canCollectFees  Boolean     @default(false) // may collect fees at the Fee desk with their teacher login (cashier access)
   lastLoginAt     DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -390,6 +399,8 @@ model Teacher {
   sessions           TeacherSession[]
 
   salaryPayments SalaryPayment[]
+  salaryValues   SalaryValue[]
+  studyMaterials StudyMaterial[]
   notices        Notice[]
   exams          Exam[]
   timetableSlots TimetableSlot[]
@@ -415,8 +426,9 @@ model SchoolClass {
   sections Section[]
   subjects ClassSubject[]
 
-  feeAmounts FeeAmount[]
-  examPapers ExamPaper[]
+  feeAmounts     FeeAmount[]
+  examPapers     ExamPaper[]
+  studyMaterials StudyMaterial[]
 
   @@unique([schoolId, name])
 }
@@ -432,6 +444,7 @@ model Section {
   students           Student[]
   enrollments        Enrollment[]
   subjectAssignments SubjectTeacherAssignment[]
+  studyMaterials     StudyMaterial[]
   attendanceDays     AttendanceDay[]
   examSections       ExamSection[]
   examResults        ExamResult[]
@@ -455,6 +468,7 @@ model Subject {
   students           StudentSubject[]
   teacherAssignments SubjectTeacherAssignment[]
   examPapers         ExamPaper[]
+  studyMaterials     StudyMaterial[]
   timetableSlots     TimetableSlot[]
   qualifiedTeachers  TeacherSubject[]
 
@@ -527,6 +541,7 @@ model AcademicSession {
   feeHeads       FeeHead[]
   feeReceipts    FeeReceipt[]
   exams          Exam[]
+  studyMaterials StudyMaterial[]
   calendarEvents CalendarEvent[]
 
   @@unique([schoolId, name])
@@ -570,9 +585,12 @@ model AuditLog {
   schoolId   String?
   schoolName String?
   details    String?
+  actor      String? // who did it, e.g. "Anita Rao (admin)", "Kavya Menon (teacher)"
+  category   String? // area of the app, e.g. "Students", "Fees" (school activity log)
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+  @@index([schoolId, createdAt])
 }
 
 // A school's admin account for the Admin Portal (signs in at /login).
@@ -967,6 +985,7 @@ model StaffMember {
   photo          Photo?            @relation(fields: [photoId], references: [id], onDelete: SetNull)
   documents      Document[]
   salaryPayments SalaryPayment[]
+  salaryValues   SalaryValue[]
   cashierAccount SchoolAdmin?
   noticeMessages NoticeRecipient[]
   attendance     StaffAttendance[]
@@ -993,6 +1012,11 @@ model SalaryPayment {
   note      String?
   createdBy String
   createdAt DateTime    @default(now())
+  // The salary slip, as worked out when paid: [{ name, kind: "EARNING" | "DEDUCTION", amount }]. Null for older payments.
+  lines     Json?
+  gross     Int? // earnings before deductions
+  lopDays   Float? // unpaid days deducted (absent + half of half days), when the admin chose to
+  lopAmount Int?
 
   school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: SetNull)
@@ -1327,4 +1351,116 @@ model CalendarAttachment {
   createdAt DateTime @default(now())
 
   event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+enum SalaryComponentKind {
+  EARNING
+  DEDUCTION
+}
+
+enum SalaryCalc {
+  FIXED // rupees a month
+  PERCENT_OF_BASIC // a percentage of the person's basic pay
+}
+
+// A part of every salary the school sets up, e.g. HRA (earning, 40% of basic)
+// or Provident fund (deduction, 12% of basic). Basic pay itself is each person's
+// monthlySalary. `defaultValue` applies to everyone unless a person has their own.
+model SalaryComponent {
+  id           String              @id @default(cuid())
+  schoolId     String
+  name         String
+  kind         SalaryComponentKind
+  calc         SalaryCalc          @default(FIXED)
+  defaultValue Float? // rupees (FIXED) or percent (PERCENT_OF_BASIC); null = only for people given a value
+  sortOrder    Int                 @default(0)
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+
+  school School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  values SalaryValue[]
+
+  @@unique([schoolId, name])
+}
+
+// One teacher's or staff member's own value for a component (rupees or percent), instead of its default.
+model SalaryValue {
+  id          String  @id @default(cuid())
+  schoolId    String
+  componentId String
+  teacherId   String?
+  staffId     String?
+  value       Float
+
+  school    School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  component SalaryComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  teacher   Teacher?        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staff     StaffMember?    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([componentId, teacherId])
+  @@unique([componentId, staffId])
+  @@index([schoolId])
+}
+
+// A signed-in student session (same scheme as teachers): `id` is the SHA-256 of the cookie's token.
+model StudentSession {
+  id        String   @id
+  studentId String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+}
+
+enum MaterialKind {
+  NOTES
+  ASSIGNMENT
+  TEST_PAPER
+  SYLLABUS
+  OTHER
+}
+
+// Study material for a class (or one section): notes, assignments, test papers
+// or the syllabus, uploaded by an admin or a teacher. A file and/or a link.
+model StudyMaterial {
+  id          String       @id @default(cuid())
+  schoolId    String
+  sessionId   String
+  classId     String
+  sectionId   String? // one section only; null = every section of the class
+  subjectId   String?
+  kind        MaterialKind
+  title       String
+  description String?
+  dueDate     DateTime?    @db.Date // assignments: when it's due
+  link        String? // e.g. a video or website
+  fileName    String?
+  mimeType    String?
+  size        Int?
+  fileId      String?      @unique
+  uploadedBy  String // e.g. "Kavya Menon (teacher)"
+  teacherId   String? // the teacher who uploaded it (they may edit or delete it)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  class   SchoolClass     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section Section?        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  subject Subject?        @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  teacher Teacher?        @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  file    MaterialFile?   @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([schoolId, sessionId, classId])
+}
+
+// A study material's file. `text` is kept for later: the file's text, for search
+// and for generating question papers from notes and the syllabus.
+model MaterialFile {
+  id       String         @id @default(cuid())
+  data     Bytes
+  text     String?
+  material StudyMaterial?
 }

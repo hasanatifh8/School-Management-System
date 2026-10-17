@@ -11,6 +11,7 @@ import { generatePassword, hashPassword } from "@/lib/passwords";
 import { createPhoto, readPhotoUpload, resolvePhotoChange } from "@/lib/photos";
 import { getCurrentSchool } from "@/lib/school";
 import { staffSchema } from "./schema";
+import { logActivity, logged } from "@/lib/activity";
 
 // Staff are school admins' business only; cashiers (fees-only accounts) can't reach these.
 
@@ -64,6 +65,7 @@ export async function createStaffMember(_: ActionState, formData: FormData): Pro
     return created;
   });
 
+  await logActivity("Staff", `Added staff member ${staff.name} (${staff.employeeCode})`, password ? "As a cashier" : null);
   revalidate();
   if (!password) redirect(`/admin/staff/${staff.id}`);
   // Show the new login once before moving on (the password is not stored in plain text).
@@ -101,7 +103,7 @@ export async function updateStaffMember(id: string, _: ActionState, formData: Fo
   });
   if (emailChanged) await revokeAdminSessions(account.id);
   revalidate();
-  return { ok: true, message: emailChanged ? "Saved. The cashier now signs in with the new email and was signed out." : "Saved." };
+  return logged("Staff", { ok: true, message: emailChanged ? "Saved. The cashier now signs in with the new email and was signed out." : "Saved." });
 }
 
 /** Takes someone off the payroll. Past salaries stay; a cashier's sign-in is turned off. */
@@ -114,7 +116,7 @@ export async function removeStaffMember(id: string): Promise<ActionState> {
     await revokeAdminSessions(staff.cashierAccount.id);
   }
   revalidate();
-  return { ok: true, message: staff.cashierAccount ? "Removed. Their cashier sign-in was turned off." : "Removed from the payroll. Past salaries are kept." };
+  return logged("Staff", { ok: true, message: staff.cashierAccount ? "Removed. Their cashier sign-in was turned off." : "Removed from the payroll. Past salaries are kept." });
 }
 
 export async function restoreStaffMember(id: string): Promise<ActionState> {
@@ -122,7 +124,7 @@ export async function restoreStaffMember(id: string): Promise<ActionState> {
   await findStaff(school.id, id);
   await db.staffMember.update({ where: { id }, data: { status: "ACTIVE" } });
   revalidate();
-  return { ok: true, message: "Back on the payroll." };
+  return logged("Staff", { ok: true, message: "Back on the payroll." });
 }
 
 /* ───────────────────────── Cashier access ───────────────────────── */
@@ -144,11 +146,11 @@ export async function makeCashier(id: string, _: ActionState, formData: FormData
     db.schoolAdmin.create({ data: { schoolId: school.id, staffMemberId: id, name: staff.name, email: email.data, role: "ACCOUNTANT", passwordHash } }),
   ]);
   revalidate();
-  return {
+  return logged("Staff", {
     ok: true,
     message: `${staff.name} is now a cashier. Share these details with them now; the password won't be shown again.`,
     credentials: { username: email.data, password },
-  };
+  });
 }
 
 export async function resetCashierPassword(id: string): Promise<ActionState> {
@@ -159,7 +161,7 @@ export async function resetCashierPassword(id: string): Promise<ActionState> {
   await db.schoolAdmin.update({ where: { id: account.id }, data: { passwordHash: await hashPassword(password) } });
   await revokeAdminSessions(account.id);
   revalidate();
-  return { ok: true, message: "New password created. They were signed out everywhere.", credentials: { username: account.email, password } };
+  return logged("Staff", { ok: true, message: "New password created. They were signed out everywhere.", credentials: { username: account.email, password } });
 }
 
 export async function setCashierActive(id: string, active: boolean): Promise<ActionState> {
@@ -170,7 +172,7 @@ export async function setCashierActive(id: string, active: boolean): Promise<Act
   await db.schoolAdmin.update({ where: { id: staff.cashierAccount.id }, data: { active } });
   if (!active) await revokeAdminSessions(staff.cashierAccount.id);
   revalidate();
-  return { ok: true, message: active ? "Cashier sign-in turned on." : "Cashier sign-in turned off and signed out." };
+  return logged("Staff", { ok: true, message: active ? "Cashier sign-in turned on." : "Cashier sign-in turned off and signed out." });
 }
 
 /** Takes cashier access away. Receipts they issued keep their name. */
@@ -180,5 +182,5 @@ export async function removeCashier(id: string): Promise<ActionState> {
   if (!staff.cashierAccount) return { error: "Not a cashier." };
   await db.schoolAdmin.delete({ where: { id: staff.cashierAccount.id } }); // sessions cascade
   revalidate();
-  return { ok: true, message: `${staff.name} is no longer a cashier.` };
+  return logged("Staff", { ok: true, message: `${staff.name} is no longer a cashier.` });
 }

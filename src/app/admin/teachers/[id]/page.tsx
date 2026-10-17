@@ -26,16 +26,17 @@ import {
   UserRoundX,
   Wallet,
   type LucideIcon,
+  Receipt,
+  Banknote,
 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { LeaveHistory } from "@/components/leave/leave-history";
-import { PersonAttendanceView, num } from "@/components/attendance/person-attendance";
-import { STAFF_STATUSES, STAFF_STATUS_META } from "@/lib/staff-attendance-shared";
-import { attendanceWindow, pickMonth, schoolHolidays, getSaturdayOff } from "@/lib/attendance";
-import { loadPersonAttendance } from "@/lib/staff-register";
+import { StaffAttendanceSection } from "@/components/attendance/staff-attendance-section";
+import { SalaryTab } from "@/components/payroll/salary-tab";
+import { schoolHolidays } from "@/lib/attendance";
 import { leaveBalance, personLeave } from "@/lib/leave";
 import { Avatar, Badge, ButtonLink, Card, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
 import { parseISODate, todayISO } from "@/lib/attendance-shared";
@@ -57,11 +58,12 @@ import {
   removeSubjectAssignment,
   removeTeacher,
   removeTeacherLogin,
+  setTeacherFeeCollection,
   restoreTeacher,
   setTeacherLoginEnabled,
   updateTeacher,
 } from "../actions";
-import { TeacherLoginCard } from "./teacher-login-card";
+import { PortalLoginCard } from "@/components/portal-login-card";
 import { TeacherForm } from "../teacher-form";
 
 const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -69,11 +71,10 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", t
 const monthFormat = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 const GENDER_LABELS = { MALE: "Male", FEMALE: "Female", OTHER: "Other" } as const;
 
-const TABS = ["overview", "timetable", "attendance", "leave", "edit", "documents"] as const;
+const TABS = ["overview", "timetable", "attendance", "leave", "salary", "edit", "documents"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Whole years and months from a date until today (India), e.g. "3 yrs 2 mos". */
-const shortDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /** Whole months from `date` to today (0 before a month has passed). */
 function monthsSince(date: Date) {
@@ -240,6 +241,7 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
           <StatusTab replace href={`${base}?tab=timetable`} active={tab === "timetable"} label="Timetable" icon={CalendarClock} count={timetable.count} />
           <StatusTab replace href={`${base}?tab=attendance`} active={tab === "attendance"} label="Attendance" icon={CalendarCheck} />
           <StatusTab replace href={`${base}?tab=leave`} active={tab === "leave"} label="Leave" icon={Plane} />
+          <StatusTab replace href={`${base}?tab=salary`} active={tab === "salary"} label="Salary" icon={Banknote} />
           <StatusTab replace href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={teacher.documents.length} />
         </nav>
       </div>
@@ -247,7 +249,14 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
       {tab === "timetable" && <TeacherTimetable timetable={timetable} teacherId={teacher.id} />}
 
       {tab === "attendance" && (
-        <TeacherAttendance schoolId={school.id} teacherId={teacher.id} joined={teacher.joiningDate ? teacher.joiningDate.toISOString().slice(0, 10) : null} base={base} month={monthParam} />
+        <StaffAttendanceSection
+          schoolId={school.id}
+          person={{ teacherId: teacher.id }}
+          joined={teacher.joiningDate ? teacher.joiningDate.toISOString().slice(0, 10) : null}
+          monthHref={`${base}?tab=attendance&month=`}
+          month={monthParam}
+          register={{ href: "/admin/attendance/staff/register?group=teaching&month=", label: "Full staff register" }}
+        />
       )}
 
       {tab === "leave" && (
@@ -261,6 +270,8 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
       )}
 
       {tab === "documents" && <DocumentsPanel ownerKind="teacher" ownerId={teacher.id} documents={teacher.documents} />}
+
+      {tab === "salary" && <SalaryTab schoolId={school.id} person={{ teacherId: teacher.id }} basic={teacher.monthlySalary} />}
 
       {tab === "edit" && (
         <div className="space-y-6">
@@ -416,7 +427,7 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
 
             <div className="space-y-6 self-start">
 
-              <TeacherLoginCard
+              <PortalLoginCard
                 username={teacher.username}
                 hasLogin={Boolean(teacher.passwordHash)}
                 enabled={teacher.loginEnabled}
@@ -426,6 +437,22 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                 setEnabled={setTeacherLoginEnabled.bind(null, teacher.id)}
                 remove={removeTeacherLogin.bind(null, teacher.id)}
               />
+
+              <Card
+                title="Fee collection"
+                icon={Receipt}
+                description="Lets this teacher collect fees at the Fee desk with their teacher login, like a cashier. They can't change the fee structure or cancel receipts."
+                action={teacher.canCollectFees ? <Badge tone="green" dot>On</Badge> : <Badge>Off</Badge>}
+              >
+                {!teacher.passwordHash && (
+                  <p className="mb-3 text-xs text-warning">Set up their teacher login above first; they collect fees with it.</p>
+                )}
+                <ActionForm action={setTeacherFeeCollection.bind(null, teacher.id, !teacher.canCollectFees)} compact className="flex flex-wrap items-center gap-3">
+                  <SubmitButton variant={teacher.canCollectFees ? "secondary" : "primary"} icon={<Receipt className="h-4 w-4" />}>
+                    {teacher.canCollectFees ? "Stop fee collection" : "Allow fee collection"}
+                  </SubmitButton>
+                </ActionForm>
+              </Card>
 
               <Card title="Recent salary" icon={Wallet} padded={false}>
                 {teacher.salaryPayments.length === 0 ? (
@@ -557,77 +584,6 @@ function Detail({ label, icon: Icon, children }: { label: string; icon?: LucideI
         <dd className={`mt-0.5 break-words text-sm ${empty ? "text-subtle" : "text-fg"}`}>{empty ? "Not added" : children}</dd>
       </div>
     </div>
-  );
-}
-
-/** The Attendance tab: the session's totals, a month as a calendar register (?month=) and every month's totals. */
-async function TeacherAttendance({
-  schoolId,
-  teacherId,
-  joined,
-  base,
-  month: param,
-}: {
-  schoolId: string;
-  teacherId: string;
-  joined: string | null;
-  base: string;
-  month: string | string[] | undefined;
-}) {
-  const win = await attendanceWindow(schoolId);
-  const month = pickMonth(param, win);
-  const data = await loadPersonAttendance(schoolId, { teacherId }, win.min, win.max, win.today, joined);
-  const t = data.total;
-  const m = data.byMonth.find((x) => x.month === month);
-  const red = (n: number) => (n ? "text-danger" : undefined);
-  return (
-    <PersonAttendanceView
-      session={win.session.name}
-      percent={data.working.length ? t.percent : null}
-      subtitle={data.working.length ? `${data.working.length} working day${data.working.length === 1 ? "" : "s"} since ${shortDate.format(parseISODate(data.since)!)}` : undefined}
-      aside={t.unmarked ? `${t.unmarked} working day${t.unmarked === 1 ? "" : "s"} not marked` : undefined}
-      counts={[
-        { label: "Present", value: t.present, cls: "text-success" },
-        { label: "Absent", value: t.absent, cls: red(t.absent) },
-        { label: "Late", value: t.late },
-        { label: "Half day", value: t.halfDay },
-        { label: "Leave", value: t.leave },
-        { label: "Loss of pay", value: t.lop, cls: red(t.lop) },
-      ]}
-      note="Approved leave is not counted against attendance. Loss of pay = absent days plus half of each half day."
-      month={month}
-      minMonth={win.min.slice(0, 7)}
-      maxMonth={win.max.slice(0, 7)}
-      today={win.today}
-      statuses={STAFF_STATUSES}
-      meta={STAFF_STATUS_META}
-      marks={data.marks}
-      remarks={data.remarks}
-      holidays={data.holidays}
-      onLeave={data.onLeave}
-      since={data.since}
-      saturdayOff={await getSaturdayOff(schoolId)}
-      flagUnmarked
-      monthLine={m ? `${m.workingDays} working day${m.workingDays === 1 ? "" : "s"} · present ${num(m.present)} · absent ${m.absent} · leave ${m.leave}${m.percent != null ? ` · ${m.percent}%` : ""}` : undefined}
-      monthRows={data.byMonth
-        .filter((x) => x.workingDays > 0)
-        .map((x) => ({
-          month: x.month,
-          percent: x.percent,
-          cells: [
-            { label: "Working days", value: x.workingDays },
-            { label: "Present", value: x.present },
-            { label: "Absent", value: x.absent, cls: red(x.absent) },
-            { label: "Late", value: x.late },
-            { label: "Half day", value: x.halfDay },
-            { label: "Leave", value: x.leave },
-            { label: "Loss of pay", value: x.lop, cls: red(x.lop) },
-          ],
-        }))}
-      monthHref={(mo) => `${base}?tab=attendance&month=${mo}`}
-      registerHref={`/admin/attendance/staff/register?group=teaching&month=${month}`}
-      registerLabel="Full staff register"
-    />
   );
 }
 

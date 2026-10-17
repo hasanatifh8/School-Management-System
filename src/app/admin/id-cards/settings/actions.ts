@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ActionState } from "@/lib/action-state";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
+import { logged } from "@/lib/activity";
 
 const clean = (v: FormDataEntryValue | null, maxLines: number) =>
   String(v ?? "")
@@ -21,5 +22,5 @@ export async function saveCardBack(_: ActionState, formData: FormData): Promise<
     data: { idCardEmergency: clean(formData.get("emergency"), 4), idCardGuidelines: clean(formData.get("guidelines"), 5) },
   });
   revalidatePath("/", "layout");
-  return { ok: true, message: "Card back saved. New cards use it." };
+  return logged("Settings", { ok: true, message: "Card back saved. New cards use it." });
 }

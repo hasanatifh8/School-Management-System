@@ -5,6 +5,7 @@ import type { ActionState } from "@/lib/action-state";
 import { db } from "@/lib/db";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 import { saveSectionTimetable } from "@/lib/timetable";
+import { logged } from "@/lib/activity";
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_PERIODS = 16;
@@ -55,10 +56,10 @@ export async function savePeriods(_: ActionState, formData: FormData): Promise<A
   });
   revalidatePath("/", "layout");
   const teaching = breaks.filter((b) => !b).length;
-  return {
+  return logged("Timetable", {
     ok: true,
     message: names.length ? `Bell schedule saved: ${teaching} periods a day, ${days.length} days a week.` : "Bell schedule cleared. Add periods again whenever you're ready.",
-  };
+  });
 }
 
 export async function saveTimetable(sectionId: string, _: ActionState, formData: FormData): Promise<ActionState> {
@@ -75,5 +76,5 @@ export async function setTimetableLock(sectionId: string, locked: boolean): Prom
   if (!section) return { error: "Class not found." };
   await db.timetable.upsert({ where: { sectionId }, create: { sectionId, locked, updatedBy: who }, update: { locked } });
   revalidatePath("/", "layout");
-  return { ok: true, message: locked ? "Locked. The class teacher can view but not change it." : "Unlocked. The class teacher can edit it again." };
+  return logged("Timetable", { ok: true, message: locked ? "Locked. The class teacher can view but not change it." : "Unlocked. The class teacher can edit it again." });
 }
