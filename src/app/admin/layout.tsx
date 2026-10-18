@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   ArrowLeftRight,
+  Newspaper,
   Banknote,
   BookOpen,
   BookOpenText,
@@ -70,6 +71,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
         {
           label: "Daily",
           items: [
+            { href: "/admin/today", label: "Today's report", icon: <Newspaper /> },
             { href: "/admin/attendance", label: "Attendance", icon: <CalendarCheck /> },
             { href: "/admin/leave", label: "Leave", icon: <Plane /> },
             fees,

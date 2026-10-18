@@ -9,6 +9,7 @@ import {
   IdCard,
   IndianRupee,
   Megaphone,
+  Newspaper,
   Presentation,
   Receipt,
   Rocket,
@@ -270,6 +271,9 @@ export default async function DashboardPage() {
               <span className="text-subtle">·</span>
               <span className="text-muted">Session {session.name}</span>
             </DateChip>
+            <ButtonLink href="/admin/today" variant="secondary" icon={Newspaper}>
+              Today&apos;s report
+            </ButtonLink>
             <ButtonLink href="/admin/students/new" icon={UserPlus}>
               New admission
             </ButtonLink>

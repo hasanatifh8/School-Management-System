@@ -106,6 +106,7 @@ export const APP_PAGES: AppPage[] = [
   { title: "Expense list", path: "/admin/expenses/list", does: "Every expense entry; add or edit expenses.", keywords: "add expense bills entry" },
   { title: "Budget", path: "/admin/expenses/budget", does: "Monthly budget per expense category.", keywords: "budget plan" },
   { title: "Salaries", path: "/admin/expenses/salaries", does: "Pay salaries to teachers and staff and see who is still due.", keywords: "salary pay payroll" },
+  { title: "Today's report", path: "/admin/today", does: "Everything that happened in the school on a day: attendance by class and which classes haven't taken it, absent students and staff, fees collected by mode and collector, expenses and salaries, exams, notices, leave, admissions, birthdays and the activity log. Any past day with ?date=.", keywords: "today report daily summary day attendance not taken fees collected today absent" },
   { title: "Payroll", path: "/admin/payroll", does: "A month's salary slips: view, edit drafts and publish them. Teachers and staff see only published slips.", keywords: "payroll payslip salary slip publish draft edit deduction" },
 
   /* Academics */
