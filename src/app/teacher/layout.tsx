@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { NavTracker } from "@/components/nav-tracker";
-import { ArrowLeftRight, Banknote, BookOpen, BookOpenText, CalendarCheck2, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Plane, Receipt, Users } from "lucide-react";
+import {
+  CircleUserRound, ArrowLeftRight, Banknote, BookOpen, BookOpenText, CalendarCheck2, CalendarCheck, CalendarClock, CalendarDays, ClipboardList, GraduationCap, IdCard, KeyRound, LayoutDashboard, Megaphone, Plane, Receipt, Users } from "lucide-react";
 import { SchoolLogo } from "@/components/school-logo";
 import { AccountCard, AppShell, type NavGroup } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -36,6 +37,7 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
     {
       items: [
         { href: "/teacher", label: "Dashboard", icon: <LayoutDashboard />, exact: true },
+        { href: "/teacher/profile", label: "My profile", icon: <CircleUserRound /> },
         { href: "/teacher/timetable", label: "Timetable", icon: <CalendarClock /> },
         { href: "/teacher/calendar", label: "School calendar", icon: <CalendarDays /> },
         { href: "/teacher/students", label: "Students", icon: <GraduationCap /> },
@@ -55,7 +57,12 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
               // Class teacher of several sections: one link each to switch "My class" to it.
               ...ctx.classSections
                 .filter((s) => s.id !== ctx.classSection?.id)
-                .map((s) => ({ href: `/teacher/switch-class?id=${s.id}&to=/teacher/class`, label: `Switch to ${sectionLabel(s)}`, icon: <ArrowLeftRight /> })),
+                .map((s) => ({
+                  href: `/teacher/switch-class?id=${s.id}&to=/teacher/class`,
+                  label: `Switch to ${sectionLabel(s)}`,
+                  icon: <ArrowLeftRight />,
+                  reload: true as const,
+                })),
               { href: "/teacher/attendance", label: "Attendance", icon: <CalendarCheck /> },
               { href: "/teacher/notices", label: "Notices", icon: <Megaphone /> },
               { href: "/teacher/id-cards", label: "ID cards", icon: <IdCard /> },
@@ -97,7 +104,7 @@ export default async function TeacherLayout({ children }: LayoutProps<"/teacher"
       }}
       groups={groups}
       footerItems={[{ href: "/teacher/account", label: "Account", icon: <KeyRound /> }]}
-      mobileTabs={myClass ? ["/teacher", "/teacher/attendance", "/teacher/class", "/teacher/tests"] : ["/teacher", "/teacher/tests", "/teacher/account"]}
+      mobileTabs={myClass ? ["/teacher", "/teacher/attendance", "/teacher/class", "/teacher/tests"] : ["/teacher", "/teacher/tests", "/teacher/profile"]}
       account={
         <AccountCard
           name={name}

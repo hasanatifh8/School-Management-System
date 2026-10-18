@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { type ActionState, optionalEmail, optionalMobile, optionalText, validationError } from "@/lib/action-state";
+import { type ActionState, optionalBloodGroup, optionalEmail, optionalMobile, optionalText, validationError } from "@/lib/action-state";
 import { weeklyOffOn } from "@/lib/attendance";
 import { parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
@@ -112,4 +112,58 @@ export async function selfCheckIn(): Promise<ActionState> {
   });
   revalidatePath("/", "layout");
   return logged("Attendance", { ok: true, message: "Checked in. Have a good day!" }, "Checked in (self check-in)");
+}
+
+/** What a teacher may change on their own profile; the rest is kept by the school admin. */
+const myProfileSchema = z
+  .object({
+    phone: optionalMobile,
+    whatsappNumber: optionalMobile,
+    whatsappSameAsPhone: z.literal("on").optional(),
+    email: optionalEmail,
+    address: optionalText,
+    bloodGroup: optionalBloodGroup,
+    qualification: z
+      .string()
+      .trim()
+      .max(120, "Keep it under 120 letters")
+      .optional()
+      .transform((v) => v || null),
+  })
+  .transform(({ whatsappSameAsPhone, ...data }) => ({ ...data, whatsappNumber: whatsappSameAsPhone ? data.phone : data.whatsappNumber }));
+
+const PROFILE_FIELD_LABELS = { phone: "phone", whatsappNumber: "WhatsApp number", email: "email", address: "address", bloodGroup: "blood group", qualification: "qualification" } as const;
+
+/** A teacher updates their own contact details, blood group, qualification and photo. */
+export async function updateMyProfile(_: ActionState, formData: FormData): Promise<ActionState> {
+  const ctx = await requireTeacher();
+  const parsed = myProfileSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return validationError(parsed.error);
+  const upload = await readPhotoUpload(formData);
+  if ("error" in upload) return { error: upload.error, fieldErrors: { photo: [upload.error] } };
+  const data = parsed.data;
+
+  // Each teacher needs their own phone number and email (as on the admin's teacher form).
+  const others = { schoolId: ctx.school.id, id: { not: ctx.teacher.id } };
+  const [byPhone, byEmail] = await Promise.all([
+    data.phone ? db.teacher.findFirst({ where: { ...others, phone: data.phone }, select: { id: true } }) : null,
+    data.email ? db.teacher.findFirst({ where: { ...others, email: { equals: data.email, mode: "insensitive" } }, select: { id: true } }) : null,
+  ]);
+  const fieldErrors: Record<string, string[]> = {};
+  if (byPhone) fieldErrors.phone = ["Another teacher already uses this number"];
+  if (byEmail) fieldErrors.email = ["Another teacher already uses this email"];
+  if (Object.keys(fieldErrors).length) return { error: "Use your own phone number and email.", fieldErrors };
+
+  const before = ctx.teacher;
+  const changed = (Object.keys(PROFILE_FIELD_LABELS) as (keyof typeof PROFILE_FIELD_LABELS)[]).filter((k) => (before[k] ?? null) !== (data[k] ?? null));
+  const removePhoto = formData.get("removePhoto") === "on";
+  await db.$transaction(async (tx) => {
+    const { photoId, staleId } = await resolvePhotoChange(tx, ctx.school.id, before.photoId, upload.photo, removePhoto);
+    await tx.teacher.update({ where: { id: before.id }, data: { ...data, photoId } });
+    if (staleId) await tx.photo.delete({ where: { id: staleId } });
+  });
+  revalidatePath("/", "layout");
+  const what = [...changed.map((k) => PROFILE_FIELD_LABELS[k]), ...(upload.photo || removePhoto ? ["photo"] : [])];
+  if (!what.length) return { ok: true, message: "Nothing changed." };
+  return logged("Teachers", { ok: true, message: "Your profile is saved." }, `${fullName(before)} updated their own ${what.join(", ")}`);
 }

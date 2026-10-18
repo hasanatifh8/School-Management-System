@@ -1,5 +1,6 @@
-import { AtSign, BookOpen, Briefcase, Crown, Mail, Phone, School } from "lucide-react";
-import { Badge, Card, InfoItem, PageHeader } from "@/components/ui";
+import Link from "next/link";
+import { AtSign, BookOpen, Briefcase, CircleUserRound, Crown, Mail, Phone, School } from "lucide-react";
+import { Badge, ButtonLink, Card, InfoItem, PageHeader } from "@/components/ui";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { requireTeacher } from "@/lib/teacher-auth";
 import { TeacherPasswordForm } from "./password-form";
@@ -11,20 +12,44 @@ export default async function TeacherAccountPage() {
   for (const s of subjectSections) for (const name of s.subjects) bySubject.set(name, [...(bySubject.get(name) ?? []), sectionLabel(s.section)]);
   return (
     <>
-      <PageHeader title="Account" subtitle="Your details and password." />
+      <PageHeader
+        title="Account"
+        subtitle="Your sign-in and password."
+        action={
+          <ButtonLink href="/teacher/profile" variant="secondary" icon={CircleUserRound}>
+            My profile
+          </ButtonLink>
+        }
+      />
       <div className="grid gap-6 xl:grid-cols-3">
         <Card title={fullName(teacher)} description={teacher.employeeCode} className="self-start">
           <dl className="space-y-4">
             <InfoItem icon={AtSign} label="Username (sign-in)">
               <span className="font-mono">{teacher.username}</span>
             </InfoItem>
-            <InfoItem icon={School} label="School">{school.name}</InfoItem>
-            <InfoItem icon={BookOpen} label="Specialization">{teacher.specialization ?? "—"}</InfoItem>
-            <InfoItem icon={Briefcase} label="Qualification">{teacher.qualification ?? "—"}</InfoItem>
-            <InfoItem icon={Phone} label="Phone">{teacher.phone ?? "—"}</InfoItem>
-            <InfoItem icon={Mail} label="Email">{teacher.email ?? "—"}</InfoItem>
+            <InfoItem icon={School} label="School">
+              {school.name}
+            </InfoItem>
+            <InfoItem icon={BookOpen} label="Specialization">
+              {teacher.specialization ?? "—"}
+            </InfoItem>
+            <InfoItem icon={Briefcase} label="Qualification">
+              {teacher.qualification ?? "—"}
+            </InfoItem>
+            <InfoItem icon={Phone} label="Phone">
+              {teacher.phone ?? "—"}
+            </InfoItem>
+            <InfoItem icon={Mail} label="Email">
+              {teacher.email ?? "—"}
+            </InfoItem>
           </dl>
-          <p className="mt-4 text-xs text-muted">To correct your details or username, ask your school admin.</p>
+          <p className="mt-4 text-xs text-muted">
+            Update your phone, email, address and photo on{" "}
+            <Link href="/teacher/profile" className="font-medium text-accent-text underline-offset-4 hover:underline">
+              My profile
+            </Link>
+            . To change your name or username, ask your school admin.
+          </p>
         </Card>
         <Card title="My classes & subjects" icon={BookOpen} description="Assigned by your school admin." className="self-start xl:col-span-2 xl:order-last">
           <dl className="space-y-4">

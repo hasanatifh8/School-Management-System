@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ArrowLeftRight } from "lucide-react";
 import { cx } from "@/components/ui";
 import { sectionLabel } from "@/lib/names";
@@ -6,6 +5,8 @@ import { sectionLabel } from "@/lib/names";
 /**
  * For a class teacher of several sections: which class the "My class" pages
  * show, and a chip to switch to each of the others (then back to `here`).
+ * Plain links (a full page load): switching changes every page, the sidebar
+ * included, and a prefetch must never switch the class by itself.
  */
 export function ClassSwitcher({
   sections,
@@ -23,10 +24,9 @@ export function ClassSwitcher({
         <ArrowLeftRight className="h-3.5 w-3.5" /> Your classes
       </span>
       {sections.map((s) => (
-        <Link
+        <a
           key={s.id}
           href={`/teacher/switch-class?id=${s.id}&to=${encodeURIComponent(here)}`}
-          prefetch={false}
           aria-current={s.id === current ? "true" : undefined}
           className={cx(
             "rounded-full px-3 py-1 text-sm font-medium transition",
@@ -34,7 +34,7 @@ export function ClassSwitcher({
           )}
         >
           {sectionLabel(s)}
-        </Link>
+        </a>
       ))}
     </div>
   );

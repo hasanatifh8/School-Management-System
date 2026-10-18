@@ -19,6 +19,11 @@ export type NavItem = {
   exact?: boolean;
   /** Other path prefixes that also mark this item active. */
   alsoActive?: string[];
+  /**
+   * A full page load instead of client navigation, for links that change what
+   * every page shows (switching class): never prefetched, and the sidebar is redrawn.
+   */
+  reload?: true;
 };
 export type NavGroup = { label?: string; items: NavItem[] };
 
@@ -207,7 +212,14 @@ function SideLink({ item, active, rail, onNavigate }: { item: NavItem; active: b
   return (
     <Link
       href={item.href}
-      onClick={onNavigate}
+      prefetch={item.reload ? false : undefined}
+      onClick={(e) => {
+        if (item.reload) {
+          e.preventDefault();
+          window.location.assign(item.href);
+        }
+        onNavigate?.();
+      }}
       aria-current={active ? "page" : undefined}
       title={rail ? item.label : undefined}
       className={cx(
