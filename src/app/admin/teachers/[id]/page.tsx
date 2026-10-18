@@ -34,8 +34,12 @@ import { DeletePermanently } from "@/components/delete-permanently";
 import { deletePermanently } from "../../permanent-delete-actions";
 import { DocumentsPanel } from "../../documents/documents-panel";
 import { LeaveHistory } from "@/components/leave/leave-history";
+import { PersonLeaveSetup } from "@/components/leave/person-leave-setup";
 import { StaffAttendanceSection } from "@/components/attendance/staff-attendance-section";
 import { SalaryTab } from "@/components/payroll/salary-tab";
+import { SalaryBreakdown } from "@/components/payroll/salary-breakdown";
+import { loadComponents, loadOwnValues } from "@/lib/payroll";
+import { computeSalary } from "@/lib/payroll-shared";
 import { schoolHolidays } from "@/lib/attendance";
 import { leaveBalance, personLeave } from "@/lib/leave";
 import { Avatar, Badge, ButtonLink, Card, PageHeader, StatCard, StatGrid, StatusTab, tabBarClass, tbodyClass, tdClass, thClass, theadClass } from "@/components/ui";
@@ -164,7 +168,13 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
     },
   });
   if (!teacher) notFound();
-  const timetable = await loadTeacherTimetable(school.id, teacher.id);
+  const [timetable, components, own] = await Promise.all([
+    loadTeacherTimetable(school.id, teacher.id),
+    loadComponents(school.id),
+    loadOwnValues(school.id, { teacherId: teacher.id }),
+  ]);
+  // The monthly salary as it would be paid: basic pay plus the school's earnings and deductions.
+  const salary = teacher.monthlySalary ? computeSalary(teacher.monthlySalary, components, own.get(`T:${teacher.id}`) ?? {}) : null;
   const today = tab === "overview" ? await todaysClasses(school.id, teacher.id, timetable) : { value: "", detail: "" };
 
   const name = fullName(teacher);
@@ -260,13 +270,16 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
       )}
 
       {tab === "leave" && (
-        <LeaveHistory
-          leave={await personLeave(school.id, "TEACHER", teacher.id)}
-          balance={await leaveBalance(school.id, "TEACHER", teacher.id)}
-          noun="teacher"
-          openHref={(lid) => `/admin/leave?status=all&q=${encodeURIComponent(teacher.employeeCode)}&open=${lid}`}
-          newHref="/admin/leave/new"
-        />
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_28rem]">
+          <LeaveHistory
+            leave={await personLeave(school.id, "TEACHER", teacher.id)}
+            balance={await leaveBalance(school.id, "TEACHER", teacher.id)}
+            noun="teacher"
+            openHref={(lid) => `/admin/leave?status=all&q=${encodeURIComponent(teacher.employeeCode)}&open=${lid}`}
+            newHref="/admin/leave/new"
+          />
+          <PersonLeaveSetup schoolId={school.id} person={{ teacherId: teacher.id }} />
+        </div>
       )}
 
       {tab === "documents" && <DocumentsPanel ownerKind="teacher" ownerId={teacher.id} documents={teacher.documents} />}
@@ -341,9 +354,10 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
             <StatCard
               icon={Wallet}
               tone="amber"
-              label="Monthly salary"
-              value={teacher.monthlySalary == null ? "—" : rupees(teacher.monthlySalary)}
-              detail={teacher.salaryPayments[0] ? `Last paid for ${monthFormat.format(new Date(`${teacher.salaryPayments[0].month}-01`))}` : "No payments yet"}
+              label="Net salary a month"
+              value={salary ? rupees(salary.net) : "—"}
+              detail={salary ? `Gross ${rupees(salary.gross)} · deductions ${rupees(salary.deductions)}` : "Salary not set"}
+              href={`${base}?tab=salary`}
             />
           </StatGrid>
 
@@ -411,7 +425,7 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                     </span>
                   </Detail>
                   <Detail label="Joining date">{dateFormat.format(teacher.joiningDate)}</Detail>
-                  <Detail label="Monthly salary">{teacher.monthlySalary != null && rupees(teacher.monthlySalary)}</Detail>
+                  <Detail label="Basic pay">{teacher.monthlySalary != null && rupees(teacher.monthlySalary)}</Detail>
                 </DetailList>
               </Card>
 
@@ -454,24 +468,51 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
                 </ActionForm>
               </Card>
 
-              <Card title="Recent salary" icon={Wallet} padded={false}>
-                {teacher.salaryPayments.length === 0 ? (
-                  <p className="p-6 text-sm text-muted">No salary paid yet. Pay it from Expenses → Salaries.</p>
+              <Card
+                title="Salary"
+                icon={Wallet}
+                description={salary ? "Each month's pay, as it appears on the salary slip." : undefined}
+                action={
+                  <Link href={`${base}?tab=salary`} className="text-sm font-medium text-accent-text underline-offset-4 hover:underline">
+                    {salary ? "Change" : "Set salary"}
+                  </Link>
+                }
+              >
+                {salary ? (
+                  <SalaryBreakdown salary={salary} />
                 ) : (
-                  <ul className="divide-y divide-line">
-                    {teacher.salaryPayments.map((p) => (
-                      <li key={p.id} className="flex items-center justify-between gap-3 px-6 py-3 text-sm">
-                        <div>
-                          <p className="font-medium text-fg">{monthFormat.format(new Date(`${p.month}-01`))}</p>
-                          <p className="text-xs text-muted">
-                            {MODE_LABELS[p.mode]} · paid {dateFormat.format(p.paidOn)}
-                          </p>
-                        </div>
-                        <span className="font-semibold tabular-nums text-fg">{rupees(p.amount)}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="text-sm text-muted">No salary set yet. Set basic pay and the school&apos;s earnings and deductions in the Salary tab.</p>
                 )}
+                <div className="mt-5">
+                  <p className="mb-2 text-eyebrow uppercase text-muted">Salary slips</p>
+                  {teacher.salaryPayments.length === 0 ? (
+                    <p className="text-sm text-muted">No salary paid yet. Pay it from Expenses → Salaries.</p>
+                  ) : (
+                    <ul className="divide-y divide-line rounded-xl border border-line">
+                      {teacher.salaryPayments.map((p) => (
+                        <li key={p.id}>
+                          <Link href={`/admin/payslips/${p.id}`} className="flex items-center gap-3 px-4 py-2.5 text-sm transition hover:bg-surface-2">
+                            <FileText className="h-4 w-4 shrink-0 text-subtle" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-medium text-fg">{monthFormat.format(new Date(`${p.month}-01`))}</span>
+                              <span className="block text-xs text-muted">
+                                {MODE_LABELS[p.mode]} · paid {dateFormat.format(p.paidOn)}
+                                {p.lopDays ? ` · ${p.lopDays} unpaid day${p.lopDays === 1 ? "" : "s"} deducted` : ""}
+                              </span>
+                            </span>
+                            {!p.published && (
+                              <Badge tone="amber" dot>
+                                Draft
+                              </Badge>
+                            )}
+                            <span className="font-semibold tabular-nums text-fg">{rupees(p.amount)}</span>
+                            <ArrowRight className="h-4 w-4 text-subtle" />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </Card>
 
               <Card title="Documents" icon={FileText}>

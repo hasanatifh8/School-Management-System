@@ -8,10 +8,11 @@ import "server-only";
 //  - a subject teacher: only papers of the subjects they teach in that section.
 // Results are published per section by an admin, the class teacher or the
 // test's creator, once every mark is in. Published marks are locked.
+// A paper's marks open the day after its date (no marks before the paper is sat).
 import type { ActionState } from "@/lib/action-state";
-import { isoDate } from "@/lib/attendance-shared";
+import { addDays, isoDate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { formatMarks, gradeFor, paperName, parseMark, passes, type ResultStatus, paperIsFor } from "@/lib/exams-shared";
+import { formatExamDate, formatMarks, gradeFor, paperName, parseMark, passes, type ResultStatus, paperIsFor } from "@/lib/exams-shared";
 import type { ExamActor, LoadedExam } from "@/lib/exams";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { logged } from "@/lib/activity";
@@ -48,6 +49,7 @@ export async function loadSheet(actor: ExamActor, exam: LoadedExam, sectionId: s
   if (!access) return null;
 
   const forClass = exam.papers.filter((p) => paperIsFor(p, section));
+  const today = todayISO();
   const graded = forClass.filter((p) => p.maxMarks != null);
   const [students, marks, result] = await Promise.all([
     db.student.findMany({
@@ -90,6 +92,9 @@ export async function loadSheet(actor: ExamActor, exam: LoadedExam, sectionId: s
       passMarks: p.passMarks,
       practical: p.practical,
       editable: canEnterPaper(access, p),
+      /** The first day marks can be entered: the day after the paper. */
+      opensOn: addDays(isoDate(p.date), 1),
+      notYet: today < addDays(isoDate(p.date), 1),
     })),
     ungraded: forClass.length - graded.length,
     students: students.map((s) => ({
@@ -232,6 +237,7 @@ export async function saveMarksRecord(actor: ExamActor, exam: LoadedExam, sectio
     const key = `m.${e.p}.${e.s}`;
     if (!paper || !student) return { error: "The class list or timetable changed. Reload the page and try again." };
     if (!paper.editable) return { error: `You can't enter marks for ${paper.name}.` };
+    if (paper.notYet) return { error: `${paper.name} is on ${formatExamDate(paper.date)}. Its marks can be entered from ${formatExamDate(paper.opensOn)}.` };
     if (!student.eligible.includes(paper.id)) {
       errors[key] = [`${student.name} doesn't take ${paper.name}`];
       continue;

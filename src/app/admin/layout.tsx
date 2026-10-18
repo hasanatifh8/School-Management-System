@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   ArrowLeftRight,
+  Banknote,
   BookOpen,
   BookOpenText,
   Bus,
@@ -106,6 +107,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           label: "Office",
           items: [
             { href: "/admin/expenses", label: "Expenses", icon: <PiggyBank /> },
+            { href: "/admin/payroll", label: "Payroll", icon: <Banknote />, alsoActive: ["/admin/payslips"] },
             { href: "/admin/id-cards", label: "ID cards", icon: <IdCard /> },
             { href: "/admin/transport", label: "Transport", icon: <Bus /> },
             { href: "/admin/sessions", label: "Sessions", icon: <CalendarRange /> },

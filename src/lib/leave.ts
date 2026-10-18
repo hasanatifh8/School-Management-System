@@ -276,6 +276,7 @@ const requestSchema = z
       .transform((v) => v || null),
   })
   .superRefine((v, ctx) => {
+    if (v.applicant === "STUDENT" && v.category === "PRIVILEGED") ctx.addIssue({ code: "custom", path: ["category"], message: "Privileged leave is for teachers and staff" });
     if (!parseISODate(v.fromDate) || !parseISODate(v.toDate)) return;
     if (v.toDate < v.fromDate) ctx.addIssue({ code: "custom", path: ["toDate"], message: "The last day is before the first day" });
     else if (leaveDays(v.fromDate, v.toDate) > MAX_LEAVE_DAYS) ctx.addIssue({ code: "custom", path: ["toDate"], message: `At most ${MAX_LEAVE_DAYS} days at a time` });
@@ -573,33 +574,186 @@ export async function saveAllowanceRecords(schoolId: string, formData: FormData)
   return logged("Leave", { ok: true, message: "Leave allowances saved." });
 }
 
-export type BalanceRow = { category: LeaveCategoryKey; allowed: number | null; used: number; pending: number };
+/* ───────────────────────── Leave groups and extra days ───────────────────────── */
+
+export type LeaveDays = Partial<Record<LeaveCategoryKey, number>>;
+type Person = { teacherId: string } | { staffId: string };
+
+/** A group's stored days, keeping only known types with whole days. */
+export function policyDays(json: unknown): LeaveDays {
+  const out: LeaveDays = {};
+  if (json && typeof json === "object") {
+    for (const c of LEAVE_CATEGORIES) {
+      const v = (json as Record<string, unknown>)[c];
+      if (typeof v === "number" && Number.isInteger(v) && v >= 0) out[c] = v;
+    }
+  }
+  return out;
+}
+
+/** The school's leave groups with their days and members, by name. */
+export async function loadLeavePolicies(schoolId: string) {
+  const rows = await db.leavePolicy.findMany({
+    where: { schoolId },
+    orderBy: { name: "asc" },
+    include: { _count: { select: { teachers: { where: { status: "ACTIVE" } }, staff: { where: { status: "ACTIVE" } } } } },
+  });
+  return rows.map((p) => ({ id: p.id, name: p.name, days: policyDays(p.days), teachers: p._count.teachers, staff: p._count.staff }));
+}
+
+export type LeavePolicyRow = Awaited<ReturnType<typeof loadLeavePolicies>>[number];
+
+/** Days per type from fields `d:PRIVILEGED` = days (blank = no limit), or an error. */
+function readDays(formData: FormData): LeaveDays | { error: string } {
+  const days: LeaveDays = {};
+  for (const c of LEAVE_CATEGORIES) {
+    const raw = String(formData.get(`d:${c}`) ?? "").trim();
+    if (!raw) continue;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 365) return { error: "Enter whole days from 0 to 365, or leave it blank for no limit." };
+    days[c] = n;
+  }
+  return days;
+}
 
 /**
- * A teacher's or staff member's leave this session by type: the allowance,
- * working days taken (approved) and waiting (pending).
+ * Creates or updates a leave group: its name, days per type and members
+ * (fields `teacher` / `staff`, ids). Members ticked here move into the group;
+ * members unticked leave it and fall back to the school-wide allowance.
+ */
+export async function saveLeavePolicyRecord(schoolId: string, id: string | null, formData: FormData): Promise<ActionState & { id?: string }> {
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name || name.length > 60) return { error: "Enter a group name (up to 60 letters).", fieldErrors: { name: ["Enter a group name (up to 60 letters)"] } };
+  const days = readDays(formData);
+  if ("error" in days) return days;
+  const teacherIds = formData.getAll("teacher").map(String);
+  const staffIds = formData.getAll("staff").map(String);
+
+  if (id && !(await db.leavePolicy.findFirst({ where: { id, schoolId }, select: { id: true } }))) return { error: "This leave group no longer exists." };
+  const clash = await db.leavePolicy.findFirst({ where: { schoolId, name: { equals: name, mode: "insensitive" }, ...(id && { id: { not: id } }) } });
+  if (clash) return { error: `There is already a group called ${clash.name}.`, fieldErrors: { name: ["Choose another name"] } };
+
+  const saved = await db.$transaction(async (tx) => {
+    const policy = id ? await tx.leavePolicy.update({ where: { id }, data: { name, days } }) : await tx.leavePolicy.create({ data: { schoolId, name, days } });
+    await tx.teacher.updateMany({ where: { schoolId, leavePolicyId: policy.id, id: { notIn: teacherIds } }, data: { leavePolicyId: null } });
+    await tx.staffMember.updateMany({ where: { schoolId, leavePolicyId: policy.id, id: { notIn: staffIds } }, data: { leavePolicyId: null } });
+    if (teacherIds.length) await tx.teacher.updateMany({ where: { schoolId, id: { in: teacherIds } }, data: { leavePolicyId: policy.id } });
+    if (staffIds.length) await tx.staffMember.updateMany({ where: { schoolId, id: { in: staffIds } }, data: { leavePolicyId: policy.id } });
+    return policy;
+  });
+  const n = teacherIds.length + staffIds.length;
+  return { ...(await logged("Leave", { ok: true, message: `${name} saved with ${n} ${n === 1 ? "person" : "people"}.` })), id: saved.id };
+}
+
+/** Deletes a group; its members go back to the school-wide allowance. */
+export async function deleteLeavePolicyRecord(schoolId: string, id: string): Promise<ActionState> {
+  const policy = await db.leavePolicy.findFirst({ where: { id, schoolId } });
+  if (!policy) return { ok: true, message: "Leave group deleted." };
+  await db.leavePolicy.delete({ where: { id } });
+  return logged("Leave", { ok: true, message: `${policy.name} deleted. Its members now get the school-wide allowance.` });
+}
+
+/**
+ * One person's leave group and this session's extra days (fields `policy` and
+ * `x:PRIVILEGED` = days, negative to take days off, blank or 0 for none).
+ */
+export async function savePersonLeaveRecord(schoolId: string, person: Person, formData: FormData): Promise<ActionState> {
+  const policyId = String(formData.get("policy") ?? "") || null;
+  if (policyId && !(await db.leavePolicy.findFirst({ where: { id: policyId, schoolId }, select: { id: true } }))) return { error: "Choose a leave group from the list." };
+  const extras: { category: LeaveCategoryKey; days: number }[] = [];
+  for (const category of LEAVE_CATEGORIES) {
+    const raw = String(formData.get(`x:${category}`) ?? "").trim();
+    const days = raw ? Number(raw) : 0;
+    if (!Number.isInteger(days) || days < -365 || days > 365) return { error: "Extra days must be whole days from −365 to 365." };
+    extras.push({ category, days });
+  }
+  const isTeacher = "teacherId" in person;
+  const exists = isTeacher
+    ? await db.teacher.findFirst({ where: { id: person.teacherId, schoolId }, select: { id: true } })
+    : await db.staffMember.findFirst({ where: { id: person.staffId, schoolId }, select: { id: true } });
+  if (!exists) return { error: "This person was not found." };
+  const session = await getCurrentSession(schoolId);
+  await db.$transaction([
+    isTeacher
+      ? db.teacher.update({ where: { id: person.teacherId }, data: { leavePolicyId: policyId } })
+      : db.staffMember.update({ where: { id: person.staffId }, data: { leavePolicyId: policyId } }),
+    db.leaveExtra.deleteMany({ where: { schoolId, sessionId: session.id, ...person } }),
+    db.leaveExtra.createMany({ data: extras.filter((x) => x.days !== 0).map((x) => ({ ...x, ...person, schoolId, sessionId: session.id })) }),
+  ]);
+  return logged("Leave", { ok: true, message: "Leave group and extra days saved." });
+}
+
+/** A person's group and this session's extra days, for their profile. */
+export async function personLeaveSetup(schoolId: string, person: Person) {
+  const session = await getCurrentSession(schoolId);
+  const [who, extras] = await Promise.all([
+    "teacherId" in person
+      ? db.teacher.findUnique({ where: { id: person.teacherId }, select: { leavePolicyId: true } })
+      : db.staffMember.findUnique({ where: { id: person.staffId }, select: { leavePolicyId: true } }),
+    db.leaveExtra.findMany({ where: { schoolId, sessionId: session.id, ...person }, select: { category: true, days: true } }),
+  ]);
+  return { policyId: who?.leavePolicyId ?? null, extras: Object.fromEntries(extras.map((x) => [x.category, x.days])) as LeaveDays, session: session.name };
+}
+
+/* ───────────────────────── Balance ───────────────────────── */
+
+export type BalanceRow = {
+  category: LeaveCategoryKey;
+  /** Days for the session: the group's (or school-wide) days plus extra days; null = no limit. */
+  allowed: number | null;
+  /** Days added or taken off for this person this session. */
+  extra: number;
+  used: number;
+  pending: number;
+};
+
+/**
+ * A teacher's or staff member's leave this session by type: the allowance
+ * (their leave group's days, else the school-wide allowance, plus extra days
+ * given to them this session), working days taken (approved) and waiting (pending).
+ * A type with no limit stays unlimited; extra days on it are ignored.
  */
 export async function leaveBalance(schoolId: string, applicant: "TEACHER" | "STAFF", personId: string) {
   const session = await getCurrentSession(schoolId);
   const from = isoDate(session.startDate);
   const to = isoDate(session.endDate);
-  const [allowances, requests, working] = await Promise.all([
+  const person = applicant === "TEACHER" ? { teacherId: personId } : { staffId: personId };
+  const [allowances, who, extras, requests, working] = await Promise.all([
     loadAllowances(schoolId),
+    applicant === "TEACHER"
+      ? db.teacher.findUnique({ where: { id: personId }, select: { leavePolicy: true } })
+      : db.staffMember.findUnique({ where: { id: personId }, select: { leavePolicy: true } }),
+    db.leaveExtra.findMany({ where: { schoolId, sessionId: session.id, ...person }, select: { category: true, days: true } }),
     db.leaveRequest.findMany({
       where: { schoolId, [personKey[applicant]]: personId, status: { in: ["APPROVED", "PENDING"] }, fromDate: { lte: session.endDate }, toDate: { gte: session.startDate } },
       select: { category: true, status: true, fromDate: true, toDate: true },
     }),
     workingDates(schoolId, from, to),
   ]);
+  const base = who?.leavePolicy ? policyDays(who.leavePolicy.days) : allowances[applicant];
+  const extra = new Map(extras.map((x) => [x.category, x.days]));
   const workSet = new Set(working);
-  const rows: BalanceRow[] = LEAVE_CATEGORIES.map((category) => ({ category, allowed: allowances[applicant][category] ?? null, used: 0, pending: 0 }));
+  const rows: BalanceRow[] = LEAVE_CATEGORIES.map((category) => {
+    const b = base[category];
+    const x = extra.get(category) ?? 0;
+    return { category, allowed: b == null ? null : Math.max(0, b + x), extra: b == null ? 0 : x, used: 0, pending: 0 };
+  });
   for (const r of requests) {
     const days = datesBetween(isoDate(r.fromDate), isoDate(r.toDate)).filter((d) => workSet.has(d)).length;
     const row = rows.find((x) => x.category === r.category)!;
     if (r.status === "APPROVED") row.used += days;
     else row.pending += days;
   }
-  return { session: session.name, rows };
+  return { session: session.name, policy: who?.leavePolicy ? { id: who.leavePolicy.id, name: who.leavePolicy.name } : null, rows };
+}
+
+export type LeaveBalance = Awaited<ReturnType<typeof leaveBalance>>;
+
+/** Weekly offs and holidays from today to the session's end, so the leave form can count working days. */
+export async function upcomingDaysOff(schoolId: string, today: string) {
+  const session = await getCurrentSession(schoolId);
+  const end = isoDate(session.endDate);
+  return today > end ? [] : [...(await daysOff(schoolId, today, end)).keys()];
 }
 
 /**

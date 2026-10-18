@@ -3,11 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { type ActionState, validationError } from "@/lib/action-state";
-import { addMonths, parseISODate } from "@/lib/attendance-shared";
+import { addMonths, monthDates, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { ensureCategories, isMonth, loadPayroll, requireExpensesAccess } from "@/lib/expenses";
 import { PAYMENT_MODES } from "@/lib/fees-shared";
-import { dayCount, type SlipLine } from "@/lib/payroll-shared";
+import { dayCount, lopNote, type SlipLine } from "@/lib/payroll-shared";
 import type { PayrollRow } from "@/lib/expenses";
 import { logged } from "@/lib/activity";
 
@@ -42,14 +42,20 @@ const revalidate = () => revalidatePath("/admin", "layout");
  * The slip a payment saves: the person's salary lines, unpaid days if the admin
  * chose to deduct them, and an adjustment when the amount paid differs.
  */
-function slipFor(row: PayrollRow, deductLop: boolean, amount: number) {
+function slipFor(row: PayrollRow, deductLop: boolean, amount: number, month: string) {
   if (!row.pay) return { lines: [{ name: "Salary", kind: "EARNING", amount }] as SlipLine[], gross: amount, lopDays: null, lopAmount: null };
   const lop = deductLop && row.pay.lopAmount > 0;
   const lines: SlipLine[] = [...row.pay.lines];
-  if (lop) lines.push({ name: `Loss of pay (${dayCount(row.pay.lopDays)})`, kind: "DEDUCTION", amount: row.pay.lopAmount });
+  if (lop)
+    lines.push({
+      name: `Loss of pay (${dayCount(row.pay.lopDays)})`,
+      kind: "DEDUCTION",
+      amount: row.pay.lopAmount,
+      note: lopNote(row.pay.lopGross, row.pay.lopDays, monthDates(month).length),
+    });
   const expected = Math.max(0, row.pay.net - (lop ? row.pay.lopAmount : 0));
-  if (amount > expected) lines.push({ name: "Adjustment", kind: "EARNING", amount: amount - expected });
-  else if (amount < expected) lines.push({ name: "Adjustment", kind: "DEDUCTION", amount: expected - amount });
+  if (amount > expected) lines.push({ name: "Adjustment", kind: "EARNING", amount: amount - expected, note: "Paid more than the worked-out salary" });
+  else if (amount < expected) lines.push({ name: "Adjustment", kind: "DEDUCTION", amount: expected - amount, note: "Paid less than the worked-out salary" });
   return {
     lines,
     gross: row.pay.gross + (amount > expected ? amount - expected : 0),
@@ -77,7 +83,7 @@ export async function paySalary(key: string, month: string, _: ActionState, form
   const row = (await loadPayroll(school.id, month)).find((r) => r.key === key);
   if (!row || (row.type === "TEACHER" ? !key.startsWith("T:") : !key.startsWith("S:"))) return { error: "Person not found." };
   if (row.payment) return { error: `${row.name} is already paid for this month.` };
-  const slip = slipFor(row, formData.get("deductLop") === "on", parsed.data.amount);
+  const slip = slipFor(row, formData.get("deductLop") === "on", parsed.data.amount, month);
   await db.salaryPayment.create({
     data: {
       schoolId: school.id,
@@ -95,7 +101,7 @@ export async function paySalary(key: string, month: string, _: ActionState, form
     },
   });
   revalidate();
-  return logged("Payroll", { ok: true, message: `Paid ${row.name}.` });
+  return logged("Payroll", { ok: true, message: `Paid ${row.name}. Their slip is a draft: publish it from Payroll so they can see it.` });
 }
 
 /** Pays everyone not yet paid this month their monthly salary, on one date. */
@@ -123,12 +129,12 @@ export async function payAllSalaries(month: string, type: "TEACHER" | "STAFF", _
       paidOn: parseISODate(parsed.data.paidOn)!,
       mode: parsed.data.mode,
       createdBy: who,
-      ...slipFor(r, deductLop, amountOf(r)),
+      ...slipFor(r, deductLop, amountOf(r), month),
     })),
     skipDuplicates: true,
   });
   revalidate();
-  return logged("Payroll", { ok: true, message: `Paid ${due.length} ${type === "TEACHER" ? "teaching" : "non-teaching"} salar${due.length === 1 ? "y" : "ies"}.` });
+  return logged("Payroll", { ok: true, message: `Paid ${due.length} ${type === "TEACHER" ? "teaching" : "non-teaching"} salar${due.length === 1 ? "y" : "ies"}. The slips are drafts: publish them from Payroll.` });
 }
 
 export async function undoSalary(paymentId: string): Promise<ActionState> {

@@ -1,8 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { ActionState } from "@/lib/action-state";
-import { bulkApproveRecords, createLeaveRecord, decideLeaveRecord, saveAllowanceRecords, withdrawLeaveRecord, type LeaveActor } from "@/lib/leave";
+import {
+  bulkApproveRecords,
+  createLeaveRecord,
+  decideLeaveRecord,
+  deleteLeavePolicyRecord,
+  saveAllowanceRecords,
+  saveLeavePolicyRecord,
+  savePersonLeaveRecord,
+  withdrawLeaveRecord,
+  type LeaveActor,
+} from "@/lib/leave";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 
 async function adminActor(): Promise<LeaveActor> {
@@ -38,6 +49,30 @@ export async function bulkApproveLeave(ids: string[]): Promise<ActionState> {
 export async function saveAllowances(_: ActionState, formData: FormData): Promise<ActionState> {
   const school = await getCurrentSchool();
   const result = await saveAllowanceRecords(school.id, formData);
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
+}
+
+export async function saveLeavePolicy(id: string | null, _: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const result = await saveLeavePolicyRecord(school.id, id, formData);
+  if (!result.ok) return result;
+  revalidatePath("/", "layout");
+  if (!id) redirect(`/admin/settings/leave/groups/${result.id}`);
+  return result;
+}
+
+export async function deleteLeavePolicy(id: string): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const result = await deleteLeavePolicyRecord(school.id, id);
+  revalidatePath("/", "layout");
+  redirect("/admin/settings/leave");
+  return result;
+}
+
+export async function savePersonLeave(person: { teacherId: string } | { staffId: string }, _: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const result = await savePersonLeaveRecord(school.id, person, formData);
   if (result.ok) revalidatePath("/", "layout");
   return result;
 }

@@ -43,6 +43,8 @@ import { attendanceWindow, weeklyOffOn } from "@/lib/attendance";
 import { attendancePercent, emptyCounts, isoDate, parseISODate } from "@/lib/attendance-shared";
 import { loadCalendar } from "@/lib/calendar";
 import { db } from "@/lib/db";
+import { leaveBalance, type LeaveBalance } from "@/lib/leave";
+import { CATEGORY_SHORT } from "@/lib/leave-shared";
 import { fullName, sectionLabel } from "@/lib/queries";
 import { getCurrentSession } from "@/lib/sessions";
 import { requireTeacher } from "@/lib/teacher-auth";
@@ -86,6 +88,7 @@ export default async function TeacherDashboard() {
     myLeave,
     studentLeavePending,
     markExams,
+    leaveLeft,
   ] = await Promise.all([
     db.student.groupBy({ by: ["sectionId"], where: { sectionId: { in: sectionIds }, status: "ACTIVE" }, _count: true }),
     cls ? db.student.findMany({ where: { sectionId: cls.id, status: "ACTIVE" }, select: { rollNumber: true } }) : [],
@@ -155,6 +158,7 @@ export default async function TeacherDashboard() {
         results: { where: { sectionId: { in: sectionIds } }, select: { sectionId: true } },
       },
     }),
+    leaveBalance(ctx.school.id, "TEACHER", ctx.teacher.id),
   ]);
 
   /* ── Numbers ── */
@@ -397,7 +401,7 @@ export default async function TeacherDashboard() {
               month={monthMarks}
               canCheckIn={!todayMark && attendanceDue && !todayHoliday}
             />
-            <LeaveCard requests={myLeave} studentPending={studentLeavePending} />
+            <LeaveCard requests={myLeave} studentPending={studentLeavePending} balance={leaveLeft} />
             <ClassesSubjectsCard ctx={ctx} counts={new Map(counts.map((c) => [c.sectionId, c._count]))} />
             <MarksCard exams={markExams} today={win.today} />
           </div>
@@ -550,9 +554,35 @@ const LEAVE_TONE = { PENDING: "amber", APPROVED: "green", REJECTED: "red" } as c
 const shortDay = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /** The teacher's latest leave requests, and students' requests waiting on them. */
-function LeaveCard({ requests, studentPending }: { requests: { id: string; fromDate: Date; toDate: Date; status: keyof typeof LEAVE_TONE }[]; studentPending: number }) {
+function LeaveCard({
+  requests,
+  studentPending,
+  balance,
+}: {
+  requests: { id: string; fromDate: Date; toDate: Date; status: keyof typeof LEAVE_TONE }[];
+  studentPending: number;
+  balance: LeaveBalance;
+}) {
+  // Leave left this session for each type with a limit, PL first.
+  const limited = balance.rows.filter((r) => r.allowed != null);
   return (
     <Card title="My leave" icon={Plane} action={<TextLink href="/teacher/leave/new">Apply</TextLink>}>
+      {limited.length > 0 && (
+        <Link href="/teacher/my-attendance" className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Leave balance">
+          {limited.map((r) => {
+            const left = Math.max(0, r.allowed! - r.used);
+            return (
+              <span key={r.category} className={`rounded-lg px-2.5 py-1.5 ring-1 ring-inset ${left ? "bg-surface-2 ring-line" : "bg-danger-soft ring-danger-line"}`}>
+                <span className="block text-[11px] font-medium uppercase tracking-wide text-muted">{CATEGORY_SHORT[r.category]} left</span>
+                <span className={`text-base font-semibold tabular-nums ${left ? "text-fg" : "text-danger"}`}>
+                  {left}
+                  <span className="text-xs font-normal text-subtle"> / {r.allowed}</span>
+                </span>
+              </span>
+            );
+          })}
+        </Link>
+      )}
       {studentPending > 0 && (
         <Link href="/teacher/leave?who=student" className="mb-3 block rounded-lg bg-warning-soft px-3 py-2 text-sm font-medium text-fg ring-1 ring-inset ring-warning-line">
           {studentPending} student leave request{studentPending === 1 ? "" : "s"} to decide

@@ -24,7 +24,7 @@ export function LeaveHistory({
   openHref: ((id: string) => string) | null;
   newHref?: string;
   /** This session's allowance, taken and pending working days by type. */
-  balance?: { session: string; rows: BalanceRow[] };
+  balance?: { session: string; policy?: { name: string } | null; rows: BalanceRow[] };
 }) {
   const newButton = newHref && (
     <ButtonLink href={newHref} icon={Plus} size="sm" variant="secondary">
@@ -45,7 +45,11 @@ export function LeaveHistory({
   return (
     <div className="space-y-6">
       {balance && balanceRows.length > 0 && (
-        <Card title={`Leave balance · ${balance.session}`} description="Working days, against the school's leave allowances" padded={false}>
+        <Card
+          title={`Leave balance · ${balance.session}`}
+          description={`Working days. ${balance.policy ? `Leave group: ${balance.policy.name}.` : "School-wide allowance."} Resets every session.`}
+          padded={false}
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className={theadClass}>
@@ -63,7 +67,15 @@ export function LeaveHistory({
                   return (
                     <tr key={b.category}>
                       <td className={`${tdClass} font-medium text-fg`}>{CATEGORY_LABELS[b.category]}</td>
-                      <td className={`${tdClass} text-right tabular-nums`}>{b.allowed ?? "No limit"}</td>
+                      <td className={`${tdClass} text-right tabular-nums`}>
+                        {b.allowed ?? "No limit"}
+                        {b.extra !== 0 && (
+                          <span className="ml-1 text-xs text-accent-text" title="Extra days given for this session">
+                            ({b.extra > 0 ? "+" : "−"}
+                            {Math.abs(b.extra)})
+                          </span>
+                        )}
+                      </td>
                       <td className={`${tdClass} text-right tabular-nums`}>{b.used}</td>
                       <td className={`${tdClass} text-right tabular-nums ${b.pending ? "text-warning" : ""}`}>{b.pending}</td>
                       <td className={`${tdClass} text-right font-semibold tabular-nums ${left != null && left < 0 ? "text-danger" : left === 0 ? "text-warning" : "text-fg"}`}>{left ?? "—"}</td>

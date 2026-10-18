@@ -227,10 +227,12 @@ async function loadDemoExpenses(tx: Prisma.TransactionClient, schoolId: string, 
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
     const month = d.toISOString().slice(0, 7);
     const paidOn = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 28));
+    // Older months are published; last month's slips are drafts waiting to be checked and published.
+    const publish = back > 1 ? { published: true, publishedAt: paidOn, publishedBy: "Demo data" } : {};
     await tx.salaryPayment.createMany({
       data: [
-        ...teachers.map((t) => ({ schoolId, month, payeeType: "TEACHER" as const, teacherId: t.id, name: `${t.firstName} ${t.lastName}`, role: "Teacher", amount: t.monthlySalary ?? 0, paidOn, mode: "BANK_TRANSFER" as const, createdBy: "Demo data" })),
-        ...staff.map((s) => ({ schoolId, month, payeeType: "STAFF" as const, staffId: s.id, name: s.name, role: s.designation, amount: s.monthlySalary ?? 0, paidOn, mode: "BANK_TRANSFER" as const, createdBy: "Demo data" })),
+        ...teachers.map((t) => ({ schoolId, month, payeeType: "TEACHER" as const, teacherId: t.id, name: `${t.firstName} ${t.lastName}`, role: "Teacher", amount: t.monthlySalary ?? 0, paidOn, mode: "BANK_TRANSFER" as const, createdBy: "Demo data", ...publish })),
+        ...staff.map((s) => ({ schoolId, month, payeeType: "STAFF" as const, staffId: s.id, name: s.name, role: s.designation, amount: s.monthlySalary ?? 0, paidOn, mode: "BANK_TRANSFER" as const, createdBy: "Demo data", ...publish })),
       ],
     });
     // Bills vary a little month to month; one month has a school event.

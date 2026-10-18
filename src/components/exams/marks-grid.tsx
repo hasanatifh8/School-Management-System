@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { startTransition, useActionState, useEffect, useMemo, useState, useTransition } from "react";
-import { CircleCheck, EyeOff, FileBarChart, Loader2, Lock, Save, Send } from "lucide-react";
+import { CalendarClock, CircleCheck, EyeOff, FileBarChart, Loader2, Lock, Save, Send } from "lucide-react";
 import { FormMessage } from "@/components/forms";
 import { Badge, buttonVariants, checkboxClass, useConfirm, useToast } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
@@ -10,7 +10,18 @@ import { PASS_PERCENT, formatExamDate, formatMarks, gradeFor, parseMark, passes 
 
 export type GridData = {
   section: { label: string };
-  papers: { id: string; name: string; date: string; maxMarks: number; optional: boolean; passMarks: number | null; editable: boolean }[];
+  papers: {
+    id: string;
+    name: string;
+    date: string;
+    maxMarks: number;
+    optional: boolean;
+    passMarks: number | null;
+    editable: boolean;
+    /** Marks open the day after the paper; until then the column is locked. */
+    opensOn: string;
+    notYet: boolean;
+  }[];
   ungraded: number;
   students: { id: string; name: string; rollNumber: number | null; studentCode: string; eligible: string[] }[];
   marks: Record<string, { marks: number | null; absent: boolean }>;
@@ -115,8 +126,10 @@ export function MarksGrid({
     startTransition(() => formAction(fd));
   };
 
-  // The papers of a student this user enters; the Absent box applies to these.
-  const mineFor = (s: (typeof students)[number]) => papers.filter((p) => p.editable && s.eligible.includes(p.id));
+  // Papers this user can type in now: theirs, and already sat. The Absent box applies to these.
+  const canType = (p: (typeof papers)[number]) => p.editable && !p.notYet;
+  const upcoming = papers.filter((p) => p.editable && p.notYet);
+  const mineFor = (s: (typeof students)[number]) => papers.filter((p) => canType(p) && s.eligible.includes(p.id));
   const isAbsent = (s: (typeof students)[number]) => {
     const mine = mineFor(s);
     return mine.length > 0 && mine.every((p) => values[key(p.id, s.id)] === "AB");
@@ -134,7 +147,7 @@ export function MarksGrid({
       return next;
     });
   };
-  const showAbsent = !locked && papers.some((p) => p.editable);
+  const showAbsent = !locked && papers.some(canType);
 
   // Totals from what is typed now (invalid cells count as missing). Optional papers aren't totalled.
   const totals = students.map((s) => {
@@ -212,6 +225,16 @@ export function MarksGrid({
         </p>
       )}
 
+      {!locked && upcoming.length > 0 && (
+        <div role="status" className="flex items-start gap-2.5 border-b border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning sm:px-6">
+          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            <span className="font-semibold">Marks open the day after each paper.</span>{" "}
+            {upcoming.map((p) => `${p.name}: paper on ${formatExamDate(p.date)}, marks from ${formatExamDate(p.opensOn)}`).join(" · ")}.
+          </p>
+        </div>
+      )}
+
       {papers.length === 0 || students.length === 0 ? (
         <p className="px-6 py-12 text-center text-sm text-muted">
           {students.length === 0 ? "There are no students in this section." : "No paper for this class has max marks yet. Add max marks in the timetable to enter marks."}
@@ -229,12 +252,17 @@ export function MarksGrid({
                 )}
                 {papers.map((p) => (
                   <th key={p.id} className={`${th} text-center normal-case tracking-normal`}>
-                    <span className={`block text-xs font-semibold ${p.editable && !locked ? "text-fg" : "text-muted"}`}>{p.name}</span>
+                    <span className={`block text-xs font-semibold ${canType(p) && !locked ? "text-fg" : "text-muted"}`}>{p.name}</span>
                     <span className="block text-[11px] font-normal text-muted">
                       {formatExamDate(p.date)} · MM {p.maxMarks}
                       {p.optional && " · optional"}
                       {p.passMarks != null && ` · pass ${p.passMarks}`}
                     </span>
+                    {p.editable && p.notYet && !locked && (
+                      <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-warning">
+                        <Lock className="h-3 w-3" /> Opens {formatExamDate(p.opensOn)}
+                      </span>
+                    )}
                   </th>
                 ))}
                 <th className={`${th} text-right`}>Total</th>
@@ -279,7 +307,14 @@ export function MarksGrid({
                       const v = values[k] ?? "";
                       const parsed = parseMark(v, p.maxMarks);
                       const low = "marks" in parsed && !passes(parsed.marks, p);
-                      if (!p.editable || locked) {
+                      if (p.editable && p.notYet && !locked && !v) {
+                        return (
+                          <td key={p.id} className="px-3 py-2 text-center text-subtle" title={`Marks for ${p.name} can be entered from ${formatExamDate(p.opensOn)}`}>
+                            <Lock className="mx-auto h-3.5 w-3.5" aria-label={`Locked until ${formatExamDate(p.opensOn)}`} />
+                          </td>
+                        );
+                      }
+                      if (!canType(p) || locked) {
                         return (
                           <td key={p.id} className={`px-3 py-2 text-center tabular-nums ${v === "AB" ? "font-medium text-danger" : low ? "text-danger" : "text-fg-2"}`}>
                             {v || <span className="text-subtle">—</span>}
@@ -365,7 +400,7 @@ export function MarksGrid({
         <div className="min-w-0 flex-1 space-y-2">
           <FormMessage state={state.error ? state : {}} />
           <FormMessage state={publishState} />
-          {!locked && papers.some((p) => p.editable) && (
+          {!locked && papers.some(canType) && (
             <p className="text-xs text-muted">
               Type marks. For a student absent in one subject, press AB beside that box (or type AB); their other papers stay open. Tick
               Absent in all only if they missed the whole exam. Enter moves down. Marks below a paper&apos;s pass marks
@@ -374,7 +409,7 @@ export function MarksGrid({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!locked && papers.some((p) => p.editable) && (
+          {!locked && papers.some(canType) && (
             <button type="button" onClick={submit} disabled={saving || !dirty} className={buttonVariants.primary}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : dirty ? <Save className="h-4 w-4" /> : <CircleCheck className="h-4 w-4" />}
               {dirty ? `Save ${changed.length} change${changed.length === 1 ? "" : "s"}` : "All saved"}

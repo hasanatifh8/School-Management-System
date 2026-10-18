@@ -6,6 +6,8 @@ import { MODE_LABELS, rupees } from "@/lib/fees-shared";
 import { loadComponents, loadOwnValues } from "@/lib/payroll";
 import { computeSalary, dayCount } from "@/lib/payroll-shared";
 import { getCurrentSession } from "@/lib/sessions";
+import { monthDates, todayISO } from "@/lib/attendance-shared";
+import { loadPersonAttendance } from "@/lib/staff-register";
 import { requireTeacher } from "@/lib/teacher-auth";
 
 const monthFormat = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -15,7 +17,7 @@ const dateFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "sh
 export default async function TeacherSalaryPage() {
   const { teacher, school } = await requireTeacher();
   const [payments, components, own, session] = await Promise.all([
-    db.salaryPayment.findMany({ where: { schoolId: school.id, teacherId: teacher.id }, orderBy: [{ month: "desc" }, { createdAt: "desc" }] }),
+    db.salaryPayment.findMany({ where: { schoolId: school.id, teacherId: teacher.id, published: true }, orderBy: [{ month: "desc" }, { createdAt: "desc" }] }),
     loadComponents(school.id),
     loadOwnValues(school.id, { teacherId: teacher.id }),
     getCurrentSession(school.id),
@@ -25,50 +27,103 @@ export default async function TeacherSalaryPage() {
   const to = session.endDate.toISOString().slice(0, 7);
   const thisSession = payments.filter((p) => p.month >= from && p.month <= to);
   const last = payments[0];
+  // Present and absent days for every month with a slip.
+  const months = payments.map((p) => p.month).sort();
+  const today = todayISO();
+  const register = months.length
+    ? await loadPersonAttendance(
+        school.id,
+        { teacherId: teacher.id },
+        monthDates(months[0])[0],
+        monthDates(months[months.length - 1]).at(-1)!,
+        today,
+        teacher.joiningDate ? teacher.joiningDate.toISOString().slice(0, 10) : null,
+      )
+    : null;
+  const attendance = new Map(register?.byMonth.map((m) => [m.month, m]) ?? []);
+  const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
   return (
     <>
-      <PageHeader title="Salary slips" subtitle="Your monthly salary slips from the school. Open one to print it or save it as a PDF." />
+      <PageHeader
+        title="Salary slips"
+        subtitle="Your salary slips for every month the school has published, with that month's attendance. Open one to see the full breakup, print it or save it as a PDF."
+      />
 
       <div className="mb-6">
         <StatGrid cols={3}>
-          <StatCard icon={Banknote} tone="emerald" label="Last salary" value={last ? rupees(last.amount) : "—"} detail={last ? monthFormat.format(new Date(`${last.month}-01T00:00:00Z`)) : "No salary paid yet"} />
-          <StatCard icon={CalendarRange} tone="indigo" label={`Session ${session.name}`} value={rupees(thisSession.reduce((n, p) => n + p.amount, 0))} detail={`${thisSession.length} month${thisSession.length === 1 ? "" : "s"} paid`} />
-          <StatCard icon={Wallet} tone="sky" label="Monthly net pay" value={structure ? rupees(structure.net) : "—"} detail={structure ? `Gross ${rupees(structure.gross)}` : "Not set by the school yet"} />
+          <StatCard
+            icon={Banknote}
+            tone="emerald"
+            label="Last salary"
+            value={last ? rupees(last.amount) : "—"}
+            detail={last ? monthFormat.format(new Date(`${last.month}-01T00:00:00Z`)) : "No salary paid yet"}
+          />
+          <StatCard
+            icon={CalendarRange}
+            tone="indigo"
+            label={`Session ${session.name}`}
+            value={rupees(thisSession.reduce((n, p) => n + p.amount, 0))}
+            detail={`${thisSession.length} month${thisSession.length === 1 ? "" : "s"} paid`}
+          />
+          <StatCard
+            icon={Wallet}
+            tone="sky"
+            label="Monthly net pay"
+            value={structure ? rupees(structure.net) : "—"}
+            detail={structure ? `Gross ${rupees(structure.gross)}` : "Not set by the school yet"}
+          />
         </StatGrid>
       </div>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <Card title="Slips" icon={FileText} padded={false}>
           {payments.length === 0 ? (
-            <EmptyState icon={FileText} title="No salary slips yet" description="Your slip appears here once the school pays your salary for a month." />
+            <EmptyState
+              icon={FileText}
+              title="No salary slips yet"
+              description="Your slip appears here once the school pays and publishes your salary for a month."
+            />
           ) : (
             <PagedList pageSize={12} noun="slips">
-              {payments.map((p) => (
-                <li key={p.id}>
-                  <Link href={`/teacher/salary/${p.id}`} className="group flex items-center gap-4 px-5 py-3.5 transition hover:bg-surface-2 sm:px-6">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-300">
-                      <FileText className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-medium text-fg group-hover:text-accent-text">{monthFormat.format(new Date(`${p.month}-01T00:00:00Z`))}</span>
-                      <span className="block text-xs text-muted">
-                        Paid {dateFormat.format(p.paidOn)} · {MODE_LABELS[p.mode]}
+              {payments.map((p) => {
+                const a = attendance.get(p.month);
+                return (
+                  <li key={p.id}>
+                    <Link href={`/teacher/salary/${p.id}`} className="group flex items-center gap-4 px-5 py-3.5 transition hover:bg-surface-2 sm:px-6">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-300">
+                        <FileText className="h-5 w-5" />
                       </span>
-                    </span>
-                    {p.lopDays ? (
-                      <Badge tone="red" dot>
-                        {dayCount(p.lopDays)} unpaid
-                      </Badge>
-                    ) : null}
-                    <span className="text-right">
-                      <span className="block font-semibold tabular-nums text-fg">{rupees(p.amount)}</span>
-                      {p.gross && p.gross !== p.amount ? <span className="block text-xs tabular-nums text-muted">of {rupees(p.gross)}</span> : null}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-subtle group-hover:text-accent-text" />
-                  </Link>
-                </li>
-              ))}
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium text-fg group-hover:text-accent-text">
+                          {monthFormat.format(new Date(`${p.month}-01T00:00:00Z`))}
+                        </span>
+                        <span className="block text-xs text-muted">
+                          Paid {dateFormat.format(p.paidOn)} · {MODE_LABELS[p.mode]}
+                        </span>
+                        {a && (
+                          <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums">
+                            <span className="text-success">Present {num(a.present)}</span>
+                            <span className={a.absent ? "text-danger" : "text-muted"}>Absent {a.absent}</span>
+                            {a.leave > 0 && <span className="text-muted">Leave {a.leave}</span>}
+                            <span className="text-subtle">of {a.workingDays} working days</span>
+                          </span>
+                        )}
+                      </span>
+                      {p.lopDays ? (
+                        <Badge tone="red" dot>
+                          {dayCount(p.lopDays)} unpaid
+                        </Badge>
+                      ) : null}
+                      <span className="text-right">
+                        <span className="block font-semibold tabular-nums text-fg">{rupees(p.amount)}</span>
+                        {p.gross && p.gross !== p.amount ? <span className="block text-xs tabular-nums text-muted">of {rupees(p.gross)}</span> : null}
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-subtle group-hover:text-accent-text" />
+                    </Link>
+                  </li>
+                );
+              })}
             </PagedList>
           )}
         </Card>

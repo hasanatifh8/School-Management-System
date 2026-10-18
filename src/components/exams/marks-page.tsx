@@ -69,7 +69,7 @@ export async function MarksPageContent({
         <MarksGrid
           data={{
             section: { label: sheet.section.label },
-            papers: sheet.papers.map(({ id, name, date, maxMarks, optional, passMarks, editable }) => ({ id, name, date, maxMarks, optional, passMarks, editable })),
+            papers: sheet.papers.map(({ id, name, date, maxMarks, optional, passMarks, editable, opensOn, notYet }) => ({ id, name, date, maxMarks, optional, passMarks, editable, opensOn, notYet })),
             ungraded: sheet.ungraded,
             students: students.map(({ id, name, rollNumber, studentCode, eligible }) => ({ id, name, rollNumber, studentCode, eligible })),
             marks: sheet.marks,

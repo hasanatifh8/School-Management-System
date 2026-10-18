@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Send, X } from "lucide-react";
+import { Search, Send, TriangleAlert, X } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
@@ -11,7 +11,9 @@ import {
   CATEGORY_LABELS,
   LEAVE_CATEGORIES,
   MAX_LEAVE_DAYS,
+  STUDENT_CATEGORIES,
   leaveDays,
+  type LeaveCategoryKey,
   type LeaveApplicantKey,
   type LeavePerson,
 } from "@/lib/leave-shared";
@@ -19,6 +21,8 @@ import {
 /**
  * A leave application: who it's for, the dates, the reason. `self` is the
  * signed-in teacher's own option ("Myself"), which needs no person picked.
+ * With `balance`, applying for yourself shows the days left of the chosen type
+ * and warns (without blocking) when the request asks for more; the admin decides.
  */
 export function LeaveForm({
   action,
@@ -26,12 +30,18 @@ export function LeaveForm({
   self,
   canApproveNow,
   today,
+  balance,
+  daysOff = [],
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   people: LeavePerson[];
   self?: LeaveApplicantKey;
   canApproveNow: boolean;
   today: string;
+  /** The applicant's own leave left this session, by type (allowed null = no limit). */
+  balance?: { category: LeaveCategoryKey; allowed: number | null; used: number; pending: number }[];
+  /** Weekly offs and holidays, which leave doesn't count. */
+  daysOff?: string[];
 }) {
   const kinds = useMemo(() => {
     const present = new Set(people.map((p) => p.applicant));
@@ -50,7 +60,23 @@ export function LeaveForm({
       .filter((p) => p.applicant === applicant && words.every((w) => p.name.toLowerCase().includes(w) || p.sub.toLowerCase().includes(w)))
       .slice(0, 8);
   }, [people, applicant, q]);
+  const [category, setCategory] = useState<LeaveCategoryKey | "">("");
   const days = from && to && to >= from ? leaveDays(from, to) : 0;
+  const categories = applicant === "STUDENT" ? STUDENT_CATEGORIES : LEAVE_CATEGORIES;
+
+  // Working days asked (weekly offs and holidays don't count), against what's left of the chosen type.
+  const off = useMemo(() => new Set(daysOff), [daysOff]);
+  const working = useMemo(() => {
+    if (!days || days > MAX_LEAVE_DAYS) return 0;
+    let n = 0;
+    for (let i = 0; i < days; i++) {
+      const d = new Date(Date.parse(`${from}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10);
+      if (!off.has(d)) n++;
+    }
+    return n;
+  }, [from, days, off]);
+  const row = isSelf && category ? balance?.find((b) => b.category === category) : undefined;
+  const left = row?.allowed != null ? row.allowed - row.used - row.pending : null;
 
   return (
     <ActionForm action={action} className="space-y-5">
@@ -70,6 +96,7 @@ export function LeaveForm({
                     setApplicant(k);
                     setPerson(null);
                     setQ("");
+                    if (k === "STUDENT" && category === "PRIVILEGED") setCategory("");
                   }}
                   className={`rounded-full px-4 py-1.5 text-sm font-medium ring-1 ring-inset transition ${
                     applicant === k ? "bg-accent-soft text-accent-text ring-accent-line" : "bg-surface text-fg-2 ring-line hover:bg-surface-2"
@@ -152,17 +179,49 @@ export function LeaveForm({
           </div>
 
           <Field label="Reason" name="category" errors={state.fieldErrors} required>
-            <select name="category" required defaultValue="" className={selectClass}>
+            <select name="category" required value={category} onChange={(e) => setCategory(e.target.value as LeaveCategoryKey)} className={selectClass}>
               <option value="" disabled>
                 Choose a reason
               </option>
-              {LEAVE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABELS[c]}
-                </option>
-              ))}
+              {categories.map((c) => {
+                const b = isSelf ? balance?.find((x) => x.category === c) : undefined;
+                const l = b?.allowed != null ? Math.max(0, b.allowed - b.used - b.pending) : null;
+                return (
+                  <option key={c} value={c}>
+                    {CATEGORY_LABELS[c]}
+                    {l != null ? ` · ${l} day${l === 1 ? "" : "s"} left` : ""}
+                  </option>
+                );
+              })}
             </select>
           </Field>
+
+          {row && left != null && working > 0 && (
+            <p
+              role="status"
+              className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm ring-1 ring-inset ${
+                working > left ? "bg-warning-soft text-warning ring-warning-line" : "bg-surface-2 text-fg-2 ring-line"
+              }`}
+            >
+              {working > left && <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />}
+              <span>
+                {working > left ? (
+                  <>
+                    <strong>
+                      This asks for {working} working day{working === 1 ? "" : "s"} but you have {Math.max(0, left)} {CATEGORY_LABELS[row.category].toLowerCase()} left.
+                    </strong>{" "}
+                    You can still apply; the school decides, and days over your balance may be unpaid.
+                  </>
+                ) : (
+                  <>
+                    {working} working day{working === 1 ? "" : "s"}. After this you&apos;ll have {left - working} {CATEGORY_LABELS[row.category].toLowerCase()} day
+                    {left - working === 1 ? "" : "s"} left.
+                  </>
+                )}
+                {row.pending > 0 && ` (${row.pending} day${row.pending === 1 ? "" : "s"} already waiting for approval are counted.)`}
+              </span>
+            </p>
+          )}
 
           <Field label="Description" name="description" errors={state.fieldErrors} hint="Optional. Details for whoever approves it.">
             <textarea name="description" rows={3} maxLength={500} className={inputClass} />

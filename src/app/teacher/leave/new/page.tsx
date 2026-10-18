@@ -1,13 +1,18 @@
 import { LeaveForm } from "@/components/leave/leave-form";
 import { Card, PageHeader } from "@/components/ui";
 import { todayISO } from "@/lib/attendance-shared";
-import { leavePeople, teacherLeaveActor } from "@/lib/leave";
+import { leaveBalance, leavePeople, teacherLeaveActor, upcomingDaysOff } from "@/lib/leave";
 import { requireTeacher } from "@/lib/teacher-auth";
 import { applyLeave } from "../actions";
 
 export default async function TeacherNewLeavePage() {
   const ctx = await requireTeacher();
-  const people = await leavePeople(teacherLeaveActor(ctx));
+  const today = todayISO();
+  const [people, balance, daysOff] = await Promise.all([
+    leavePeople(teacherLeaveActor(ctx)),
+    leaveBalance(ctx.school.id, "TEACHER", ctx.teacher.id),
+    upcomingDaysOff(ctx.school.id, today),
+  ]);
   return (
     <>
       <PageHeader
@@ -16,7 +21,7 @@ export default async function TeacherNewLeavePage() {
         breadcrumbs={[{ label: "Leave", href: "/teacher/leave" }, { label: "New request" }]}
       />
       <Card className="max-w-2xl">
-        <LeaveForm action={applyLeave} people={people} self="TEACHER" canApproveNow={false} today={todayISO()} />
+        <LeaveForm action={applyLeave} people={people} self="TEACHER" canApproveNow={false} today={today} balance={balance.rows} daysOff={daysOff} />
       </Card>
     </>
   );

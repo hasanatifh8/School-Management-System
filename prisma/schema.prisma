@@ -118,6 +118,7 @@ enum LeaveApplicant {
 }
 
 enum LeaveCategory {
+  PRIVILEGED // PL
   SICK
   CASUAL
   FAMILY
@@ -197,28 +198,31 @@ model School {
   houses    House[]
   sessions  AcademicSession[]
 
-  attendanceDays   AttendanceDay[]
-  holidays         Holiday[]
-  staffAttendance  StaffAttendance[]
-  transportRoutes  TransportRoute[]
-  leaveRequests    LeaveRequest[]
-  feeHeads         FeeHead[]
-  feeReceipts      FeeReceipt[]
-  staffMembers     StaffMember[]
-  salaryPayments   SalaryPayment[]
-  salaryComponents SalaryComponent[]
-  salaryValues     SalaryValue[]
-  studyMaterials   StudyMaterial[]
-  expenseCats      ExpenseCategory[]
-  expenses         Expense[]
-  messaging        MessagingSettings?
-  notices          Notice[]
-  exams            Exam[]
-  periods          Period[]
-  calendarEvents   CalendarEvent[]
-  leaveAllowances  LeaveAllowance[]
-  attendanceEdits  AttendanceChange[]
-  proxies          ProxyAssignment[]
+  attendanceDays    AttendanceDay[]
+  holidays          Holiday[]
+  staffAttendance   StaffAttendance[]
+  transportRoutes   TransportRoute[]
+  leaveRequests     LeaveRequest[]
+  feeHeads          FeeHead[]
+  feeReceipts       FeeReceipt[]
+  staffMembers      StaffMember[]
+  salaryPayments    SalaryPayment[]
+  salaryComponents  SalaryComponent[]
+  salaryValues      SalaryValue[]
+  studyMaterials    StudyMaterial[]
+  expenseCats       ExpenseCategory[]
+  expenses          Expense[]
+  messaging         MessagingSettings?
+  notices           Notice[]
+  exams             Exam[]
+  periods           Period[]
+  calendarEvents    CalendarEvent[]
+  leaveAllowances   LeaveAllowance[]
+  leavePolicies     LeavePolicy[]
+  leaveExtras       LeaveExtra[]
+  attendanceEdits   AttendanceChange[]
+  proxies           ProxyAssignment[]
+  salaryAdjustments SalaryAdjustment[]
 }
 
 // A school house (e.g. "Green House"). Names and colours are set by the admin.
@@ -380,6 +384,7 @@ model Teacher {
   specialization  String?
   experienceYears Int? // total teaching experience
   monthlySalary   Int? // in rupees
+  leavePolicyId   String? // their leave group; none = the school-wide allowance
   joiningDate     DateTime    @default(now())
   status          Status      @default(ACTIVE)
   photoId         String?     @unique
@@ -408,8 +413,12 @@ model Teacher {
   noticeMessages NoticeRecipient[]
   attendance     StaffAttendance[]
   leaveRequests  LeaveRequest[]
+  leavePolicy    LeavePolicy?      @relation(fields: [leavePolicyId], references: [id], onDelete: SetNull)
+  leaveExtras    LeaveExtra[]
   proxiesNeeded  ProxyAssignment[] @relation("ProxyAbsent")
   proxiesTaken   ProxyAssignment[] @relation("ProxyCover")
+
+  salaryAdjustments SalaryAdjustment[]
 
   @@unique([schoolId, employeeCode])
 }
@@ -543,6 +552,8 @@ model AcademicSession {
   exams          Exam[]
   studyMaterials StudyMaterial[]
   calendarEvents CalendarEvent[]
+
+  leaveExtras LeaveExtra[]
 
   @@unique([schoolId, name])
 }
@@ -752,6 +763,44 @@ model LeaveAllowance {
   school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@unique([schoolId, applicant, category])
+}
+
+// A leave group, e.g. "Senior teachers": leave days a session per type for the
+// teachers and staff given it. A type left out has no limit.
+model LeavePolicy {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  days      Json // { "PRIVILEGED": 15, "CASUAL": 10, ... }
+  createdAt DateTime @default(now())
+
+  school   School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teachers Teacher[]
+  staff    StaffMember[]
+
+  @@unique([schoolId, name])
+}
+
+// Days added to (or taken off) one person's leave of one type for one session,
+// on top of their group or the school-wide allowance. Exactly one of
+// teacherId / staffId is set.
+model LeaveExtra {
+  id        String        @id @default(cuid())
+  schoolId  String
+  sessionId String
+  teacherId String?
+  staffId   String?
+  category  LeaveCategory
+  days      Int
+
+  school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  teacher Teacher?        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staff   StaffMember?    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, teacherId, category])
+  @@unique([sessionId, staffId, category])
+  @@index([schoolId])
 }
 
 // A change to saved attendance made from a register, with the reason. Exactly
@@ -975,6 +1024,7 @@ model StaffMember {
   qualification   String? // e.g. "B.Com", "12th pass"
   experienceYears Int? // total work experience
   monthlySalary   Int?
+  leavePolicyId   String? // their leave group; none = the school-wide allowance
   joiningDate     DateTime?
   status          Status      @default(ACTIVE)
   photoId         String?     @unique
@@ -990,6 +1040,10 @@ model StaffMember {
   noticeMessages NoticeRecipient[]
   attendance     StaffAttendance[]
   leaveRequests  LeaveRequest[]
+  leavePolicy    LeavePolicy?      @relation(fields: [leavePolicyId], references: [id], onDelete: SetNull)
+  leaveExtras    LeaveExtra[]
+
+  salaryAdjustments SalaryAdjustment[]
 
   @@unique([schoolId, employeeCode])
   @@index([schoolId])
@@ -998,25 +1052,29 @@ model StaffMember {
 // One person's salary paid for one month. Name and role are copied so the
 // record stays readable after someone leaves.
 model SalaryPayment {
-  id        String      @id @default(cuid())
-  schoolId  String
-  month     String // "2026-09"
-  payeeType PayeeType
-  teacherId String?
-  staffId   String?
-  name      String
-  role      String
-  amount    Int
-  paidOn    DateTime    @db.Date
-  mode      PaymentMode
-  note      String?
-  createdBy String
-  createdAt DateTime    @default(now())
-  // The salary slip, as worked out when paid: [{ name, kind: "EARNING" | "DEDUCTION", amount }]. Null for older payments.
-  lines     Json?
-  gross     Int? // earnings before deductions
-  lopDays   Float? // unpaid days deducted (absent + half of half days), when the admin chose to
-  lopAmount Int?
+  id          String      @id @default(cuid())
+  schoolId    String
+  month       String // "2026-09"
+  payeeType   PayeeType
+  teacherId   String?
+  staffId     String?
+  name        String
+  role        String
+  amount      Int
+  paidOn      DateTime    @db.Date
+  mode        PaymentMode
+  note        String?
+  createdBy   String
+  createdAt   DateTime    @default(now())
+  // The salary slip, as worked out when paid: [{ name, kind: "EARNING" | "DEDUCTION", amount, note? }] (note: why, e.g. "12% of basic pay"). Null for older payments.
+  lines       Json?
+  gross       Int? // earnings before deductions
+  lopDays     Float? // unpaid days deducted (absent + half of half days), when the admin chose to
+  lopAmount   Int?
+  // A slip stays a draft (admins only) until published; then the teacher sees it.
+  published   Boolean     @default(false)
+  publishedAt DateTime?
+  publishedBy String?
 
   school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: SetNull)
@@ -1464,4 +1522,27 @@ model MaterialFile {
   data     Bytes
   text     String?
   material StudyMaterial?
+}
+
+// A one-time earning or deduction for one person in one month (a bonus,
+// arrears, an advance recovered…). Added to that month's salary when it is
+// paid. Exactly one of teacherId / staffId is set.
+model SalaryAdjustment {
+  id        String              @id @default(cuid())
+  schoolId  String
+  month     String // "2026-10"
+  teacherId String?
+  staffId   String?
+  name      String // e.g. "Diwali bonus"
+  kind      SalaryComponentKind
+  amount    Int
+  note      String? // why, printed on the slip
+  createdBy String
+  createdAt DateTime            @default(now())
+
+  school  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher Teacher?     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staff   StaffMember? @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, month])
 }

@@ -4,15 +4,22 @@ export const LEAVE_APPLICANTS = ["STUDENT", "TEACHER", "STAFF"] as const;
 export type LeaveApplicantKey = (typeof LEAVE_APPLICANTS)[number];
 export const APPLICANT_LABELS: Record<LeaveApplicantKey, string> = { STUDENT: "Student", TEACHER: "Teacher", STAFF: "Staff" };
 
-export const LEAVE_CATEGORIES = ["SICK", "CASUAL", "FAMILY", "EMERGENCY", "OTHER"] as const;
+export const LEAVE_CATEGORIES = ["PRIVILEGED", "SICK", "CASUAL", "FAMILY", "EMERGENCY", "OTHER"] as const;
 export type LeaveCategoryKey = (typeof LEAVE_CATEGORIES)[number];
 export const CATEGORY_LABELS: Record<LeaveCategoryKey, string> = {
+  PRIVILEGED: "Privileged leave (PL)",
   SICK: "Sick / medical",
   CASUAL: "Casual",
   FAMILY: "Family function",
   EMERGENCY: "Emergency",
   OTHER: "Other",
 };
+
+/** Short names for balance chips, e.g. "PL 9 left". */
+export const CATEGORY_SHORT: Record<LeaveCategoryKey, string> = { PRIVILEGED: "PL", SICK: "Sick", CASUAL: "Casual", FAMILY: "Family", EMERGENCY: "Emergency", OTHER: "Other" };
+
+/** Leave types a student can ask for (PL is for teachers and staff). */
+export const STUDENT_CATEGORIES = LEAVE_CATEGORIES.filter((c) => c !== "PRIVILEGED");
 
 export const LEAVE_STATUSES = ["PENDING", "APPROVED", "REJECTED"] as const;
 export type LeaveStatusKey = (typeof LEAVE_STATUSES)[number];

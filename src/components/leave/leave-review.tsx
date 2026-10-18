@@ -125,6 +125,7 @@ export function LeaveReview({
 
       {r.balance && (
         <Section icon={Wallet} title={`Leave balance · Session ${r.balance.session}`}>
+          <p className="mb-2.5 text-xs text-muted">{r.balance.policy ? `Leave group: ${r.balance.policy.name}` : "School-wide allowance"}</p>
           <ul className="space-y-2.5">
             {r.balance.rows
               .filter((b) => b.allowed != null || b.used || b.pending)
@@ -162,7 +163,7 @@ export function LeaveReview({
                 : `After approving: ${after} ${CATEGORY_LABELS[r.category].toLowerCase()} day(s) left.`}
             </p>
           )}
-          {r.balance.rows.every((b) => b.allowed == null) && <p className="mt-2 text-xs text-muted">No allowances set. Set them under Leave → Leave allowances.</p>}
+          {r.balance.rows.every((b) => b.allowed == null) && <p className="mt-2 text-xs text-muted">No allowances set. Set them under Leave → Leave allowances, or put this person in a leave group.</p>}
         </Section>
       )}
 

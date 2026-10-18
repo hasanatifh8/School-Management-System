@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { Banknote, FileText, Wallet } from "lucide-react";
+import { Banknote, FileText, ReceiptText, Wallet } from "lucide-react";
+import { SalaryBreakdown } from "@/components/payroll/salary-breakdown";
 import { SalaryStructureForm } from "@/components/payroll/salary-structure-form";
-import { Card, EmptyState, PagedList } from "@/components/ui";
+import { Badge, Card, EmptyState, PagedList } from "@/components/ui";
 import { db } from "@/lib/db";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
 import { loadComponents, loadOwnValues } from "@/lib/payroll";
+import { computeSalary } from "@/lib/payroll-shared";
 import { saveSalaryStructure } from "@/app/admin/settings/payroll/actions";
 
 const monthFormat = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -18,11 +20,17 @@ export async function SalaryTab({ schoolId, person, basic }: { schoolId: string;
     loadOwnValues(schoolId, person),
     db.salaryPayment.findMany({ where: { schoolId, ...person }, orderBy: [{ month: "desc" }, { createdAt: "desc" }] }),
   ]);
+  const salary = basic ? computeSalary(basic, components, own.get(key) ?? {}) : null;
   return (
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-      <Card title="Salary structure" icon={Wallet} description="Basic pay plus the school's earnings and deductions. Applies to months not yet paid.">
-        <SalaryStructureForm action={saveSalaryStructure.bind(null, person)} basic={basic} components={components} own={own.get(key) ?? {}} />
-      </Card>
+      <div className="space-y-6">
+        <Card title="Salary structure" icon={Wallet} description="Basic pay plus the school's earnings and deductions. Applies to months not yet paid.">
+          <SalaryStructureForm action={saveSalaryStructure.bind(null, person)} basic={basic} components={components} own={own.get(key) ?? {}} />
+        </Card>
+        <Card title="Monthly salary slip" icon={ReceiptText} description="The saved structure as it is paid each month, before any unpaid days.">
+          {salary ? <SalaryBreakdown salary={salary} /> : <p className="text-sm text-muted">Enter basic pay above and save to see the salary slip.</p>}
+        </Card>
+      </div>
       <Card title="Salaries paid" icon={Banknote} description={payments.length ? `${payments.length} payment${payments.length === 1 ? "" : "s"}` : undefined} padded={false}>
         {payments.length === 0 ? (
           <EmptyState compact icon={Banknote} title="No salary paid yet" description="Pay it from Expenses → Salaries." />
@@ -39,6 +47,11 @@ export async function SalaryTab({ schoolId, person, basic }: { schoolId: string;
                       {p.lopDays ? ` · ${p.lopDays} unpaid day${p.lopDays === 1 ? "" : "s"} deducted` : ""}
                     </span>
                   </span>
+                  {!p.published && (
+                    <Badge tone="amber" dot>
+                      Draft
+                    </Badge>
+                  )}
                   <span className="font-semibold tabular-nums text-fg">{rupees(p.amount)}</span>
                 </Link>
               </li>

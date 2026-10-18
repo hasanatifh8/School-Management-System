@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { BackLink } from "@/components/back-link";
 import { PdfDownloadButton } from "@/components/pdf-download";
@@ -6,8 +7,8 @@ import { SalarySlip } from "@/components/payroll/salary-slip";
 import { buttonVariants } from "@/components/ui";
 import type { Payslip } from "@/lib/payroll";
 
-/** A salary slip with Back, Print and Download PDF (admin and teacher portals). */
-export function SalarySlipView({ slip, back }: { slip: Payslip; back: { href: string; label: string } }) {
+/** A salary slip with Back, Print and Download PDF (admin and teacher portals); admins also get `actions` and a `banner`. */
+export function SalarySlipView({ slip, back, actions, banner }: { slip: Payslip; back: { href: string; label: string }; actions?: ReactNode; banner?: ReactNode }) {
   const fileName = `Salary slip ${slip.month} ${slip.name}`.replace(/[^\w\- ]+/g, "");
   return (
     <div className="space-y-4">
@@ -18,9 +19,11 @@ export function SalarySlipView({ slip, back }: { slip: Payslip; back: { href: st
           {back.label}
         </BackLink>
         <span className="flex-1" />
+        {actions}
         <PdfDownloadButton root="salary-slip" fileName={fileName} />
         <PrintButton label="Print slip" />
       </div>
+      {banner && <div className="print:hidden">{banner}</div>}
       <div data-pdf-root="salary-slip">
         <SalarySlip slip={slip} />
       </div>

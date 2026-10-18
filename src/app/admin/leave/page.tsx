@@ -26,8 +26,8 @@ export default async function LeavePage({ searchParams }: PageProps<"/admin/leav
       bulkApprove={bulkApproveLeave}
       breadcrumbs={<DrillNav items={[{ label: "Leave" }]} />}
       headerExtra={
-        <ButtonLink href="/admin/leave/allowances" variant="secondary" icon={Settings2}>
-          Leave allowances
+        <ButtonLink href="/admin/settings/leave" variant="secondary" icon={Settings2}>
+          Teacher & staff leave days
         </ButtonLink>
       }
     />

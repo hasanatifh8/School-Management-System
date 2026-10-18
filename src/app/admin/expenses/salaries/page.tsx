@@ -75,7 +75,7 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
                   {r.payment ? (
                     <div className="flex items-center gap-2">
                       <Link href={`/admin/payslips/${r.payment.id}`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-accent-text hover:bg-accent-soft">
-                        <FileText className="h-3.5 w-3.5" /> Slip
+                        <FileText className="h-3.5 w-3.5" /> {r.payment.published ? "Slip" : "Draft slip"}
                       </Link>
                       <Badge tone="green">
                         <CircleCheck className="h-3 w-3" />
@@ -119,9 +119,14 @@ export default async function SalariesPage({ searchParams }: PageProps<"/admin/e
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MonthPicker basePath={`/admin/expenses/salaries?group=${active.key}`} month={month} max={addMonths(current, 1)} current={current} />
-        <ButtonLink href="/admin/settings/payroll" variant="secondary" icon={SlidersHorizontal}>
-          Salary components
-        </ButtonLink>
+        <span className="flex flex-wrap gap-2">
+          <ButtonLink href={`/admin/payroll?month=${month}`} variant="secondary" icon={FileText}>
+            Payslips
+          </ButtonLink>
+          <ButtonLink href="/admin/settings/payroll" variant="secondary" icon={SlidersHorizontal}>
+            Salary components
+          </ButtonLink>
+        </span>
       </div>
 
       {/* One card per category; the chosen one is managed below. */}

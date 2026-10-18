@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { SalaryTab } from "@/components/payroll/salary-tab";
+import { LeaveHistory } from "@/components/leave/leave-history";
+import { PersonLeaveSetup } from "@/components/leave/person-leave-setup";
+import { leaveBalance, personLeave } from "@/lib/leave";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import {
@@ -15,6 +18,7 @@ import {
   MessageCircle,
   Pencil,
   Phone,
+  Plane,
   RotateCcw,
   UserRound,
   UserRoundX,
@@ -50,7 +54,7 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", t
 const monthFormat = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 const GENDER_LABELS = { MALE: "Male", FEMALE: "Female", OTHER: "Other" } as const;
 
-const TABS = ["overview", "salary", "edit", "documents"] as const;
+const TABS = ["overview", "leave", "salary", "edit", "documents"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Whole years and months from a date until today (India), e.g. "3 yrs 2 mos". */
@@ -143,6 +147,7 @@ export default async function StaffMemberPage({ params, searchParams }: PageProp
       <div className="mb-6 border-b border-line">
         <nav aria-label="Staff member sections" className={tabBarClass}>
           <StatusTab replace href={base} active={tab === "overview"} label="Overview" icon={LayoutGrid} />
+          <StatusTab replace href={`${base}?tab=leave`} active={tab === "leave"} label="Leave" icon={Plane} />
           <StatusTab replace href={`${base}?tab=salary`} active={tab === "salary"} label="Salary" icon={Banknote} />
           <StatusTab replace href={`${base}?tab=edit`} active={tab === "edit"} label="Edit profile" icon={Pencil} />
           <StatusTab replace href={`${base}?tab=documents`} active={tab === "documents"} label="Documents" icon={FileText} count={staff.documents.length} />
@@ -150,6 +155,19 @@ export default async function StaffMemberPage({ params, searchParams }: PageProp
       </div>
 
       {tab === "documents" && <DocumentsPanel ownerKind="staff" ownerId={staff.id} documents={staff.documents} />}
+
+      {tab === "leave" && (
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_28rem]">
+          <LeaveHistory
+            leave={await personLeave(school.id, "STAFF", staff.id)}
+            balance={await leaveBalance(school.id, "STAFF", staff.id)}
+            noun="staff member"
+            openHref={(lid) => `/admin/leave?status=all&q=${encodeURIComponent(staff.employeeCode)}&open=${lid}`}
+            newHref="/admin/leave/new"
+          />
+          <PersonLeaveSetup schoolId={school.id} person={{ staffId: staff.id }} />
+        </div>
+      )}
 
       {tab === "salary" && <SalaryTab schoolId={school.id} person={{ staffId: staff.id }} basic={staff.monthlySalary} />}
 

@@ -15,6 +15,7 @@ import {
   ListTree,
   MessageCircle,
   Palette,
+  Plane,
   Shield,
   Target,
   UserCog,
@@ -53,6 +54,18 @@ const groups: { title: string; items: Item[] }[] = [
       { href: "/admin/fees/structure", icon: ListTree, tone: "emerald", title: "Fee structure", text: "Fee heads and amounts per class" },
       { href: "/admin/expenses/budget", icon: Target, tone: "amber", title: "Monthly budgets", text: "Spending limits by category" },
       { href: "/admin/settings/payroll", icon: Banknote, tone: "emerald", title: "Payroll", text: "Salary components: HRA, DA, PF and more" },
+    ],
+  },
+  {
+    title: "Teachers & staff",
+    items: [
+      {
+        href: "/admin/settings/leave",
+        icon: Plane,
+        tone: "violet",
+        title: "Teacher & staff leave",
+        text: "PL, sick and casual days per session, and leave groups",
+      },
     ],
   },
   {

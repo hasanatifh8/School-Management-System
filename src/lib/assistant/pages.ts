@@ -86,7 +86,7 @@ export const APP_PAGES: AppPage[] = [
     keywords: "apply leave new leave enter leave",
     steps: ["Open Leave → New leave request", "Pick the person, the dates and the leave type, and add the reason", "Submit, or tick approve now"],
   },
-  { title: "Leave allowances", path: "/admin/leave/allowances", does: "Days of each leave type allowed per session for teachers and staff.", keywords: "leave allowance quota balance casual sick" },
+  { title: "Teacher & staff leave", path: "/admin/settings/leave", does: "Leave days (PL, sick, casual) per session for the school's teachers and staff, leave groups, and the school-wide allowance.", keywords: "leave allowance quota balance casual sick pl privileged group policy staff teacher" },
 
   /* Fees */
   { title: "Fees overview", path: "/admin/fees", does: "Collections today and this month, dues by class, recent receipts.", keywords: "fees overview collection dues" },
@@ -106,6 +106,7 @@ export const APP_PAGES: AppPage[] = [
   { title: "Expense list", path: "/admin/expenses/list", does: "Every expense entry; add or edit expenses.", keywords: "add expense bills entry" },
   { title: "Budget", path: "/admin/expenses/budget", does: "Monthly budget per expense category.", keywords: "budget plan" },
   { title: "Salaries", path: "/admin/expenses/salaries", does: "Pay salaries to teachers and staff and see who is still due.", keywords: "salary pay payroll" },
+  { title: "Payroll", path: "/admin/payroll", does: "A month's salary slips: view, edit drafts and publish them. Teachers and staff see only published slips.", keywords: "payroll payslip salary slip publish draft edit deduction" },
 
   /* Academics */
   { title: "Classes", path: "/admin/classes", does: "Classes and sections, class teachers and student counts.", keywords: "class section class teacher" },
