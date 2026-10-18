@@ -16,19 +16,23 @@ async function adminContext() {
   return { school, who: viewer?.kind === "admin" ? viewer.admin.name : "Power Admin" };
 }
 
-/** Saves the bell schedule: periods in order, breaks, and the school days. */
+/** Saves the bell schedule: periods in order, breaks and assembly, and the school days. */
 export async function savePeriods(_: ActionState, formData: FormData): Promise<ActionState> {
   const { school } = await adminContext();
   const ids = formData.getAll("id").map(String);
   const names = formData.getAll("name").map((v) => String(v).trim());
   const starts = formData.getAll("startTime").map(String);
   const ends = formData.getAll("endTime").map(String);
-  const breaks = formData.getAll("isBreak").map((v) => v === "1");
+  // "kind" is period, break or assembly; an assembly is a break shown as an assembly.
+  const kinds = formData.getAll("kind").map(String);
+  const breaks = kinds.map((k) => k === "break" || k === "assembly");
+  const assemblies = kinds.map((k) => k === "assembly");
   const days = [...new Set(formData.getAll("day").map(Number))].filter((d) => d >= 1 && d <= 7).sort();
 
   if (!days.length) return { error: "Choose at least one school day." };
   // An empty schedule is allowed: it clears every class timetable.
-  if (names.length > MAX_PERIODS) return { error: `A day can have at most ${MAX_PERIODS} periods and breaks.` };
+  if (names.length > MAX_PERIODS) return { error: `A day can have at most ${MAX_PERIODS} periods, breaks and assemblies.` };
+  if (assemblies.filter(Boolean).length > 1) return { error: "Add only one assembly to the school day." };
   for (let i = 0; i < names.length; i++) {
     const label = names[i] || `Row ${i + 1}`;
     if (!names[i] || names[i].length > 40) return { error: `${label}: enter a name (up to 40 letters).` };
@@ -44,7 +48,7 @@ export async function savePeriods(_: ActionState, formData: FormData): Promise<A
   await db.$transaction(async (tx) => {
     await tx.period.deleteMany({ where: { schoolId: school.id, id: { notIn: [...kept] } } });
     for (let i = 0; i < names.length; i++) {
-      const data = { name: names[i], startTime: starts[i], endTime: ends[i], isBreak: breaks[i], sortOrder: i };
+      const data = { name: names[i], startTime: starts[i], endTime: ends[i], isBreak: breaks[i], isAssembly: assemblies[i], sortOrder: i };
       if (kept.has(ids[i])) await tx.period.update({ where: { id: ids[i] }, data });
       else await tx.period.create({ data: { ...data, schoolId: school.id } });
     }

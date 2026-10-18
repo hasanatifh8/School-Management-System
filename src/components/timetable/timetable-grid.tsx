@@ -1,4 +1,4 @@
-import { Coffee } from "lucide-react";
+import { Coffee, Megaphone } from "lucide-react";
 import { DAY_SHORT, periodTime, slotKey, type PeriodInfo } from "@/lib/timetable-shared";
 
 export type Cell = { title: string; sub?: string };
@@ -40,7 +40,7 @@ export function TimetableGrid({
                   <PeriodName period={p} />
                 </td>
                 <td colSpan={days.length} className="rounded-lg bg-surface-2 px-3 py-1.5 text-center text-xs font-medium text-muted">
-                  <Coffee className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />
+                  {p.isAssembly ? <Megaphone className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden /> : <Coffee className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />}
                   {p.name}
                 </td>
               </tr>

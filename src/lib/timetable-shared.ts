@@ -6,7 +6,8 @@ export const DAY_SHORT = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] a
 /** Periods that aren't a subject, offered in every timetable. */
 export const SLOT_LABELS = ["Library", "Games", "Assembly", "Activity", "Free period"] as const;
 
-export type PeriodInfo = { id: string; name: string; startTime: string; endTime: string; isBreak: boolean };
+/** `isAssembly` rows are breaks too: they hold no lessons. */
+export type PeriodInfo = { id: string; name: string; startTime: string; endTime: string; isBreak: boolean; isAssembly?: boolean };
 
 /** Key of one cell: day and period. */
 export const slotKey = (day: number, periodId: string) => `${day}:${periodId}`;

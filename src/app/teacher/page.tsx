@@ -446,7 +446,7 @@ function ScheduleRow({ period, cell, now, next }: { period: PeriodInfo; cell?: {
       </span>
       {period.isBreak ? (
         <span className="flex flex-1 items-center gap-2 text-sm text-muted">
-          <Coffee className="h-4 w-4" aria-hidden /> {period.name}
+          {period.isAssembly ? <Megaphone className="h-4 w-4" aria-hidden /> : <Coffee className="h-4 w-4" aria-hidden />} {period.name}
         </span>
       ) : (
         <>

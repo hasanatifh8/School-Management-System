@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Coffee, Copy, Eraser, Save, TriangleAlert } from "lucide-react";
+import { Coffee, Copy, Eraser, Megaphone, Save, TriangleAlert } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { buttonVariants } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
@@ -91,7 +91,7 @@ export function TimetableEditor({
                     <PeriodName period={p} />
                   </td>
                   <td colSpan={days.length} className="rounded-lg bg-surface-2 px-3 py-1.5 text-center text-xs font-medium text-muted">
-                    <Coffee className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />
+                    {p.isAssembly ? <Megaphone className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden /> : <Coffee className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />}
                     {p.name}
                   </td>
                 </tr>

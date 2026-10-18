@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Coffee,
   FileBarChart,
+  Megaphone,
   NotebookPen,
   Plane,
   Sparkles,
@@ -211,7 +212,7 @@ export default async function StudentHomePage() {
                     />
                     {p.isBreak ? (
                       <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-                        <Coffee className="h-3.5 w-3.5" /> {p.name} · {formatTime(p.startTime)}
+                        {p.isAssembly ? <Megaphone className="h-3.5 w-3.5" /> : <Coffee className="h-3.5 w-3.5" />} {p.name} · {formatTime(p.startTime)}
                       </div>
                     ) : (
                       <div className={cx("flex items-center gap-3 rounded-xl bg-gradient-to-r to-transparent px-3 py-2.5 ring-1", tone.soft, tone.ring, live && "ring-2 ring-accent", done && "opacity-60")}>
