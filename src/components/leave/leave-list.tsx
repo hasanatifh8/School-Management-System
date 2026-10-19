@@ -82,6 +82,12 @@ export function LeaveList({
                 </span>
               </p>
               {r.description && <p className="mt-1 line-clamp-2 whitespace-pre-line text-sm text-muted">{r.description}</p>}
+              {r.status === "APPROVED" && r.overLimit.length > 0 && (
+                <p className="mt-2 inline-flex items-start gap-1.5 rounded-lg bg-danger-soft px-2.5 py-1.5 text-xs font-medium text-danger ring-1 ring-inset ring-danger-line">
+                  <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                  {r.overLimit.length} day{r.overLimit.length === 1 ? "" : "s"} over the monthly limit ({r.overLimit.map((d) => formatISO(d, shortDate)).join(", ")}): absent, unpaid
+                </p>
+              )}
               {r.clash && (
                 <p className="mt-2 inline-flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning ring-1 ring-inset ring-warning-line">
                   <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />

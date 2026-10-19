@@ -12,7 +12,7 @@ import "server-only";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { type ActionState, validationError } from "@/lib/action-state";
-import { datesBetween, isoDate, parseISODate } from "@/lib/attendance-shared";
+import { datesBetween, isoDate, monthDates, parseISODate } from "@/lib/attendance-shared";
 import { daysOff } from "@/lib/attendance";
 import { db } from "@/lib/db";
 import { INLINE_TYPES, readDocumentUpload } from "@/lib/documents";
@@ -22,7 +22,12 @@ import {
   LEAVE_CATEGORIES,
   LEAVE_STATUSES,
   MAX_LEAVE_DAYS,
+  PROOF_REASON_MIN,
+  CATEGORY_LABELS,
+  CATEGORY_SHORT,
   leaveDays,
+  readLeaveRules,
+  splitByMonthlyCap,
   CLASH_SHARE,
   LEAVE_URGENT_HOURS,
   staffDepartment,
@@ -107,6 +112,8 @@ function view(actor: LeaveActor, r: Row) {
     /** Hours a pending request has been waiting (null once decided). */
     waitingHours: r.status === "PENDING" ? Math.floor((Date.now() - r.createdAt.getTime()) / 3_600_000) : null,
     attachment: r.attachment ? { fileName: r.attachment.fileName, mimeType: r.attachment.mimeType, size: r.attachment.size } : null,
+    /** Approved days over the monthly cap for this type: absent (unpaid), not leave. */
+    overLimit: r.overLimitDates,
     /** Department for teachers (specialisation) and staff, for clash checks. */
     department: r.teacher ? teacherDepartment(r.teacher) : r.staff ? staffDepartment(r.staff) : null,
     /** Admins can delete any request; a teacher can withdraw their own while it is pending. */
@@ -222,7 +229,7 @@ export async function personLeave(schoolId: string, applicant: LeaveApplicantKey
   const rows = await db.leaveRequest.findMany({
     where: { schoolId, [personKey[applicant]]: personId },
     orderBy: [{ fromDate: "desc" }, { createdAt: "desc" }],
-    select: { id: true, fromDate: true, toDate: true, category: true, description: true, status: true, requestedBy: true, decidedBy: true, decisionNote: true },
+    select: { id: true, fromDate: true, toDate: true, category: true, description: true, status: true, requestedBy: true, decidedBy: true, decisionNote: true, overLimitDates: true },
   });
   return rows.map((r) => {
     const from = isoDate(r.fromDate);
@@ -307,9 +314,30 @@ export async function createLeaveRecord(actor: LeaveActor, formData: FormData): 
     if (bad) return { error: bad, fieldErrors: { attachment: [bad] } };
   }
 
+  // Teachers' and staff leave follows the school's rules: proof for some types, a monthly cap.
+  const staffApplicant = v.applicant === "TEACHER" || v.applicant === "STAFF" ? v.applicant : null;
+  const rules = staffApplicant ? await loadLeaveRules(actor.schoolId) : null;
+  if (staffApplicant && rules?.proof.includes(v.category)) {
+    const label = CATEGORY_LABELS[v.category].toLowerCase();
+    if (!upload) return { error: `${CATEGORY_LABELS[v.category]} needs a supporting document, e.g. a medical certificate.`, fieldErrors: { attachment: ["Attach the document"] } };
+    if ((v.description?.length ?? 0) < PROOF_REASON_MIN)
+      return { error: `Write the reason for ${label} (at least ${PROOF_REASON_MIN} characters).`, fieldErrors: { description: ["Describe the reason"] } };
+  }
+
   const from = parseISODate(v.fromDate)!;
   const to = parseISODate(v.toDate)!;
   const key = personKey[v.applicant];
+  const cap = staffApplicant ? rules?.monthly[staffApplicant][v.category] : undefined;
+  if (staffApplicant && cap != null) {
+    const usage = await monthUsage(actor.schoolId, staffApplicant, v.personId, v.fromDate.slice(0, 7), v.toDate.slice(0, 7));
+    const used: Record<string, number> = {};
+    for (const [m, u] of Object.entries(usage[v.category] ?? {})) used[m] = u.counted + u.pending;
+    const { over } = splitByMonthlyCap(await workingDates(actor.schoolId, v.fromDate, v.toDate), cap, used);
+    if (over.length && formData.get("acceptOverLimit") !== "on") {
+      const message = `Only ${cap} day${cap === 1 ? "" : "s"} of ${CATEGORY_SHORT[v.category]} a month count as leave. ${over.length} day${over.length === 1 ? "" : "s"} of this request would be absent (unpaid): tick the box to apply anyway.`;
+      return { error: message, fieldErrors: { acceptOverLimit: [message] } };
+    }
+  }
   const overlap = await db.leaveRequest.findFirst({
     where: { schoolId: actor.schoolId, [key]: v.personId, status: { not: "REJECTED" }, fromDate: { lte: to }, toDate: { gte: from } },
   });
@@ -334,7 +362,7 @@ export async function createLeaveRecord(actor: LeaveActor, formData: FormData): 
       ...(upload && "file" in upload && { attachment: { create: upload.file } }),
     },
   });
-  if (approveNow) await applyApprovedLeave(created);
+  if (approveNow) await settleApproved(created);
   const days = leaveDays(v.fromDate, v.toDate);
   return logged("Leave", {
     ok: true,
@@ -396,7 +424,7 @@ export async function withdrawStudentLeaveRecord(studentId: string, id: string):
  * An approved leave turns marks already saved in its dates into "Leave": every
  * mark for a student (their leave days are locked), only "Absent" for staff.
  */
-async function applyApprovedLeave(r: { schoolId: string; studentId: string | null; teacherId: string | null; staffId: string | null; fromDate: Date; toDate: Date }) {
+async function applyApprovedLeave(r: { schoolId: string; studentId: string | null; teacherId: string | null; staffId: string | null; fromDate: Date; toDate: Date; overLimitDates?: string[] }) {
   const dates = { gte: r.fromDate, lte: r.toDate };
   if (r.studentId) {
     await db.attendanceRecord.updateMany({
@@ -404,11 +432,61 @@ async function applyApprovedLeave(r: { schoolId: string; studentId: string | nul
       data: { status: "LEAVE", remark: "Approved leave" },
     });
   } else {
-    await db.staffAttendance.updateMany({
-      where: { schoolId: r.schoolId, ...(r.teacherId ? { teacherId: r.teacherId } : { staffId: r.staffId }), status: "ABSENT", date: dates },
-      data: { status: "ON_LEAVE" },
-    });
+    // Days over the monthly cap stay (or become) absent; the rest are leave.
+    const who = r.teacherId ? { teacherId: r.teacherId } : { staffId: r.staffId };
+    const over = (r.overLimitDates ?? []).map((d) => parseISODate(d)!);
+    await db.$transaction([
+      db.staffAttendance.updateMany({
+        where: { schoolId: r.schoolId, ...who, status: "ABSENT", date: dates, ...(over.length && { NOT: { date: { in: over } } }) },
+        data: { status: "ON_LEAVE" },
+      }),
+      ...(over.length
+        ? [db.staffAttendance.updateMany({ where: { schoolId: r.schoolId, ...who, status: "ON_LEAVE", date: { in: over } }, data: { status: "ABSENT", remark: "Over the monthly leave limit" } })]
+        : []),
+    ]);
   }
+}
+
+/**
+ * Works out which days of a teacher's or staff member's approved leave of one
+ * type are over the school's monthly cap, for the months `months` touches:
+ * leave approved earlier counts first. Saves the days on each request and
+ * moves their attendance marks between Leave and Absent to match.
+ */
+async function recountOverLimit(schoolId: string, applicant: "TEACHER" | "STAFF", personId: string, category: LeaveCategoryKey, months: string[]) {
+  const cap = (await loadLeaveRules(schoolId)).monthly[applicant][category];
+  const touched = new Set(months);
+  const requests = await db.leaveRequest.findMany({
+    where: { schoolId, [personKey[applicant]]: personId, category, status: "APPROVED" },
+    orderBy: [{ decidedAt: "asc" }, { createdAt: "asc" }],
+  });
+  const inTouched = requests.filter((r) => datesBetween(isoDate(r.fromDate), isoDate(r.toDate)).some((d) => touched.has(d.slice(0, 7))));
+  if (!inTouched.length) return;
+  const min = inTouched.reduce((m, r) => (isoDate(r.fromDate) < m ? isoDate(r.fromDate) : m), isoDate(inTouched[0].fromDate));
+  const max = inTouched.reduce((m, r) => (isoDate(r.toDate) > m ? isoDate(r.toDate) : m), isoDate(inTouched[0].toDate));
+  const working = new Set(await workingDates(schoolId, min, max));
+  const used: Record<string, number> = {};
+  for (const r of inTouched) {
+    const dates = datesBetween(isoDate(r.fromDate), isoDate(r.toDate)).filter((d) => working.has(d) && touched.has(d.slice(0, 7)));
+    const { counted, over } = splitByMonthlyCap(dates, cap, used);
+    for (const d of counted) used[d.slice(0, 7)] = (used[d.slice(0, 7)] ?? 0) + 1;
+    // Days in other months keep what was worked out for them.
+    const next = [...r.overLimitDates.filter((d) => !touched.has(d.slice(0, 7))), ...over].sort();
+    if (next.join() !== r.overLimitDates.join()) {
+      await db.leaveRequest.update({ where: { id: r.id }, data: { overLimitDates: next } });
+      await applyApprovedLeave({ ...r, overLimitDates: next });
+    }
+  }
+}
+
+/** Months (YYYY-MM) from one date to another. */
+const monthsBetween = (from: string, to: string) => [...new Set(datesBetween(from, to).map((d) => d.slice(0, 7)))];
+
+/** After a request is approved: marks attendance, and for teachers and staff applies the monthly cap. */
+async function settleApproved(r: { id: string; schoolId: string; applicant: LeaveApplicantKey; studentId: string | null; teacherId: string | null; staffId: string | null; category: LeaveCategoryKey; fromDate: Date; toDate: Date }) {
+  await applyApprovedLeave(r);
+  if (r.applicant === "TEACHER" || r.applicant === "STAFF")
+    await recountOverLimit(r.schoolId, r.applicant, (r.teacherId ?? r.staffId)!, r.category, monthsBetween(isoDate(r.fromDate), isoDate(r.toDate)));
 }
 
 /**
@@ -472,14 +550,21 @@ export async function decideLeaveRecord(actor: LeaveActor, id: string, approve: 
     where: { id },
     data: { status: approve ? "APPROVED" : "REJECTED", decidedBy, decidedAt: new Date(), decisionNote: note },
   });
-  if (approve) await applyApprovedLeave(r);
-  return logged("Leave", { ok: true, message: `${view(actor, r).person.name}'s leave ${approve ? "approved" : "rejected"}.` });
+  if (approve) await settleApproved(r);
+  const over = approve ? ((await db.leaveRequest.findUnique({ where: { id }, select: { overLimitDates: true } }))?.overLimitDates.length ?? 0) : 0;
+  return logged("Leave", {
+    ok: true,
+    message: `${view(actor, r).person.name}'s leave ${approve ? "approved" : "rejected"}.${over ? ` ${over} day${over === 1 ? " is" : "s are"} over the monthly limit and count as absent (unpaid).` : ""}`,
+  });
 }
 
 export async function withdrawLeaveRecord(actor: LeaveActor, id: string): Promise<ActionState> {
   const r = await db.leaveRequest.findFirst({ where: { AND: [visibleWhere(actor), { id }] }, include });
   if (!r || !view(actor, r).canWithdraw) return { error: "You can't remove this request." };
   await db.leaveRequest.delete({ where: { id } });
+  // Removing approved leave frees its days: later leave of the type may now count.
+  if (r.status === "APPROVED" && (r.applicant === "TEACHER" || r.applicant === "STAFF"))
+    await recountOverLimit(r.schoolId, r.applicant, (r.teacherId ?? r.staffId)!, r.category, monthsBetween(isoDate(r.fromDate), isoDate(r.toDate)));
   return logged("Leave", { ok: true, message: r.status === "PENDING" ? "Leave request withdrawn." : "Leave request deleted." }, `${r.status === "PENDING" ? "Withdrew" : "Deleted"} ${view(actor, r).person.name}'s leave (${isoDate(r.fromDate)} to ${isoDate(r.toDate)})`);
 }
 
@@ -544,6 +629,69 @@ export async function approvedLeaveOn(schoolId: string, date: Date) {
 async function workingDates(schoolId: string, from: string, to: string) {
   const off = await daysOff(schoolId, from, to);
   return datesBetween(from, to).filter((d) => !off.has(d));
+}
+
+/** The school's leave rules: monthly caps and the types that need proof. */
+export async function loadLeaveRules(schoolId: string) {
+  const school = await db.school.findUnique({ where: { id: schoolId }, select: { leaveRules: true } });
+  return readLeaveRules(school?.leaveRules);
+}
+
+/** Saves the rules from fields `m:TEACHER:PRIVILEGED` = days a month (blank = no cap) and `proof` = types. */
+export async function saveLeaveRulesRecord(schoolId: string, formData: FormData): Promise<ActionState> {
+  const monthly = { TEACHER: {}, STAFF: {} } as Record<"TEACHER" | "STAFF", Partial<Record<LeaveCategoryKey, number>>>;
+  for (const a of ["TEACHER", "STAFF"] as const)
+    for (const c of LEAVE_CATEGORIES) {
+      const raw = String(formData.get(`m:${a}:${c}`) ?? "").trim();
+      if (!raw) continue;
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 0 || n > 31) return { error: "Days a month must be whole days from 0 to 31, or blank for no limit." };
+      monthly[a][c] = n;
+    }
+  const proof = LEAVE_CATEGORIES.filter((c) => formData.getAll("proof").includes(c));
+  await db.school.update({ where: { id: schoolId }, data: { leaveRules: { monthly, proof } } });
+  return logged("Leave", { ok: true, message: "Leave rules saved. They apply to leave approved from now on." });
+}
+
+/**
+ * A teacher's or staff member's leave by type and month (YYYY-MM, from `fromMonth`
+ * to `toMonth`): working days counted as leave (approved, less days over the
+ * cap) and days waiting for approval.
+ */
+export async function monthUsage(schoolId: string, applicant: "TEACHER" | "STAFF", personId: string, fromMonth: string, toMonth: string) {
+  const from = `${fromMonth}-01`;
+  const to = monthDates(toMonth).at(-1)!;
+  const [requests, working] = await Promise.all([
+    db.leaveRequest.findMany({
+      where: { schoolId, [personKey[applicant]]: personId, status: { in: ["APPROVED", "PENDING"] }, fromDate: { lte: parseISODate(to)! }, toDate: { gte: parseISODate(from)! } },
+      select: { category: true, status: true, fromDate: true, toDate: true, overLimitDates: true },
+    }),
+    workingDates(schoolId, from, to).then((d) => new Set(d)),
+  ]);
+  const out: Partial<Record<LeaveCategoryKey, Record<string, { counted: number; pending: number }>>> = {};
+  for (const r of requests) {
+    const over = new Set(r.overLimitDates);
+    for (const d of datesBetween(isoDate(r.fromDate), isoDate(r.toDate))) {
+      if (!working.has(d) || over.has(d)) continue;
+      const m = (out[r.category] ??= {});
+      const cell = (m[d.slice(0, 7)] ??= { counted: 0, pending: 0 });
+      if (r.status === "APPROVED") cell.counted++;
+      else cell.pending++;
+    }
+  }
+  return out;
+}
+
+export type MonthUsage = Awaited<ReturnType<typeof monthUsage>>;
+
+/** Days over the monthly cap on a date (approved leave), by teacher / staff id, with the type. */
+export async function overLimitOn(schoolId: string, date: string) {
+  const d = parseISODate(date)!;
+  const rows = await db.leaveRequest.findMany({
+    where: { schoolId, status: "APPROVED", applicant: { in: ["TEACHER", "STAFF"] }, overLimitDates: { has: date }, fromDate: { lte: d }, toDate: { gte: d } },
+    select: { teacherId: true, staffId: true, category: true },
+  });
+  return new Map(rows.map((r) => [(r.teacherId ?? r.staffId)!, r.category]));
 }
 
 /** Leave days per session for teachers and staff, by leave type (null = no limit set). */
@@ -726,7 +874,7 @@ export async function leaveBalance(schoolId: string, applicant: "TEACHER" | "STA
     db.leaveExtra.findMany({ where: { schoolId, sessionId: session.id, ...person }, select: { category: true, days: true } }),
     db.leaveRequest.findMany({
       where: { schoolId, [personKey[applicant]]: personId, status: { in: ["APPROVED", "PENDING"] }, fromDate: { lte: session.endDate }, toDate: { gte: session.startDate } },
-      select: { category: true, status: true, fromDate: true, toDate: true },
+      select: { category: true, status: true, fromDate: true, toDate: true, overLimitDates: true },
     }),
     workingDates(schoolId, from, to),
   ]);
@@ -739,7 +887,8 @@ export async function leaveBalance(schoolId: string, applicant: "TEACHER" | "STA
     return { category, allowed: b == null ? null : Math.max(0, b + x), extra: b == null ? 0 : x, used: 0, pending: 0 };
   });
   for (const r of requests) {
-    const days = datesBetween(isoDate(r.fromDate), isoDate(r.toDate)).filter((d) => workSet.has(d)).length;
+    // Days over the monthly cap are absent, not leave.
+    const days = datesBetween(isoDate(r.fromDate), isoDate(r.toDate)).filter((d) => workSet.has(d) && !r.overLimitDates.includes(d)).length;
     const row = rows.find((x) => x.category === r.category)!;
     if (r.status === "APPROVED") row.used += days;
     else row.pending += days;
@@ -815,8 +964,22 @@ export async function leaveDetail(actor: LeaveActor, id: string) {
       select: { id: true, fromDate: true, toDate: true, category: true, status: true },
     }),
   ]);
+  // Days over the monthly cap: saved once approved; for a waiting request, what approving now would give.
+  let overLimit = v.overLimit;
+  let monthlyCap: number | null = null;
+  if (v.applicant !== "STUDENT") {
+    const cap = (await loadLeaveRules(actor.schoolId)).monthly[v.applicant][v.category];
+    monthlyCap = cap ?? null;
+    if (v.status === "PENDING" && cap != null) {
+      const usage = await monthUsage(actor.schoolId, v.applicant, v.personId, v.from.slice(0, 7), v.to.slice(0, 7));
+      const used = Object.fromEntries(Object.entries(usage[v.category] ?? {}).map(([m, u]) => [m, u.counted]));
+      overLimit = splitByMonthlyCap(working, cap, used).over;
+    }
+  }
   return {
     ...v,
+    overLimit,
+    monthlyCap,
     workingDays: working.length,
     clash: clashes.get(id) ?? null,
     balance,

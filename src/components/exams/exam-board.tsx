@@ -284,9 +284,9 @@ function ExamCard({
         </div>
       )}
 
-      <div className="absolute right-3 top-3 z-10 flex items-center">
+      <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center">
         {printHref && (
-          <Link href={printHref} title="Print timetable" aria-label={`Print ${e.name} timetable`} className="rounded-lg p-2 text-subtle transition hover:bg-surface-3 hover:text-fg-2">
+          <Link href={printHref} title="Print timetable" aria-label={`Print ${e.name} timetable`} className="pointer-events-auto rounded-lg p-2 text-subtle transition hover:bg-surface-3 hover:text-fg-2">
             <Printer className="h-4 w-4" />
           </Link>
         )}

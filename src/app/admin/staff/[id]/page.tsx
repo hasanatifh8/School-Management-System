@@ -76,7 +76,7 @@ function ageOn(dob: Date) {
 
 export default async function StaffMemberPage({ params, searchParams }: PageProps<"/admin/staff/[id]">) {
   const { id } = await params;
-  const requested = (await searchParams).tab;
+  const { tab: requested, sv, month } = await searchParams;
   const tab: Tab = TABS.find((t) => t === requested) ?? "overview";
   const school = await getCurrentSchool();
   const staff = await db.staffMember.findFirst({
@@ -169,7 +169,9 @@ export default async function StaffMemberPage({ params, searchParams }: PageProp
         </div>
       )}
 
-      {tab === "salary" && <SalaryTab schoolId={school.id} person={{ staffId: staff.id }} basic={staff.monthlySalary} />}
+      {tab === "salary" && (
+        <SalaryTab schoolId={school.id} person={{ staffId: staff.id }} name={staff.name} basic={staff.monthlySalary} base={`${base}?tab=salary`} view={sv} month={month} />
+      )}
 
       {tab === "edit" && (
         <div className="space-y-6">

@@ -4,6 +4,7 @@ import { ExamDetailsForm } from "@/components/exams/exam-details-form";
 import { TimetableEditor } from "@/components/exams/timetable-editor";
 import { Badge, ButtonLink, Card } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
+import { daysOff } from "@/lib/attendance";
 import { isoDate, todayISO } from "@/lib/attendance-shared";
 import { examClasses, paperInputs, pickableSections, subjectOptions, type ExamActor, type LoadedExam } from "@/lib/exams";
 import { dateSpan } from "@/lib/exams-shared";
@@ -32,7 +33,13 @@ export async function ExamWorkspace({
 }) {
   const classes = examClasses(exam);
   const sectionIds = exam.sections.map((s) => s.sectionId);
-  const [options, pickable] = await Promise.all([subjectOptions(actor, sectionIds), pickableSections(actor)]);
+  const sessionStart = isoDate(exam.session.startDate);
+  const sessionEnd = isoDate(exam.session.endDate);
+  const [options, pickable, off] = await Promise.all([
+    subjectOptions(actor, sectionIds),
+    pickableSections(actor),
+    daysOff(exam.schoolId, sessionStart, sessionEnd),
+  ]);
   const isExam = exam.kind === "EXAM";
 
   return (
@@ -96,8 +103,9 @@ export async function ExamWorkspace({
           allowed={options.allowed}
           curricula={options.curricula}
           restrict={actor.kind === "teacher"}
-          sessionStart={isoDate(exam.session.startDate)}
-          sessionEnd={isoDate(exam.session.endDate)}
+          sessionStart={sessionStart}
+          sessionEnd={sessionEnd}
+          daysOff={Object.fromEntries([...off].map(([d, o]) => [d, o.name]))}
           today={todayISO()}
         />
       </Card>

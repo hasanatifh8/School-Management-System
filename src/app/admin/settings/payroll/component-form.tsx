@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { CALC_LABELS, type SalaryCalcKey, type SalaryKind } from "@/lib/payroll-shared";
+import { CALC_LABELS, looksLikeAbsence, type SalaryCalcKey, type SalaryKind } from "@/lib/payroll-shared";
 
 /** Add or edit a salary component: name, earning or deduction, fixed or % of basic, and its default. */
 export function SalaryComponentForm({
@@ -17,17 +18,38 @@ export function SalaryComponentForm({
   submitLabel: string;
 }) {
   const [calc, setCalc] = useState<SalaryCalcKey>(initial?.calc ?? "FIXED");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [kind, setKind] = useState<SalaryKind>(initial?.kind ?? "EARNING");
   const percent = calc === "PERCENT_OF_BASIC";
   return (
-    <ActionForm action={action} keepValues={!!initial} className="space-y-4">
+    <ActionForm
+      action={action}
+      keepValues={!!initial}
+      // Adding: start the next one from blank.
+      onSuccess={() => {
+        if (initial) return;
+        setName("");
+        setKind("EARNING");
+        setCalc("FIXED");
+      }}
+      className="space-y-4"
+    >
       {(state) => (
         <>
           <Field label="Name" name="name" errors={state.fieldErrors} required>
-            <input name="name" required maxLength={40} defaultValue={initial?.name} placeholder="e.g. HRA, Provident fund" className={inputClass} />
+            <input
+              name="name"
+              required
+              maxLength={40}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. HRA, Provident fund"
+              className={inputClass}
+            />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Type" name="kind" errors={state.fieldErrors}>
-              <select name="kind" defaultValue={initial?.kind ?? "EARNING"} className={selectClass}>
+              <select name="kind" value={kind} onChange={(e) => setKind(e.target.value as SalaryKind)} className={selectClass}>
                 <option value="EARNING">Earning (adds to pay)</option>
                 <option value="DEDUCTION">Deduction (taken off)</option>
               </select>
@@ -42,6 +64,15 @@ export function SalaryComponentForm({
               </select>
             </Field>
           </div>
+            {kind === "DEDUCTION" && looksLikeAbsence(name) && (
+              <p className="flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-sm text-warning ring-1 ring-inset ring-warning-line">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  This is taken off <strong>every month</strong>, whatever the attendance. To deduct for absences or extra leave, don&apos;t add a component: use
+                  Settings → Payroll → <strong>Deduction for absent days</strong>.
+                </span>
+              </p>
+            )}
           <Field
             label={percent ? "Default percent of basic" : "Default amount (₹ a month)"}
             name="defaultValue"

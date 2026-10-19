@@ -10,6 +10,7 @@ import {
   deleteLeavePolicyRecord,
   saveAllowanceRecords,
   saveLeavePolicyRecord,
+  saveLeaveRulesRecord,
   savePersonLeaveRecord,
   withdrawLeaveRecord,
   type LeaveActor,
@@ -49,6 +50,13 @@ export async function bulkApproveLeave(ids: string[]): Promise<ActionState> {
 export async function saveAllowances(_: ActionState, formData: FormData): Promise<ActionState> {
   const school = await getCurrentSchool();
   const result = await saveAllowanceRecords(school.id, formData);
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
+}
+
+export async function saveLeaveRules(_: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const result = await saveLeaveRulesRecord(school.id, formData);
   if (result.ok) revalidatePath("/", "layout");
   return result;
 }

@@ -89,7 +89,7 @@ export default async function ExpensesOverviewPage({ searchParams }: PageProps<"
       </section>
 
       <StatGrid>
-        <StatCard icon={Users} tone="indigo" label="Salaries paid" value={totals.teaching + totals.nonTeaching} prefix="₹" detail={`Teaching ${rupees(totals.teaching)} · Non-teaching ${rupees(totals.nonTeaching)}`} href={`/admin/expenses/salaries?month=${month}`} />
+        <StatCard icon={Users} tone="indigo" label="Salaries paid" value={totals.teaching + totals.nonTeaching} prefix="₹" detail={`Teaching ${rupees(totals.teaching)} · Non-teaching ${rupees(totals.nonTeaching)}`} href={`/admin/payroll?month=${month}`} />
         <StatCard icon={Zap} tone="amber" label="Other expenses" value={totals.spent - totals.teaching - totals.nonTeaching} prefix="₹" detail="Electricity, events, upkeep…" href={`/admin/expenses/list?month=${month}`} />
         <StatCard icon={TrendingUp} tone="violet" label={live ? "Expected this month" : "Usual month"} value={live ? totals.forecast : totals.average} prefix="₹" detail={live ? `Next month about ${rupees(totals.next)}` : "Average of the 3 months before"} />
         <StatCard icon={Wallet} tone="emerald" label="Fees collected" value={summary.feesCollected} prefix="₹" detail={`Net ${summary.feesCollected - totals.spent >= 0 ? "+" : "−"}${rupees(Math.abs(summary.feesCollected - totals.spent))} after spending`} />
@@ -138,7 +138,7 @@ export default async function ExpensesOverviewPage({ searchParams }: PageProps<"
               return (
                 <tr key={c.id}>
                   <td className={`${tdClass} font-medium text-fg`}>
-                    <Link href={c.isSalaries ? `/admin/expenses/salaries?month=${month}` : `/admin/expenses/list?month=${month}&category=${c.id}`} className="hover:text-accent-text">
+                    <Link href={c.isSalaries ? `/admin/payroll?month=${month}` : `/admin/expenses/list?month=${month}&category=${c.id}`} className="hover:text-accent-text">
                       {c.name}
                     </Link>
                   </td>

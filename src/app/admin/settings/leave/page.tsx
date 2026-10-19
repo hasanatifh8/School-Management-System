@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { ChevronRight, Plane, Plus, Save, UserCheck, Users } from "lucide-react";
+import { CalendarClock, ChevronRight, FileCheck2, Plane, Plus, Save, UserCheck, Users } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { ButtonLink, Callout, Card, EmptyState, PageHeader, inputClass, tdClass, thClass, theadClass } from "@/components/ui";
-import { loadAllowances, loadLeavePolicies } from "@/lib/leave";
-import { CATEGORY_LABELS, CATEGORY_SHORT, LEAVE_CATEGORIES } from "@/lib/leave-shared";
+import { ButtonLink, Callout, Card, EmptyState, PageHeader, checkboxClass, inputClass, tdClass, thClass, theadClass } from "@/components/ui";
+import { loadAllowances, loadLeavePolicies, loadLeaveRules } from "@/lib/leave";
+import { CATEGORY_LABELS, CATEGORY_SHORT, LEAVE_CATEGORIES, PROOF_REASON_MIN } from "@/lib/leave-shared";
 import { getCurrentSchool } from "@/lib/school";
 import { getCurrentSession } from "@/lib/sessions";
-import { saveAllowances } from "@/app/admin/leave/actions";
+import { saveAllowances, saveLeaveRules } from "@/app/admin/leave/actions";
 
 /**
  * Leave days the school's own teachers and non-teaching staff get each
@@ -15,7 +15,7 @@ import { saveAllowances } from "@/app/admin/leave/actions";
  */
 export default async function StaffLeaveSettingsPage() {
   const school = await getCurrentSchool();
-  const [allowances, session, groups] = await Promise.all([loadAllowances(school.id), getCurrentSession(school.id), loadLeavePolicies(school.id)]);
+  const [allowances, session, groups, rules] = await Promise.all([loadAllowances(school.id), getCurrentSession(school.id), loadLeavePolicies(school.id), loadLeaveRules(school.id)]);
   return (
     <>
       <PageHeader
@@ -90,6 +90,77 @@ export default async function StaffLeaveSettingsPage() {
             })}
           </ul>
         )}
+      </Card>
+      <Card
+        className="mb-6 max-w-4xl"
+        title="Leave rules"
+        icon={CalendarClock}
+        description="How many days of each type count as leave in one month, and which types need proof. Every teacher and staff leave still waits for an admin's approval."
+        padded={false}
+      >
+        <ActionForm action={saveLeaveRules} keepValues>
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className={theadClass}>
+                  <tr>
+                    <th className={thClass}>Leave type</th>
+                    <th className={thClass}>Teachers · days a month</th>
+                    <th className={thClass}>Non-teaching staff · days a month</th>
+                    <th className={thClass}>Needs proof</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {LEAVE_CATEGORIES.map((c) => (
+                    <tr key={c}>
+                      <td className={`${tdClass} font-medium text-fg`}>{CATEGORY_LABELS[c]}</td>
+                      {(["TEACHER", "STAFF"] as const).map((a) => (
+                        <td key={a} className={tdClass}>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              name={`m:${a}:${c}`}
+                              min={0}
+                              max={31}
+                              step={1}
+                              defaultValue={rules.monthly[a][c] ?? ""}
+                              placeholder="No limit"
+                              aria-label={`${CATEGORY_LABELS[c]}: days a month for ${a === "TEACHER" ? "teachers" : "staff"}`}
+                              className={`${inputClass} w-28`}
+                            />
+                            <span className="text-xs text-muted">a month</span>
+                          </label>
+                        </td>
+                      ))}
+                      <td className={tdClass}>
+                        <label className="flex items-center gap-2 text-fg-2">
+                          <input type="checkbox" name="proof" value={c} defaultChecked={rules.proof.includes(c)} className={checkboxClass} />
+                          <FileCheck2 className="h-4 w-4 text-subtle" aria-hidden />
+                          <span className="sr-only">{CATEGORY_LABELS[c]} needs proof</span>
+                        </label>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="space-y-3 border-t border-line px-4 py-4 sm:px-6">
+              <ul className="list-disc space-y-1 pl-4 text-xs text-muted">
+                <li>
+                  <strong className="font-medium text-fg-2">Days a month:</strong> e.g. PL 2 means only the first 2 working days of PL approved in a month count as leave.
+                  Days beyond that are marked absent and deducted from salary (loss of pay). The applicant is warned before applying.
+                </li>
+                <li>
+                  <strong className="font-medium text-fg-2">Needs proof:</strong> the application must attach a document (e.g. a medical certificate) and give a written
+                  reason of at least {PROOF_REASON_MIN} characters.
+                </li>
+              </ul>
+              <div className="flex justify-end">
+                <SubmitButton icon={<Save className="h-4 w-4" />}>Save leave rules</SubmitButton>
+              </div>
+            </div>
+          </>
+        </ActionForm>
       </Card>
       <Card
         className="max-w-2xl"

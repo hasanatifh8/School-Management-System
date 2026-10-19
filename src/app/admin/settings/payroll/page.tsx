@@ -1,21 +1,25 @@
-import { Banknote, CircleMinus, CirclePlus, Info, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { Banknote, CalendarX2, CircleMinus, CirclePlus, Info, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { DialogButton } from "@/components/dialog-button";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, ButtonLink, Callout, Card, EmptyState, PageHeader } from "@/components/ui";
 import { db } from "@/lib/db";
-import { CALC_LABELS, valueLabel } from "@/lib/payroll-shared";
+import { CALC_LABELS, looksLikeAbsence, readLopRule, valueLabel } from "@/lib/payroll-shared";
 import { getCurrentSchool } from "@/lib/school";
-import { deleteSalaryComponent, saveSalaryComponent, setSalaryComponentActive } from "./actions";
+import { deleteSalaryComponent, saveLopRule, saveSalaryComponent, setSalaryComponentActive } from "./actions";
+import { LopRuleForm } from "./lop-rule-form";
 import { SalaryComponentForm } from "./component-form";
 
 /** The school's salary components: earnings and deductions on every salary, with their defaults. */
 export default async function PayrollSettingsPage() {
   const school = await getCurrentSchool();
-  const components = await db.salaryComponent.findMany({
-    where: { schoolId: school.id },
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    include: { _count: { select: { values: true } } },
-  });
+  const [components, settings] = await Promise.all([
+    db.salaryComponent.findMany({
+      where: { schoolId: school.id },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      include: { _count: { select: { values: true } } },
+    }),
+    db.school.findUniqueOrThrow({ where: { id: school.id }, select: { lopRule: true } }),
+  ]);
 
   const group = (kind: "EARNING" | "DEDUCTION") => {
     const list = components.filter((c) => c.kind === kind);
@@ -37,11 +41,17 @@ export default async function PayrollSettingsPage() {
                   <p className="flex flex-wrap items-center gap-2 font-medium text-fg">
                     {c.name}
                     {!c.active && <Badge>Off</Badge>}
+                    {c.active && c.kind === "DEDUCTION" && looksLikeAbsence(c.name) && <Badge tone="amber">Every month, not attendance-based</Badge>}
                   </p>
                   <p className="text-xs text-muted">
                     {CALC_LABELS[c.calc]} · default {c.defaultValue == null ? "none (only people given a value)" : valueLabel(c.calc, c.defaultValue)}
                     {c._count.values > 0 && ` · ${c._count.values} with their own value`}
                   </p>
+                  {c.active && c.kind === "DEDUCTION" && looksLikeAbsence(c.name) && (
+                    <p className="mt-1 text-xs text-warning">
+                      Taken off every salary every month, even with full attendance. To deduct for absences, turn this off and use Deduction for absent days below.
+                    </p>
+                  )}
                 </div>
                 <DialogButton label="Edit" icon={<Pencil className="h-4 w-4" />} variant="ghost" title={`Edit ${c.name}`}>
                   <SalaryComponentForm
@@ -76,7 +86,7 @@ export default async function PayrollSettingsPage() {
         breadcrumbs={[{ label: "Settings", href: "/admin/settings" }, { label: "Payroll" }]}
         action={
           <>
-            <ButtonLink href="/admin/expenses/salaries" variant="secondary" icon={Banknote}>
+            <ButtonLink href="/admin/payroll" variant="secondary" icon={Banknote}>
               Pay salaries
             </ButtonLink>
             <DialogButton label="Add component" icon={<Plus className="h-4 w-4" />} variant="primary" title="Add a salary component">
@@ -98,9 +108,16 @@ export default async function PayrollSettingsPage() {
         {group("EARNING")}
         {group("DEDUCTION")}
       </div>
+      <Card
+        className="mt-6"
+        title="Deduction for absent days"
+        icon={CalendarX2}
+        description="Loss of pay: what each unpaid day (absent, or half of a half day, not on approved leave) takes off a salary. It's taken off when you tick “Deduct unpaid days” while paying."
+      >
+        <LopRuleForm action={saveLopRule} initial={readLopRule(settings.lopRule)} />
+      </Card>
       <Callout icon={Info} className="mt-6">
-        Net pay = basic pay + earnings − deductions. Unpaid days (absent days and half of each half day, not on approved leave) are taken off only when you tick
-        &ldquo;Deduct unpaid days&rdquo; while paying: a day&apos;s pay is the month&apos;s gross divided by its days. Changes apply to months not yet paid; paid slips stay as they were.
+        Net pay = basic pay + earnings − deductions − unpaid days. Changes apply to months not yet paid; paid slips stay as they were.
       </Callout>
     </>
   );

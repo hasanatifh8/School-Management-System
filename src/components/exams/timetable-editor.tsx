@@ -1,9 +1,9 @@
 "use client";
 
 import { startTransition, useActionState, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarPlus, Copy, Loader2, Plus, Save, Trash2, Wand2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarOff, CalendarPlus, Copy, Loader2, Plus, Save, Trash2, Wand2, X } from "lucide-react";
 import { FormMessage } from "@/components/forms";
-import { buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
+import { Button, Modal, buttonVariants, checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { MAX_PAPERS, PASS_PERCENT, emptyPaper, formatDay, type PaperInput } from "@/lib/exams-shared";
 import { classSectionName } from "@/lib/names";
@@ -25,6 +25,8 @@ type Props = {
   sessionStart: string;
   sessionEnd: string;
   today: string;
+  /** The session's days off (weekly offs and school holidays), date → name. */
+  daysOff: Record<string, string>;
 };
 
 const addDaysISO = (iso: string, n: number) => {
@@ -32,11 +34,10 @@ const addDaysISO = (iso: string, n: number) => {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 };
-const isSunday = (iso: string) => new Date(`${iso}T00:00:00Z`).getUTCDay() === 0;
-/** The next day after `iso` that isn't a Sunday. */
-const nextWorkingDay = (iso: string) => {
-  let d = addDaysISO(iso, 1);
-  while (isSunday(d)) d = addDaysISO(d, 1);
+/** The first day on or after `iso` that isn't a day off (gives up after a long break). */
+const firstWorkingDay = (iso: string, off: Record<string, string>) => {
+  let d = iso;
+  for (let n = 0; n < 60 && off[d]; n++) d = addDaysISO(d, 1);
   return d;
 };
 const byDateTime = (a: PaperInput, b: PaperInput) =>
@@ -44,7 +45,8 @@ const byDateTime = (a: PaperInput, b: PaperInput) =>
 
 /** Spreadsheet-like date sheet editor; saves every row at once. */
 export function TimetableEditor(props: Props) {
-  const { classes, subjects, allowed, curricula, restrict, sessionStart, sessionEnd, today } = props;
+  const { classes, subjects, allowed, curricula, restrict, sessionStart, sessionEnd, today, daysOff } = props;
+  const nextWorkingDay = (iso: string) => firstWorkingDay(addDaysISO(iso, 1), daysOff);
   const [rows, setRows] = useState<PaperInput[]>(props.initial);
   const [saved, setSaved] = useState(() => JSON.stringify(props.initial));
   const [state, formAction, pending] = useActionState(props.action, {});
@@ -105,7 +107,7 @@ export function TimetableEditor(props: Props) {
     const start = today > sessionStart ? today : sessionStart;
     const row = last
       ? { ...emptyPaper(), date: last.date ? nextWorkingDay(last.date) : "", startTime: last.startTime, endTime: last.endTime, classId: last.classId, maxMarks: last.maxMarks, room: last.room }
-      : { ...emptyPaper(), date: isSunday(start) ? nextWorkingDay(start) : start };
+      : { ...emptyPaper(), date: firstWorkingDay(start, daysOff) };
     restructure([...rows, row]);
   };
 
@@ -118,7 +120,10 @@ export function TimetableEditor(props: Props) {
   };
 
   // Required cells, checked here first so a blank one is marked without a round trip (the server checks everything again).
-  const save = () => {
+  // Papers on a day off, waiting for "keep these dates" or "move them".
+  const [offRows, setOffRows] = useState<number[]>([]);
+
+  const save = (allowDaysOff = false) => {
     const missing: Record<string, string[]> = {};
     const need = (i: number, field: keyof PaperInput, message: string) => (missing[`papers.${i}.${field}`] = [message]);
     rows.forEach((r, i) => {
@@ -137,9 +142,24 @@ export function TimetableEditor(props: Props) {
       return;
     }
     setLocalError(null);
+    const onDaysOff = rows.flatMap((r, i) => (daysOff[r.date] ? [i] : []));
+    if (onDaysOff.length && !allowDaysOff) {
+      setOffRows(onDaysOff);
+      return;
+    }
+    submit(rows);
+  };
+  const submit = (papers: PaperInput[]) => {
+    setOffRows([]);
     const fd = new FormData();
-    fd.set("papers", JSON.stringify(rows));
+    fd.set("papers", JSON.stringify(papers));
     startTransition(() => formAction(fd));
+  };
+  /** Moves each paper on a day off to the next working day, then saves. */
+  const moveOffDays = () => {
+    const next = rows.map((r) => (daysOff[r.date] ? { ...r, date: firstWorkingDay(r.date, daysOff) } : r));
+    setRows(next);
+    submit(next);
   };
 
   const th = "whitespace-nowrap px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted first:pl-4";
@@ -176,7 +196,8 @@ export function TimetableEditor(props: Props) {
           classes={classes}
           multiClass={multiClass}
           subjectChoices={subjectChoices}
-          defaultStart={rows.length && rows.at(-1)!.date ? nextWorkingDay(rows.at(-1)!.date) : today > sessionStart ? today : sessionStart}
+          defaultStart={rows.length && rows.at(-1)!.date ? nextWorkingDay(rows.at(-1)!.date) : firstWorkingDay(today > sessionStart ? today : sessionStart, daysOff)}
+          daysOff={daysOff}
           min={sessionStart}
           max={sessionEnd}
           onClose={() => setFillOpen(false)}
@@ -234,7 +255,13 @@ export function TimetableEditor(props: Props) {
                         className={`${small} w-40 ${bad(cellError(i, "date"))}`}
                       />
                       {r.date && !cellError(i, "date") && (
-                        <p className={`mt-1 text-xs ${isSunday(r.date) ? "font-medium text-warning" : "text-muted"}`}>{formatDay(r.date)}</p>
+                        <p className={`mt-1 text-xs ${daysOff[r.date] ? "font-medium text-warning" : "text-muted"}`}>{formatDay(r.date)}</p>
+                      )}
+                      {r.date && daysOff[r.date] && !cellError(i, "date") && (
+                        <p className="mt-0.5 flex max-w-40 items-start gap-1 text-xs font-medium leading-snug text-warning">
+                          <CalendarOff className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                          Holiday: {daysOff[r.date]}
+                        </p>
                       )}
                       {err(cellError(i, "date"))}
                     </td>
@@ -422,11 +449,50 @@ export function TimetableEditor(props: Props) {
         <div className="min-w-0 flex-1">
           <FormMessage state={localError ? { error: localError } : dirty && state.ok ? {} : state} />
         </div>
-        <button type="button" onClick={save} disabled={pending || !dirty} className={buttonVariants.primary}>
+        <button type="button" onClick={() => save()} disabled={pending || !dirty} className={buttonVariants.primary}>
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {pending ? "Saving…" : "Save timetable"}
         </button>
       </div>
+
+      <Modal
+        open={offRows.length > 0}
+        onClose={() => setOffRows([])}
+        size="sm"
+        title={offRows.length === 1 ? "This paper is on a holiday" : `${offRows.length} papers are on holidays`}
+        description="The school is closed on these days. Keep the exam on them, or move each paper to the next working day?"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setOffRows([])}>
+              Go back
+            </Button>
+            <Button variant="secondary" onClick={() => save(true)}>
+              Keep these dates
+            </Button>
+            <Button onClick={moveOffDays} autoFocus>
+              Move to working days
+            </Button>
+          </>
+        }
+      >
+        <ul className="divide-y divide-line px-6 py-2 text-sm">
+          {offRows.map((i) => {
+            const r = rows[i];
+            return (
+              <li key={i} className="flex items-baseline justify-between gap-3 py-2">
+                <span className="min-w-0">
+                  <span className="font-medium text-fg">{r.title.trim() || subjectName.get(r.subjectId) || `Row ${i + 1}`}</span>
+                  <span className="block text-xs text-warning">{daysOff[r.date]}</span>
+                </span>
+                <span className="shrink-0 text-right text-xs text-muted">
+                  {formatDay(r.date)}
+                  <span className="block">→ {formatDay(firstWorkingDay(r.date, daysOff))}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </Modal>
     </div>
   );
 }
@@ -458,6 +524,7 @@ function FillPanel({
   multiClass,
   subjectChoices,
   defaultStart,
+  daysOff,
   min,
   max,
   onClose,
@@ -467,6 +534,7 @@ function FillPanel({
   multiClass: boolean;
   subjectChoices: (classId: string) => { first: Option[]; rest: Option[] };
   defaultStart: string;
+  daysOff: Record<string, string>;
   min: string;
   max: string;
   onClose: () => void;
@@ -480,7 +548,7 @@ function FillPanel({
   const [from, setFrom] = useState("09:00");
   const [to, setTo] = useState("12:00");
   const [gap, setGap] = useState(1);
-  const [skipSundays, setSkipSundays] = useState(true);
+  const [skipDaysOff, setSkipDaysOff] = useState(true);
   const [marks, setMarks] = useState("");
 
   const chooseClass = (id: string) => {
@@ -493,7 +561,7 @@ function FillPanel({
     const out: PaperInput[] = [];
     let date = start;
     for (const s of options.filter((o) => picked.has(o.id))) {
-      while (skipSundays && isSunday(date)) date = addDaysISO(date, 1);
+      if (skipDaysOff) date = firstWorkingDay(date, daysOff);
       out.push({ ...emptyPaper(), date, startTime: from, endTime: to, classId: multiClass ? classId : "", subjectId: s.id, maxMarks: marks });
       date = addDaysISO(date, gap);
     }
@@ -580,8 +648,8 @@ function FillPanel({
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <label className="flex items-center gap-2 text-sm text-fg-2">
-          <input type="checkbox" checked={skipSundays} onChange={(e) => setSkipSundays(e.target.checked)} className={checkboxClass} />
-          Skip Sundays
+          <input type="checkbox" checked={skipDaysOff} onChange={(e) => setSkipDaysOff(e.target.checked)} className={checkboxClass} />
+          Skip Sundays and holidays
         </label>
         <button type="button" onClick={fill} disabled={!picked.size || !start} className={`${buttonVariants.primary} !py-2`}>
           <Plus className="h-4 w-4" />

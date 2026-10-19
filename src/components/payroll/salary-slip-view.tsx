@@ -5,10 +5,10 @@ import { PdfDownloadButton } from "@/components/pdf-download";
 import { PrintButton } from "@/components/print-button";
 import { SalarySlip } from "@/components/payroll/salary-slip";
 import { buttonVariants } from "@/components/ui";
-import type { Payslip } from "@/lib/payroll";
+import type { SlipView } from "@/lib/payroll";
 
 /** A salary slip with Back, Print and Download PDF (admin and teacher portals); admins also get `actions` and a `banner`. */
-export function SalarySlipView({ slip, back, actions, banner }: { slip: Payslip; back: { href: string; label: string }; actions?: ReactNode; banner?: ReactNode }) {
+export function SalarySlipView({ slip, back, actions, banner }: { slip: SlipView; back: { href: string; label: string }; actions?: ReactNode; banner?: ReactNode }) {
   const fileName = `Salary slip ${slip.month} ${slip.name}`.replace(/[^\w\- ]+/g, "");
   return (
     <div className="space-y-4">

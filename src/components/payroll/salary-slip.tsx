@@ -1,6 +1,6 @@
 import { GraduationCap } from "lucide-react";
 import { MODE_LABELS, rupees } from "@/lib/fees-shared";
-import type { Payslip } from "@/lib/payroll";
+import type { SlipView } from "@/lib/payroll";
 import { CATEGORY_LABELS, CATEGORY_SHORT } from "@/lib/leave-shared";
 import { rupeesInWords, type SlipLine } from "@/lib/payroll-shared";
 
@@ -11,7 +11,7 @@ const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const cell = "border border-slate-300 px-[2.5mm] py-[1.6mm]";
 
 /** One salary slip on an A4 page, for screen, print and PDF (`data-pdf-page`). */
-export function SalarySlip({ slip }: { slip: Payslip }) {
+export function SalarySlip({ slip }: { slip: SlipView }) {
   const earnings = slip.lines.filter((l) => l.kind === "EARNING");
   const deductions = slip.lines.filter((l) => l.kind === "DEDUCTION");
   const gross = earnings.reduce((n, l) => n + l.amount, 0);
@@ -23,7 +23,7 @@ export function SalarySlip({ slip }: { slip: Payslip }) {
     ["Designation", slip.role],
     ["Department", slip.department],
     ["Date of joining", slip.joined && fmt(slip.joined)],
-    ["Paid on", `${fmt(slip.paidOn)} · ${MODE_LABELS[slip.mode]}`],
+    slip.paidOn && slip.mode ? ["Paid on", `${fmt(slip.paidOn)} · ${MODE_LABELS[slip.mode]}`] : ["Paid on", "Not paid yet"],
   ];
 
   return (
@@ -33,10 +33,10 @@ export function SalarySlip({ slip }: { slip: Payslip }) {
     >
       {!slip.published && (
         <p
-          aria-label="Draft: not published to the employee"
+          aria-label={slip.preview ? "Preview: not paid yet" : "Draft: not published to the employee"}
           className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-[30deg] select-none text-[64pt] font-black uppercase tracking-widest text-slate-900/[0.06]"
         >
-          Draft
+          {slip.preview ? "Preview" : "Draft"}
         </p>
       )}
       <header className="flex items-center gap-[4mm] border-b-2 border-slate-800 pb-[3mm]">
@@ -71,7 +71,7 @@ export function SalarySlip({ slip }: { slip: Payslip }) {
       {slip.attendance && (
         <section className="mt-[4mm]">
           <p className="mb-[1.5mm] text-[7.5pt] font-semibold uppercase tracking-wider text-slate-500">Attendance this month</p>
-          <div className="grid grid-cols-7 gap-[1.5mm] text-center">
+          <div className="grid grid-cols-8 gap-[1.5mm] text-center">
             {[
               ["Days in month", slip.daysInMonth],
               ["Working days", slip.attendance.workingDays],
@@ -79,17 +79,25 @@ export function SalarySlip({ slip }: { slip: Payslip }) {
               ["Absent", slip.attendance.absent],
               ["Half days", slip.attendance.halfDay],
               ["On leave", slip.attendance.leave],
+              ["Not marked", slip.attendance.unmarked],
               ["Unpaid days", slip.lopDays ?? 0],
             ].map(([label, value]) => (
-              <div key={label} className="rounded border border-slate-300 py-[1.6mm] [print-color-adjust:exact]">
+              <div
+                key={label}
+                className={`rounded border py-[1.6mm] [print-color-adjust:exact] ${label === "Unpaid days" && slip.lopDays ? "border-red-300 bg-red-50 text-red-800" : "border-slate-300"}`}
+              >
                 <p className="text-[6.5pt] uppercase tracking-wider text-slate-500">{label}</p>
                 <p className="text-[11pt] font-semibold tabular-nums">{num(Number(value))}</p>
               </div>
             ))}
           </div>
           <p className="mt-[1.2mm] text-[7.5pt] text-slate-500">
-            Present counts late arrivals; a half day counts as half. Unpaid days = absent days + half of each half day, not on approved leave
-            {slip.lopDays ? "" : " (not deducted this month)"}.
+            Working days count from the month&apos;s first day of staff attendance (or the date of joining) up to the slip date, leaving out weekly offs and holidays.
+            Present counts late arrivals;
+            a half day counts as half. Not marked: working days with no attendance mark and no approved leave.{" "}
+            {slip.lopDays
+              ? `${num(slip.lopDays)} unpaid day${slip.lopDays === 1 ? " was" : "s were"} deducted: “Loss of pay” under Deductions shows how they were counted and charged.`
+              : "No unpaid days were deducted on this slip."}
           </p>
         </section>
       )}
@@ -189,7 +197,8 @@ export function SalarySlip({ slip }: { slip: Payslip }) {
         </p>
       )}
       <p className="mt-[3mm] text-[7.5pt] text-slate-500">
-        Unpaid days are absent days plus half of each half day, not on approved leave; a day&apos;s pay is the month&apos;s gross divided by {slip.daysInMonth}. This is a
+        {slip.preview && `Worked out on ${fmt(slip.preview.asOf)} from the salary structure and attendance up to that day; the final slip is made when the salary is paid. `}
+        Lines marked &ldquo;every month&rdquo; are part of the regular salary structure; &ldquo;this month only&rdquo; lines are one-time items. This is a
         computer-generated slip.
       </p>
 

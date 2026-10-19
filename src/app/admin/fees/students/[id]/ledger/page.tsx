@@ -55,7 +55,7 @@ export default async function FeeLedgerPage({ params, searchParams }: PageProps<
     <div className="space-y-6">
       {sp.print === "1" && <AutoPrint />}
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <BackLink href={`/admin/fees/students/${student.id}`} className={buttonVariants.ghost}>
+        <BackLink href={`/admin/fee-desk?s=${student.id}`} className={buttonVariants.ghost}>
           <ArrowLeft className="h-4 w-4" />
           {student.firstName}&apos;s fees
         </BackLink>

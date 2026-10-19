@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
 import { formatISO, shortDate } from "@/lib/attendance-shared";
 import type { LeaveDetail } from "@/lib/leave";
-import { APPLICANT_LABELS, CATEGORY_LABELS, LEAVE_URGENT_HOURS, STATUS_LABELS, STATUS_TONES } from "@/lib/leave-shared";
+import { APPLICANT_LABELS, CATEGORY_LABELS, CATEGORY_SHORT, LEAVE_URGENT_HOURS, STATUS_LABELS, STATUS_TONES } from "@/lib/leave-shared";
 import { LeaveDecision, LeaveWithdraw } from "./leave-actions";
 
 const stamp = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
@@ -72,6 +72,17 @@ export function LeaveReview({
         <p className="mx-6 mt-4 flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-xs font-medium text-warning ring-1 ring-inset ring-warning-line">
           <TriangleAlert className="mt-px h-4 w-4 shrink-0" aria-hidden />
           Warning: {r.clash}
+        </p>
+      )}
+
+      {r.overLimit.length > 0 && r.status !== "REJECTED" && (
+        <p className="mx-6 mt-4 flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger ring-1 ring-inset ring-danger-line">
+          <TriangleAlert className="mt-px h-4 w-4 shrink-0" aria-hidden />
+          <span>
+            {r.status === "PENDING" ? "If approved, " : ""}
+            {r.overLimit.length} day{r.overLimit.length === 1 ? "" : "s"} ({r.overLimit.map((d) => formatISO(d, shortDate)).join(", ")}) {r.status === "PENDING" ? "would be" : "are"} over the
+            monthly {CATEGORY_SHORT[r.category]} limit{r.monthlyCap != null ? ` of ${r.monthlyCap}` : ""}: counted as absent and deducted from salary, not as leave.
+          </span>
         </p>
       )}
 

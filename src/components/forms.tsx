@@ -131,6 +131,7 @@ export function ActionForm({
   syncKey,
   compact = false,
   keepValues = false,
+  onSuccess,
 }: {
   action: Action;
   children: ReactNode | ((state: ActionState) => ReactNode);
@@ -140,10 +141,16 @@ export function ActionForm({
   compact?: boolean;
   /** Never reset the fields (the form is controlled and remounted with fresh data instead). */
   keepValues?: boolean;
+  /** Called after a successful save, e.g. to close the dialog the form is in. */
+  onSuccess?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const formRef = useRef<HTMLFormElement>(null);
   const toast = useToast();
+  const onSuccessRef = useRef(onSuccess);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  });
 
   useEffect(() => {
     if (state.error) {
@@ -154,6 +161,7 @@ export function ActionForm({
     if (!state.ok) return;
     if (!keepValues) formRef.current?.reset();
     if (state.message) toast({ title: state.message });
+    onSuccessRef.current?.();
   }, [state, toast, compact, keepValues]);
 
   useEffect(() => {

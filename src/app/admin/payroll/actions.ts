@@ -7,7 +7,7 @@ import { addMonths, parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { isMonth, requireExpensesAccess } from "@/lib/expenses";
 import { PAYMENT_MODES } from "@/lib/fees-shared";
-import type { SlipLine } from "@/lib/payroll-shared";
+import { isReservedName, type SlipLine } from "@/lib/payroll-shared";
 import { logged } from "@/lib/activity";
 
 const revalidate = () => revalidatePath("/", "layout");
@@ -35,6 +35,19 @@ export async function unpublishPayslip(id: string): Promise<ActionState> {
     { ok: true, message: `${p.name}'s slip is back to draft and hidden from them.` },
     `Unpublished ${p.name}'s salary slip for ${p.month}`,
   );
+}
+
+/** Publishes the chosen draft slips. */
+export async function publishPayslips(ids: string[]): Promise<ActionState> {
+  const { school, who } = await requireExpensesAccess();
+  if (!ids.length) return { error: "Choose the slips to publish." };
+  const { count } = await db.salaryPayment.updateMany({
+    where: { schoolId: school.id, id: { in: ids }, published: false },
+    data: { published: true, publishedAt: new Date(), publishedBy: who },
+  });
+  revalidate();
+  if (!count) return { ok: true, message: "Those slips are already published." };
+  return logged("Payroll", { ok: true, message: `Published ${count} salary slip${count === 1 ? "" : "s"}.` }, `Published ${count} salary slips`);
 }
 
 /** Publishes every draft slip of a month. */
@@ -144,8 +157,10 @@ const oneTimeSchema = z.object({
  * ("T:<id>" / "S:<id>") or a group ("TEACHERS", "STAFF", "EVERYONE"). People
  * already paid for the month are skipped: change their draft slip instead.
  */
-export async function addOneTimeItem(month: string, _: ActionState, formData: FormData): Promise<ActionState> {
+export async function addOneTimeItem(boundMonth: string | null, _: ActionState, formData: FormData): Promise<ActionState> {
   const { school, who, month: current } = await requireExpensesAccess();
+  // A person's Salary tab sends the month with the form.
+  const month = boundMonth ?? String(formData.get("month") ?? "");
   if (!isMonth(month) || month < addMonths(current, -1) || month > addMonths(current, 1))
     return { error: "One-time items can be added for last month, this month or next month." };
   const parsed = oneTimeSchema.safeParse(Object.fromEntries(formData));
@@ -213,4 +228,51 @@ export async function removeOneTimeItem(id: string): Promise<ActionState> {
   await db.salaryAdjustment.delete({ where: { id } });
   revalidate();
   return logged("Payroll", { ok: true, message: `${item.name} removed.` });
+}
+
+const personalSchema = z.object({
+  name: z.string().trim().min(2, "Give it a name, e.g. Special allowance").max(40, "Keep it under 40 characters"),
+  kind: z.enum(["EARNING", "DEDUCTION"], "Choose earning or deduction"),
+  calc: z.enum(["FIXED", "PERCENT_OF_BASIC"], "Choose how it's worked out"),
+  value: z.string().transform((v) => v.replace(/[,\s₹%]/g, "")),
+});
+
+/**
+ * Adds a regular earning or deduction for one person, every month from now on:
+ * a salary component with no default (so nobody else gets it) and this
+ * person's value for it. An existing component of the same name is reused.
+ */
+export async function addPersonalComponent(person: { teacherId: string } | { staffId: string }, _: ActionState, formData: FormData): Promise<ActionState> {
+  const { school } = await requireExpensesAccess();
+  const parsed = personalSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return validationError(parsed.error);
+  const v = parsed.data;
+  if (v.name.toLowerCase() === "basic pay") return { error: "Basic pay is set above.", fieldErrors: { name: ["Set basic pay in the salary structure"] } };
+  if (isReservedName(v.name))
+    return { error: "Loss of pay is worked out from attendance.", fieldErrors: { name: ["Absences are deducted by the school's absence rule, not a component"] } };
+  const n = Number(v.value);
+  const ok = v.value !== "" && (v.calc === "FIXED" ? Number.isInteger(n) && n > 0 && n <= 10_000_000 : Number.isFinite(n) && n > 0 && n <= 100);
+  if (!ok) return { error: "Check the amount.", fieldErrors: { value: [v.calc === "FIXED" ? "Whole rupees, more than 0" : "A percent from 0 to 100"] } };
+
+  const found =
+    "teacherId" in person
+      ? await db.teacher.findFirst({ where: { id: person.teacherId, schoolId: school.id }, select: { firstName: true, lastName: true } }).then((t) => t && `${t.firstName} ${t.lastName}`)
+      : await db.staffMember.findFirst({ where: { id: person.staffId, schoolId: school.id }, select: { name: true } }).then((s) => s?.name);
+  if (!found) return { error: "Person not found." };
+
+  let component = await db.salaryComponent.findFirst({ where: { schoolId: school.id, name: { equals: v.name, mode: "insensitive" } } });
+  if (component && (component.kind !== v.kind || component.calc !== v.calc))
+    return { error: `“${component.name}” already exists as a different kind of component. Choose another name.`, fieldErrors: { name: ["Already used"] } };
+  if (!component) {
+    const last = await db.salaryComponent.aggregate({ where: { schoolId: school.id }, _max: { sortOrder: true } });
+    component = await db.salaryComponent.create({
+      data: { schoolId: school.id, name: v.name, kind: v.kind, calc: v.calc, defaultValue: null, sortOrder: (last._max.sortOrder ?? 0) + 1 },
+    });
+  } else if (!component.active) {
+    await db.salaryComponent.update({ where: { id: component.id }, data: { active: true } });
+  }
+  const where = "teacherId" in person ? { componentId_teacherId: { componentId: component.id, teacherId: person.teacherId } } : { componentId_staffId: { componentId: component.id, staffId: person.staffId } };
+  await db.salaryValue.upsert({ where, update: { value: n }, create: { schoolId: school.id, componentId: component.id, ...person, value: n } });
+  revalidate();
+  return logged("Payroll", { ok: true, message: `${component.name} added to ${found}'s salary.` }, `Added ${component.name} to ${found}'s salary`);
 }

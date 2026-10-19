@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { type ActionState, validationError } from "@/lib/action-state";
 import { db } from "@/lib/db";
-import { BASIC_PAY } from "@/lib/payroll-shared";
+import { BASIC_PAY, isReservedName, lopRuleText, type LopRule } from "@/lib/payroll-shared";
 import { getCurrentSchool } from "@/lib/school";
 import { logged } from "@/lib/activity";
 
@@ -23,6 +23,10 @@ const componentSchema = z
   .transform((v, ctx) => {
     if (v.name.toLowerCase() === BASIC_PAY.toLowerCase()) {
       ctx.addIssue({ code: "custom", path: ["name"], message: "Basic pay is set on each person's salary" });
+      return z.NEVER;
+    }
+    if (isReservedName(v.name)) {
+      ctx.addIssue({ code: "custom", path: ["name"], message: "Loss of pay is worked out from attendance (Deduction for absent days below)" });
       return z.NEVER;
     }
     if (!v.defaultValue) return { ...v, defaultValue: null };
@@ -121,4 +125,29 @@ export async function saveSalaryStructure(person: { teacherId: string } | { staf
   ]);
   refresh();
   return logged("Payroll", { ok: true, message: "Salary saved. It applies to months not yet paid." }, `Updated ${found.name}'s salary`, basic == null ? "No basic pay" : `Basic pay ₹${basic.toLocaleString("en-IN")}`);
+}
+
+/** Saves how absent days come off salaries: a share of a day's pay, or a fixed amount a day. */
+export async function saveLopRule(_: ActionState, formData: FormData): Promise<ActionState> {
+  const school = await getCurrentSchool();
+  const text = (k: string) => String(formData.get(k) ?? "").replace(/[,\s₹%]/g, "");
+  let rule: LopRule;
+  const countUnmarked = formData.get("unmarked") === "ABSENT";
+  if (formData.get("method") === "FIXED") {
+    const amount = Number(text("amount"));
+    if (!text("amount") || !Number.isInteger(amount) || amount < 0 || amount > 1_000_000)
+      return { error: "Enter the amount for each absent day.", fieldErrors: { amount: ["Whole rupees"] } };
+    rule = { method: "FIXED", amount, countUnmarked };
+  } else {
+    const divisorChoice = String(formData.get("divisor") ?? "");
+    const divisor = divisorChoice === "MONTH" ? null : Number(divisorChoice === "CUSTOM" ? text("customDivisor") : divisorChoice);
+    if (divisor !== null && !(Number.isInteger(divisor) && divisor >= 1 && divisor <= 31))
+      return { error: "Divide by a whole number of days, 1 to 31.", fieldErrors: { customDivisor: ["1 to 31"] } };
+    const percent = Number(text("percent") || "100");
+    if (!Number.isFinite(percent) || percent < 0 || percent > 300) return { error: "The percent must be 0 to 300.", fieldErrors: { percent: ["0 to 300"] } };
+    rule = { method: "DAY_PAY", base: formData.get("base") === "BASIC" ? "BASIC" : "GROSS", divisor, percent, countUnmarked };
+  }
+  await db.school.update({ where: { id: school.id }, data: { lopRule: rule } });
+  refresh();
+  return logged("Payroll", { ok: true, message: "Absence deduction saved. It applies to salaries not yet paid." }, "Changed the absence deduction", `${lopRuleText(rule)}; unmarked days ${countUnmarked ? "count as absent" : "not deducted"}`);
 }

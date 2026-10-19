@@ -2,8 +2,8 @@ import "server-only";
 import { addMonths, monthDates, parseISODate, todayISO } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
 import { fullName } from "@/lib/queries";
-import { loadComponents, loadOneTimeItems, loadOwnValues, monthLop, monthSalary } from "@/lib/payroll";
-import type { SlipLine } from "@/lib/payroll-shared";
+import { loadComponents, loadLopRule, loadOneTimeItems, loadOwnValues, monthLop, monthSalary } from "@/lib/payroll";
+import type { MonthPay } from "@/lib/payroll-shared";
 import { getCurrentSchool, getViewer } from "@/lib/school";
 
 /** Expenses are for school admins and Power Admin only. */
@@ -58,13 +58,13 @@ export type PayrollRow = {
   /** Net pay for the month from their salary structure (before unpaid days); null without basic pay. */
   salary: number | null;
   /** The month's slip: lines, gross, deductions, net, and unpaid days with what they'd take off. */
-  pay: { lines: SlipLine[]; gross: number; deductions: number; net: number; lopDays: number; lopAmount: number; lopGross: number } | null;
+  pay: MonthPay | null;
   payment: { id: string; amount: number; paidOn: Date; mode: string; note: string | null; published: boolean } | null;
 };
 
 /** Everyone to pay this month: active teachers and staff, plus anyone already paid for it. */
 export async function loadPayroll(schoolId: string, month: string): Promise<PayrollRow[]> {
-  const [teachers, staff, payments, components, own, lop, oneTime] = await Promise.all([
+  const [teachers, staff, payments, components, own, lop, oneTime, rule] = await Promise.all([
     db.teacher.findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: [{ firstName: "asc" }], select: { id: true, firstName: true, middleName: true, lastName: true, specialization: true, monthlySalary: true } }),
     db.staffMember.findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: [{ name: "asc" }] }),
     db.salaryPayment.findMany({ where: { schoolId, month } }),
@@ -72,8 +72,9 @@ export async function loadPayroll(schoolId: string, month: string): Promise<Payr
     loadOwnValues(schoolId),
     monthLop(schoolId, month, todayISO()),
     loadOneTimeItems(schoolId, month),
+    loadLopRule(schoolId),
   ]);
-  const payFor = (key: string, basic: number | null) => monthSalary(basic, components, own.get(key), lop.get(key) ?? 0, month, oneTime.get(key));
+  const payFor = (key: string, basic: number | null) => monthSalary(basic, components, own.get(key), lop.get(key), month, rule, oneTime.get(key));
   const byTeacher = new Map(payments.filter((p) => p.teacherId).map((p) => [p.teacherId!, p]));
   const byStaff = new Map(payments.filter((p) => p.staffId).map((p) => [p.staffId!, p]));
   const pick = (p: (typeof payments)[number] | undefined) => (p ? { id: p.id, amount: p.amount, paidOn: p.paidOn, mode: p.mode, note: p.note, published: p.published } : null);

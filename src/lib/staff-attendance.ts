@@ -4,16 +4,20 @@ import type { ActionState } from "@/lib/action-state";
 import { weeklyOffOn } from "@/lib/attendance";
 import { parseISODate } from "@/lib/attendance-shared";
 import { db } from "@/lib/db";
-import { onLeave } from "@/lib/leave";
+import { onLeave, overLimitOn } from "@/lib/leave";
+import { CATEGORY_SHORT } from "@/lib/leave-shared";
 import { photoUrl } from "@/lib/photos";
 import { fullName } from "@/lib/queries";
 import { STAFF_STATUSES, type StaffGroup, type StaffStatusKey } from "@/lib/staff-attendance-shared";
 
-/** Everyone in the group with their mark for the date (approved leave pre-filled on an unmarked day). */
+/**
+ * Everyone in the group with their mark for the date. On an unmarked day,
+ * approved leave starts as On leave, and leave over the monthly cap as Absent.
+ */
 export async function loadStaffSheet(schoolId: string, group: StaffGroup, date: string) {
   const d = parseISODate(date)!;
   const teaching = group === "teaching";
-  const [people, records, leave] = await Promise.all([
+  const [people, records, leave, overLimit] = await Promise.all([
     teaching
       ? db.teacher
           .findMany({ where: { schoolId, status: "ACTIVE" }, orderBy: [{ firstName: "asc" }, { lastName: "asc" }] })
@@ -23,6 +27,7 @@ export async function loadStaffSheet(schoolId: string, group: StaffGroup, date: 
           .then((ss) => ss.map((s) => ({ id: s.id, name: s.name, sub: [s.designation, s.department, s.employeeCode].filter(Boolean).join(" · "), photoId: s.photoId }))),
     db.staffAttendance.findMany({ where: { schoolId, date: d, [teaching ? "teacherId" : "staffId"]: { not: null } } }),
     onLeave(schoolId, d),
+    overLimitOn(schoolId, date),
   ]);
   const byPerson = new Map(records.map((r) => [(teaching ? r.teacherId : r.staffId)!, r]));
   const marked = people.some((p) => byPerson.has(p.id));
@@ -31,13 +36,15 @@ export async function loadStaffSheet(schoolId: string, group: StaffGroup, date: 
     initial: Object.fromEntries(
       people.map((p) => {
         const r = byPerson.get(p.id);
+        const over = overLimit.get(p.id);
+        if (!r && over) return [p.id, { status: "ABSENT" as StaffStatusKey, remark: `Over the monthly ${CATEGORY_SHORT[over]} limit (unpaid)` }];
         const status: StaffStatusKey = r?.status ?? (leave.has(p.id) ? "ON_LEAVE" : "PRESENT");
         return [p.id, { status, remark: r?.remark ?? (!r && leave.has(p.id) ? "Approved leave" : "") }];
       }),
     ),
     marked,
     markedBy: records.find((r) => r.markedBy)?.markedBy ?? null,
-    onLeave: people.filter((p) => leave.has(p.id)).length,
+    onLeave: people.filter((p) => leave.has(p.id) && !overLimit.has(p.id)).length,
   };
 }
 

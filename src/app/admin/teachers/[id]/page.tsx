@@ -114,7 +114,7 @@ function ageOn(dob: Date) {
 
 export default async function TeacherPage({ params, searchParams }: PageProps<"/admin/teachers/[id]">) {
   const { id } = await params;
-  const { tab: requested, month: monthParam } = await searchParams;
+  const { tab: requested, month: monthParam, sv } = await searchParams;
   const tab: Tab = TABS.find((t) => t === requested) ?? "overview";
   const school = await getCurrentSchool();
   const [allSubjects, schoolSections] = await Promise.all([
@@ -284,7 +284,9 @@ export default async function TeacherPage({ params, searchParams }: PageProps<"/
 
       {tab === "documents" && <DocumentsPanel ownerKind="teacher" ownerId={teacher.id} documents={teacher.documents} />}
 
-      {tab === "salary" && <SalaryTab schoolId={school.id} person={{ teacherId: teacher.id }} basic={teacher.monthlySalary} />}
+      {tab === "salary" && (
+        <SalaryTab schoolId={school.id} person={{ teacherId: teacher.id }} name={name} basic={teacher.monthlySalary} base={`${base}?tab=salary`} view={sv} month={monthParam} />
+      )}
 
       {tab === "edit" && (
         <div className="space-y-6">

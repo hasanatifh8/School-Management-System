@@ -122,6 +122,11 @@ export function LeaveHistory({
                     </span>
                   </div>
                   {r.description && <p className="mt-1 line-clamp-2 text-sm text-fg-2">{r.description}</p>}
+                  {r.status === "APPROVED" && r.overLimitDates.length > 0 && (
+                    <p className="mt-1 text-xs font-medium text-danger">
+                      {r.overLimitDates.length} day{r.overLimitDates.length === 1 ? "" : "s"} over the monthly limit: counted absent (unpaid)
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-muted">
                     Asked by {r.requestedBy}
                     {r.decidedBy && ` · ${STATUS_LABELS[r.status].toLowerCase()} by ${r.decidedBy}`}

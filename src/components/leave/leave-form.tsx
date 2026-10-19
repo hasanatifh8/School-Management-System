@@ -1,18 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Send, TriangleAlert, X } from "lucide-react";
+import { CalendarX2, FileCheck2, Search, Send, TriangleAlert, X } from "lucide-react";
 import { ActionForm, Field, SubmitButton } from "@/components/forms";
 import { checkboxClass, inputClass, selectClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
+import { formatISO, shortDate } from "@/lib/attendance-shared";
 import { MAX_DOCUMENT_LABEL } from "@/lib/document-types";
 import {
   APPLICANT_LABELS,
   CATEGORY_LABELS,
   LEAVE_CATEGORIES,
+  CATEGORY_SHORT,
   MAX_LEAVE_DAYS,
+  PROOF_REASON_MIN,
   STUDENT_CATEGORIES,
   leaveDays,
+  splitByMonthlyCap,
   type LeaveCategoryKey,
   type LeaveApplicantKey,
   type LeavePerson,
@@ -23,6 +27,9 @@ import {
  * signed-in teacher's own option ("Myself"), which needs no person picked.
  * With `balance`, applying for yourself shows the days left of the chosen type
  * and warns (without blocking) when the request asks for more; the admin decides.
+ * With `monthlyCaps` and `usage`, it shows the month's limit for the type and
+ * which days would be over it (absent, unpaid), which must be accepted. Types
+ * in `proof` need a document and a written reason for teachers and staff.
  */
 export function LeaveForm({
   action,
@@ -32,6 +39,9 @@ export function LeaveForm({
   today,
   balance,
   daysOff = [],
+  proof = [],
+  monthlyCaps,
+  usage,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   people: LeavePerson[];
@@ -42,6 +52,12 @@ export function LeaveForm({
   balance?: { category: LeaveCategoryKey; allowed: number | null; used: number; pending: number }[];
   /** Weekly offs and holidays, which leave doesn't count. */
   daysOff?: string[];
+  /** Leave types that need a document and a written reason (teachers and staff). */
+  proof?: LeaveCategoryKey[];
+  /** The applicant's own monthly caps by type (days a month). */
+  monthlyCaps?: Partial<Record<LeaveCategoryKey, number>>;
+  /** The applicant's own leave by type and month: days counted as leave and waiting. */
+  usage?: Partial<Record<LeaveCategoryKey, Record<string, { counted: number; pending: number }>>>;
 }) {
   const kinds = useMemo(() => {
     const present = new Set(people.map((p) => p.applicant));
@@ -66,15 +82,26 @@ export function LeaveForm({
 
   // Working days asked (weekly offs and holidays don't count), against what's left of the chosen type.
   const off = useMemo(() => new Set(daysOff), [daysOff]);
-  const working = useMemo(() => {
-    if (!days || days > MAX_LEAVE_DAYS) return 0;
-    let n = 0;
+  const workingDates = useMemo(() => {
+    if (!days || days > MAX_LEAVE_DAYS) return [];
+    const out: string[] = [];
     for (let i = 0; i < days; i++) {
       const d = new Date(Date.parse(`${from}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10);
-      if (!off.has(d)) n++;
+      if (!off.has(d)) out.push(d);
     }
-    return n;
+    return out;
   }, [from, days, off]);
+  const working = workingDates.length;
+
+  // Teachers and staff: proof for some types, and the monthly cap (own leave only).
+  const staffLeave = applicant === "TEACHER" || applicant === "STAFF";
+  const needsProof = staffLeave && !!category && proof.includes(category);
+  const cap = isSelf && category ? monthlyCaps?.[category] : undefined;
+  const monthUse = (category && usage?.[category]) || {};
+  const split = cap != null ? splitByMonthlyCap(workingDates, cap, Object.fromEntries(Object.entries(monthUse).map(([m, u]) => [m, u.counted + u.pending]))) : null;
+  const over = split?.over ?? [];
+  const months = [...new Set(workingDates.map((d) => d.slice(0, 7)))];
+  const monthName = (m: string) => new Intl.DateTimeFormat("en-IN", { month: "long", timeZone: "UTC" }).format(new Date(`${m}-01T00:00:00Z`));
   const row = isSelf && category ? balance?.find((b) => b.category === category) : undefined;
   const left = row?.allowed != null ? row.allowed - row.used - row.pending : null;
 
@@ -223,17 +250,85 @@ export function LeaveForm({
             </p>
           )}
 
-          <Field label="Description" name="description" errors={state.fieldErrors} hint="Optional. Details for whoever approves it.">
-            <textarea name="description" rows={3} maxLength={500} className={inputClass} />
+          {cap != null && split && working > 0 && (
+            <div
+              role="status"
+              className={`space-y-2 rounded-xl px-3 py-2.5 text-sm ring-1 ring-inset ${over.length ? "bg-danger-soft text-danger ring-danger-line" : "bg-surface-2 text-fg-2 ring-line"}`}
+            >
+              <p className="flex items-start gap-2">
+                <CalendarX2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  <strong>
+                    {CATEGORY_SHORT[category as LeaveCategoryKey]} limit: {cap} day{cap === 1 ? "" : "s"} a month.
+                  </strong>{" "}
+                  {months
+                    .map((m) => {
+                      const u = monthUse[m] ?? { counted: 0, pending: 0 };
+                      return `${monthName(m)}: ${u.counted} used${u.pending ? `, ${u.pending} waiting` : ""}`;
+                    })
+                    .join(" · ")}
+                  .
+                </span>
+              </p>
+              {over.length > 0 ? (
+                <>
+                  <p className="pl-6">
+                    Of the {working} working day{working === 1 ? "" : "s"} asked, {split.counted.length} count{split.counted.length === 1 ? "s" : ""} as leave.{" "}
+                    <strong>
+                      {over.length} day{over.length === 1 ? "" : "s"} ({over.map((d) => formatISO(d, shortDate)).join(", ")}) will be marked absent and deducted from your salary.
+                    </strong>
+                  </p>
+                  <label className="ml-6 flex items-start gap-2 font-medium">
+                    <input type="checkbox" name="acceptOverLimit" required className={`${checkboxClass} mt-0.5`} />I understand these days are unpaid absence, not leave.
+                  </label>
+                </>
+              ) : (
+                <p className="pl-6 text-muted">All {working} working day{working === 1 ? "" : "s"} count as leave if approved.</p>
+              )}
+            </div>
+          )}
+          {/* Someone else's leave over the cap: the server asks for this tick. */}
+          {cap == null && state.fieldErrors?.acceptOverLimit && (
+            <label className="flex items-start gap-2 rounded-xl bg-danger-soft px-3 py-2.5 text-sm font-medium text-danger ring-1 ring-inset ring-danger-line">
+              <input type="checkbox" name="acceptOverLimit" className={`${checkboxClass} mt-0.5`} />
+              {state.fieldErrors.acceptOverLimit[0]}
+            </label>
+          )}
+
+          {needsProof && (
+            <p className="flex items-start gap-2 rounded-xl bg-info-soft px-3 py-2.5 text-sm text-info ring-1 ring-inset ring-info-line">
+              <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                <strong>{CATEGORY_LABELS[category as LeaveCategoryKey]} needs proof:</strong> attach a supporting document (e.g. a medical certificate) and describe the
+                reason. It&apos;s approved only after the school checks them.
+              </span>
+            </p>
+          )}
+
+          <Field
+            label="Description"
+            name="description"
+            errors={state.fieldErrors}
+            required={needsProof}
+            hint={needsProof ? `Required: at least ${PROOF_REASON_MIN} characters.` : "Optional. Details for whoever approves it."}
+          >
+            <textarea name="description" rows={3} maxLength={500} required={needsProof} minLength={needsProof ? PROOF_REASON_MIN : undefined} className={inputClass} />
           </Field>
 
           <Field
             label="Supporting document"
             name="attachment"
             errors={state.fieldErrors}
-            hint={`Optional. A medical certificate or letter: PDF, JPG, PNG or WebP up to ${MAX_DOCUMENT_LABEL}.`}
+            required={needsProof}
+            hint={`${needsProof ? "Required." : "Optional."} A medical certificate or letter: PDF, JPG, PNG or WebP up to ${MAX_DOCUMENT_LABEL}.`}
           >
-            <input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className={inputClass} />
+            <input
+              type="file"
+              name="attachment"
+              required={needsProof}
+              accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+              className={inputClass}
+            />
           </Field>
 
           {canApproveNow && (

@@ -182,6 +182,8 @@ model School {
   updatedAt        DateTime     @default(now()) @updatedAt
   timetableDays    Int[]        @default([1, 2, 3, 4, 5, 6]) // school days in the timetable, 1 = Monday … 7 = Sunday
   saturdayOff      Boolean      @default(false) // Saturday is a weekly off too (Sunday always is): no attendance, not a working day
+  lopRule          Json? // how absent days come off salaries (see LopRule in payroll-shared); null = gross ÷ days in the month
+  leaveRules       Json? // monthly leave caps and leave types needing proof (see LeaveRules in leave-shared)
   studentIdPrefix  String       @default("STU") // student IDs look like <prefix>-<admission year>-<number>, e.g. STU-2026-0001
   studentIdDigits  Int          @default(4) // how many digits the number is padded to
 
@@ -723,6 +725,7 @@ model LeaveRequest {
   status         LeaveStatus    @default(PENDING)
   requestedBy    String // who entered it, e.g. "Kavya Menon (class teacher)"
   fromAttendance Boolean        @default(false) // made by marking the student Leave in attendance; removed if that mark changes
+  overLimitDates String[]       @default([]) // working days over the monthly cap for its type: absent (unpaid), not leave
   decidedBy      String?
   decidedAt      DateTime?
   decisionNote   String?

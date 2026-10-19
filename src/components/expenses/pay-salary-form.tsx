@@ -8,8 +8,8 @@ import { MODE_LABELS, PAYMENT_MODES, rupees } from "@/lib/fees-shared";
 import { dayCount } from "@/lib/payroll-shared";
 
 /**
- * Pay one person's month. The amount starts at their net pay; ticking "Deduct
- * unpaid days" takes the loss of pay off it (only if the admin wants to).
+ * Pay one person's month. The amount starts at their net pay less loss of pay
+ * for unpaid days; unticking "Deduct unpaid days" pays them in full.
  */
 export function PaySalaryForm({
   action,
@@ -17,17 +17,20 @@ export function PaySalaryForm({
   lopDays,
   lopAmount,
   today,
+  onSuccess,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   net: number | null;
   lopDays: number;
   lopAmount: number;
   today: string;
+  /** Called once paid, e.g. to close the dialog. */
+  onSuccess?: () => void;
 }) {
-  const [deduct, setDeduct] = useState(false);
-  const [amount, setAmount] = useState(net == null ? "" : String(net));
+  const [deduct, setDeduct] = useState(lopDays > 0);
+  const [amount, setAmount] = useState(net == null ? "" : String(Math.max(0, net - (lopDays > 0 ? lopAmount : 0))));
   return (
-    <ActionForm action={action} keepValues className="mt-2 space-y-2">
+    <ActionForm action={action} keepValues onSuccess={onSuccess} className="mt-2 space-y-2">
       {lopDays > 0 && net != null && (
         <label className="flex w-fit items-center gap-2 rounded-lg bg-danger-soft/60 px-3 py-1.5 text-xs text-fg-2">
           <input
