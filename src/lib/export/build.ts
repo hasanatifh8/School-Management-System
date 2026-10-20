@@ -12,6 +12,7 @@ import {
   teacherWhere,
 } from "@/lib/list-filters";
 import { fullName, sectionLabel } from "@/lib/queries";
+import { getCurrentSession } from "@/lib/sessions";
 import { CATEGORY_LABELS } from "@/lib/student-options";
 
 type Cell = string | number | Date | null | undefined;
@@ -93,8 +94,9 @@ function teacherValues(t: TeacherForExport) {
 
 async function studentRows(schoolId: string, params: URLSearchParams) {
   const f = parseStudentFilters(params);
+  const session = f.show === "new" ? await getCurrentSession(schoolId) : null;
   const students = await db.student.findMany({
-    where: { ...studentWhere(schoolId, f), status: f.removed ? "INACTIVE" : "ACTIVE" },
+    where: { ...studentWhere(schoolId, f, session?.startDate), status: f.removed ? "INACTIVE" : "ACTIVE" },
     orderBy: studentOrder(f),
     include: { section: { include: { class: true } }, house: true },
   });

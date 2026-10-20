@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RemovedCleanupBar } from "@/components/delete-permanently";
 import { deletePermanently } from "../permanent-delete-actions";
-import { ChevronRight, Download, FileSpreadsheet, GraduationCap, IdCard, SearchX, UserPlus } from "lucide-react";
+import { Bus, ChevronRight, Download, FileSpreadsheet, GraduationCap, IdCard, SearchX, Sparkles, UserMinus, UserPlus, UserRound, UserRoundX, Users, type LucideIcon } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentSchool } from "@/lib/school";
 import { photoUrl } from "@/lib/photos";
@@ -12,7 +12,8 @@ import { Pagination } from "@/components/pagination";
 import { paginate } from "@/lib/pagination";
 import { FilterSelect, ListToolbar, MoreFilters, ResetFilters, SearchBox } from "@/components/list-toolbar";
 import { BLOOD_GROUPS, BLOOD_GROUP_LABELS } from "@/lib/blood-groups";
-import { parseStudentFilters, studentOrder, studentWhere } from "@/lib/list-filters";
+import { parseStudentFilters, studentOrder, studentWhere, type StudentFilters } from "@/lib/list-filters";
+import { getCurrentSession } from "@/lib/sessions";
 import { CATEGORY_LABELS } from "@/lib/student-options";
 import {
   Badge,
@@ -20,10 +21,12 @@ import {
   Card,
   Dash,
   EmptyState,
+  IconTile,
   MenuLink,
   MoreMenu,
   PageHeader,
   PersonCell,
+  cx,
   StatusTab,
   Table,
   tabBarClass,
@@ -39,15 +42,28 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
   const school = await getCurrentSchool();
   const params = await searchParams;
   const f = parseStudentFilters(params);
-  const filters = studentWhere(school.id, f);
+  const session = await getCurrentSession(school.id);
+  const filters = studentWhere(school.id, f, session.startDate);
   const showRemoved = f.removed;
+  // Widget counts follow the class, house, search… filters, but not the widgets' own choices (gender, shortcut).
+  const widgetBase = studentWhere(school.id, { ...f, gender: undefined, show: undefined } as StudentFilters, session.startDate);
+  const activeBase = { ...widgetBase, status: "ACTIVE" as const };
 
-  const [activeCount, removedCount, allRemoved, classes, houses] = await Promise.all([
+  const [activeCount, removedCount, allRemoved, classes, houses, w] = await Promise.all([
     db.student.count({ where: { ...filters, status: "ACTIVE" } }),
     db.student.count({ where: { ...filters, status: "INACTIVE" } }),
     db.student.count({ where: { schoolId: school.id, status: "INACTIVE" } }),
     getClassesWithSections(school.id),
     getHouses(school.id),
+    Promise.all([
+      db.student.count({ where: activeBase }),
+      db.student.count({ where: { ...activeBase, gender: "MALE" } }),
+      db.student.count({ where: { ...activeBase, gender: "FEMALE" } }),
+      db.student.count({ where: { ...activeBase, admissionDate: { gte: session.startDate } } }),
+      db.student.count({ where: { ...activeBase, sectionId: null } }),
+      db.student.count({ where: { ...activeBase, transportRouteId: { not: null } } }),
+      db.student.count({ where: { ...widgetBase, status: "INACTIVE" } }),
+    ]).then(([active, boys, girls, admitted, unplaced, transport, removed]) => ({ active, boys, girls, admitted, unplaced, transport, removed })),
   ]);
   const paging = paginate(params, showRemoved ? removedCount : activeCount);
   const students = await db.student.findMany({
@@ -67,7 +83,27 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
     const qs = sp.toString();
     return `/admin/students${qs ? `?${qs}` : ""}`;
   };
-  const filtered = Boolean(f.q || f.classId || f.sectionId || f.houseId || f.gender || f.category || f.bloodGroup);
+  const filtered = Boolean(f.q || f.classId || f.sectionId || f.houseId || f.gender || f.category || f.bloodGroup || f.show);
+
+  // A widget's link: the current filters, with its own choice set (or cleared when it's already on).
+  const widgetHref = (set: { gender?: string; show?: string; status?: string }) => {
+    const sp = new URLSearchParams(
+      Object.entries(params).flatMap(([k, v]) => (typeof v === "string" && v && !["page", "status", "gender", "show"].includes(k) ? [[k, v]] : [])),
+    );
+    for (const [k, v] of Object.entries(set)) if (v) sp.set(k, v);
+    const qs = sp.toString();
+    return `/admin/students${qs ? `?${qs}` : ""}`;
+  };
+  const pct = (n: number) => (w.active ? `${Math.round((n / w.active) * 100)}% of active` : "—");
+  const widgets: { label: string; value: number; detail: string; icon: LucideIcon; tone: Parameters<typeof IconTile>[0]["tone"]; on: boolean; href: string }[] = [
+    { label: "Active", value: w.active, detail: "On the rolls now", icon: Users, tone: "indigo", on: !showRemoved && !f.gender && !f.show, href: widgetHref({}) },
+    { label: "Boys", value: w.boys, detail: pct(w.boys), icon: UserRound, tone: "sky", on: !showRemoved && f.gender === "MALE" && !f.show, href: widgetHref(f.gender === "MALE" && !f.show && !showRemoved ? {} : { gender: "MALE" }) },
+    { label: "Girls", value: w.girls, detail: pct(w.girls), icon: UserRound, tone: "rose", on: !showRemoved && f.gender === "FEMALE" && !f.show, href: widgetHref(f.gender === "FEMALE" && !f.show && !showRemoved ? {} : { gender: "FEMALE" }) },
+    { label: "New this session", value: w.admitted, detail: `Admitted in ${session.name}`, icon: Sparkles, tone: "emerald", on: !showRemoved && f.show === "new", href: widgetHref(f.show === "new" && !showRemoved ? {} : { show: "new" }) },
+    { label: "Not in a class", value: w.unplaced, detail: w.unplaced ? "Assign a class and section" : "Everyone is placed", icon: UserRoundX, tone: w.unplaced ? "amber" : "slate", on: !showRemoved && f.show === "unplaced", href: widgetHref(f.show === "unplaced" && !showRemoved ? {} : { show: "unplaced" }) },
+    { label: "School transport", value: w.transport, detail: pct(w.transport), icon: Bus, tone: "teal", on: !showRemoved && f.show === "transport", href: widgetHref(f.show === "transport" && !showRemoved ? {} : { show: "transport" }) },
+    { label: "Removed", value: w.removed, detail: "Left or removed; can be restored", icon: UserMinus, tone: "slate", on: showRemoved && !f.gender && !f.show, href: widgetHref(showRemoved && !f.gender && !f.show ? {} : { status: "removed" }) },
+  ];
   const sections = classes.find((c) => c.id === f.classId)?.sections ?? [];
 
   return (
@@ -95,6 +131,29 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
           </>
         }
       />
+
+      {/* Key numbers; each one filters the list below. */}
+      <nav aria-label="Student groups" className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
+        {widgets.map((k) => (
+          <Link
+            key={k.label}
+            href={k.href}
+            scroll={false}
+            aria-current={k.on ? "true" : undefined}
+            className={cx(
+              "group rounded-2xl border bg-surface p-4 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift",
+              k.on ? "border-accent ring-2 ring-accent/30" : "border-line hover:border-line-strong",
+            )}
+          >
+            <span className="flex items-start justify-between gap-2">
+              <span className="text-sm font-medium text-muted">{k.label}</span>
+              <IconTile icon={k.icon} tone={k.tone} size="sm" />
+            </span>
+            <span className="mt-2 block text-2xl font-semibold tabular-nums tracking-tight text-fg">{k.value.toLocaleString("en-IN")}</span>
+            <span className="mt-0.5 block truncate text-xs text-muted">{k.detail}</span>
+          </Link>
+        ))}
+      </nav>
 
       <Card padded={false}>
         <div className="flex flex-col gap-4 border-b border-line px-4 pt-4 sm:px-6">
@@ -146,7 +205,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/admin/s
                 options={BLOOD_GROUPS.map((b) => ({ value: b, label: BLOOD_GROUP_LABELS[b] }))}
               />
               </MoreFilters>
-              <ResetFilters keys={["q", "classId", "sectionId", "houseId", "gender", "category", "bloodGroup"]} />
+              <ResetFilters keys={["q", "classId", "sectionId", "houseId", "gender", "category", "bloodGroup", "show"]} />
             </ListToolbar>
           </div>
         </div>

@@ -28,6 +28,9 @@ const GENDERS = ["MALE", "FEMALE", "OTHER"] as const;
 const BLOOD_GROUPS = ["A_POS", "A_NEG", "B_POS", "B_NEG", "AB_POS", "AB_NEG", "O_POS", "O_NEG"] as const;
 const CATEGORIES = ["GENERAL", "OBC", "SC_ST", "MINORITY"] as const;
 const TEACHER_ROLES = ["class", "subject", "none"] as const;
+/** Student list shortcuts (the widgets): admitted this session, not in a class, using school transport. */
+export const STUDENT_SHOWS = ["new", "unplaced", "transport"] as const;
+export type StudentShow = (typeof STUDENT_SHOWS)[number];
 
 /* ───────────────────────── Students ───────────────────────── */
 
@@ -40,16 +43,20 @@ export function parseStudentFilters(params: Params) {
     gender: oneOf(read(params, "gender"), GENDERS),
     category: oneOf(read(params, "category"), CATEGORIES),
     bloodGroup: oneOf(read(params, "bloodGroup"), BLOOD_GROUPS),
+    show: oneOf(read(params, "show"), STUDENT_SHOWS),
     removed: read(params, "status") === "removed",
   };
 }
 
 export type StudentFilters = ReturnType<typeof parseStudentFilters>;
 
-/** Where-clause for everything except the Active/Removed status. */
-export function studentWhere(schoolId: string, f: StudentFilters): Prisma.StudentWhereInput {
+/** Where-clause for everything except the Active/Removed status. `sessionStart` is needed for "new this session". */
+export function studentWhere(schoolId: string, f: StudentFilters, sessionStart?: Date): Prisma.StudentWhereInput {
   return {
     schoolId,
+    ...(f.show === "new" && sessionStart && { admissionDate: { gte: sessionStart } }),
+    ...(f.show === "unplaced" && { sectionId: null }),
+    ...(f.show === "transport" && { transportRouteId: { not: null } }),
     ...(f.sectionId ? { sectionId: f.sectionId } : f.classId ? { section: { classId: f.classId } } : {}),
     ...(f.houseId && { houseId: f.houseId === "none" ? null : f.houseId }),
     ...(f.gender && { gender: f.gender }),
